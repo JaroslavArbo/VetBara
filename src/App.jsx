@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
+import { bootstrapSession, resolveQrToken } from "./lib/api";
 
 function Button({ children, className = "", variant = "default", ...props }) {
   const base = "inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none";
@@ -29,6 +30,11 @@ const EXAM_LEVELS = ["Practicing", "Consulting"];
 const ROLES = ["Admin", "Centre", "Candidate", "Examiner"];
 const CENTRES = ["Arboricultural Academy", "VETcert Centre Poland", "VETcert Centre Germany", "VETcert Centre Netherlands"];
 const CENTRE_ACCESS_TOKEN = "VETBARA-CENTRE-ARBOR-2026";
+const DEMO_QR_TOKENS = {
+  Centre: CENTRE_ACCESS_TOKEN,
+  Candidate: "VETBARA-CANDIDATE-C-001-2026",
+  Examiner: "VETBARA-EXAMINER-E-001-2026",
+};
 const EXAMINERS = [
   { id: "E-001", name: "Examiner 1", birthDate: "", registrationId: "EX-DEMO-001" },
   { id: "E-002", name: "Examiner 2", birthDate: "", registrationId: "EX-DEMO-002" },
@@ -259,28 +265,21 @@ export default function VetBaraPrototype() {
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
   const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => `${window.location.origin}${window.location.pathname}?role=${encodeURIComponent(roleName)}&id=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`;
   const sectionTone = (v) => v === "closed" ? "good" : v === "open" ? "warn" : "default";
+  const knownCandidate = (id) => candidates.some((candidate) => candidate.id === id);
+  const knownExaminer = (id) => EXAMINERS.some((examiner) => examiner.id === id);
 
   useEffect(() => {
-    const parsed = parseQrPayload(window.location.href);
-    if (!parsed.role) return;
+    let cancelled = false;
 
-    if (parsed.role === "Centre" && parsed.token === CENTRE_ACCESS_TOKEN) {
-      setCentreUnlocked(true);
-      setRole("Centre");
-      addAudit("Centre workspace opened", centre, "Direct QR/link accepted");
-      return;
+    async function openQrSession() {
+      const parsed = parseQrPayload(window.location.href);
+      if (!parsed.role && !parsed.token) return;
+      const access = await resolveAccessWithFallback(parsed, "Direct QR/link accepted");
+      if (!cancelled && access) applyResolvedAccess(access, "Direct QR/link accepted");
     }
 
-    if (parsed.role === "Candidate" && parsed.id) {
-      setRole("Candidate");
-      loginCandidate(parsed.id);
-      return;
-    }
-
-    if (parsed.role === "Examiner" && parsed.id) {
-      setRole("Examiner");
-      loginExaminer(parsed.id);
-    }
+    openQrSession();
+    return () => { cancelled = true; };
   }, []);
 
   function importTestPackage(event) {
@@ -311,7 +310,54 @@ export default function VetBaraPrototype() {
     event.target.value = "";
   }
 
-  function handleQrScan(text) { const p = parseQrPayload(text); if (p.role === "Candidate" && p.id) { loginCandidate(p.id); setRole("Candidate"); } else if (p.role === "Examiner" && p.id) { loginExaminer(p.id); setRole("Examiner"); } else if (p.role === "Centre" && p.token === CENTRE_ACCESS_TOKEN) { setCentreUnlocked(true); setRole("Centre"); addAudit("Centre workspace opened", centre, "QR accepted"); } else addAudit("QR scan failed", "Unknown QR", text); setScannerMode(null); }
+  async function resolveAccessWithFallback(parsed, detail) {
+    const token = parsed.token || parsed.raw || window.location.href;
+    try {
+      const resolved = await resolveQrToken(token);
+      const session = await bootstrapSession(resolved.sessionToken);
+      return { ...resolved, ...session, sessionToken: resolved.sessionToken };
+    } catch (error) {
+      const fallback = demoAccess(parsed);
+      if (fallback) {
+        addAudit("Backend unavailable", fallback.subjectId ?? fallback.role, `${detail}; demo fallback used`);
+        return fallback;
+      }
+      addAudit("QR resolve failed", parsed.id ?? "Unknown QR", error.message);
+      return null;
+    }
+  }
+
+  function demoAccess(parsed) {
+    if (parsed.role === "Centre" && parsed.token === DEMO_QR_TOKENS.Centre) return { role: "Centre", subjectId: centre, mode: "demo" };
+    if (parsed.role === "Candidate" && parsed.token === DEMO_QR_TOKENS.Candidate && parsed.id === "C-001" && knownCandidate(parsed.id)) return { role: "Candidate", subjectId: parsed.id, mode: "demo" };
+    if (parsed.role === "Examiner" && parsed.token === DEMO_QR_TOKENS.Examiner && parsed.id === "E-001" && knownExaminer(parsed.id)) return { role: "Examiner", subjectId: parsed.id, mode: "demo" };
+    return null;
+  }
+
+  function applyResolvedAccess(access, detail) {
+    if (access.role === "Centre") {
+      setCentreUnlocked(true);
+      setRole("Centre");
+      addAudit("Centre workspace opened", centre, detail);
+      return;
+    }
+
+    if (access.role === "Candidate" && knownCandidate(access.subjectId)) {
+      setRole("Candidate");
+      loginCandidate(access.subjectId);
+      return;
+    }
+
+    if (access.role === "Examiner" && knownExaminer(access.subjectId)) {
+      setRole("Examiner");
+      loginExaminer(access.subjectId);
+      return;
+    }
+
+    addAudit("QR role blocked", access.role ?? "Unknown role", "Resolved role or subject does not match this portal package");
+  }
+
+  async function handleQrScan(text) { const p = { ...parseQrPayload(text), raw: text }; const access = await resolveAccessWithFallback(p, "QR accepted"); if (access) applyResolvedAccess(access, "QR accepted"); setScannerMode(null); }
   function unlockCentre() {
     const raw = centreCode.trim();
     let token = raw;
