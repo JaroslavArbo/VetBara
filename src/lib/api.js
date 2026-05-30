@@ -32,11 +32,10 @@ export function bootstrapSession(sessionToken) {
   });
 }
 
-export function syncBatch(sessionToken, records) {
+export function syncBatch(sessionToken, events) {
   return requestJson("/api/sync/batch", {
     method: "POST",
-    headers: { Authorization: `Bearer ${sessionToken}` },
-    body: JSON.stringify({ records }),
+    body: JSON.stringify({ sessionToken, events }),
   });
 }
 
