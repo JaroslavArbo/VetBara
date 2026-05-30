@@ -118,15 +118,127 @@ async function existingEvent(sessionId, clientEventId) {
   return rows[0] ?? null;
 }
 
+
+function sectionKeyFor(event) {
+  if (event.payload?.sectionKey) return String(event.payload.sectionKey);
+  if (event.entityId && String(event.entityId).includes(":")) return String(event.entityId).split(":")[1];
+  return null;
+}
+
+function examinerIdFor(session, event) {
+  if (session.role === "Examiner") return session.subject_id;
+  return event.payload?.examinerId ? String(event.payload.examinerId) : null;
+}
+
+function itemIdFor(event) {
+  if (event.payload?.itemId) return String(event.payload.itemId);
+  if (event.entityId && String(event.entityId).includes(":")) return String(event.entityId).split(":")[1];
+  return null;
+}
+
+function clientTimestamp(event) {
+  const value = event.payload?.clientUpdatedAt || event.payload?.updatedAt || event.createdAt;
+  return value ? new Date(value).toISOString() : new Date().toISOString();
+}
+
+async function upsertNormalizedState(session, event, candidateId) {
+  if (!envReady() || !session.id) return false;
+
+  const payload = event.payload ?? {};
+  const sectionKey = sectionKeyFor(event);
+  const updatedAt = clientTimestamp(event);
+
+  if (event.type === "candidate_section.opened" || event.type === "candidate_section.reopened" || event.type === "candidate_section.closed") {
+    if (!candidateId || !sectionKey) return false;
+    const closed = event.type === "candidate_section.closed";
+    const status = closed ? "closed" : "open";
+    await supabase("candidate_sections?on_conflict=candidate_id,section_key", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        section_key: sectionKey,
+        status,
+        opened_at: closed ? payload.openedAt ?? null : payload.openedAt ?? event.createdAt ?? new Date().toISOString(),
+        closed_at: closed ? payload.closedAt ?? event.createdAt ?? new Date().toISOString() : null,
+        client_updated_at: updatedAt,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    return true;
+  }
+
+  if (event.type === "test_response.saved" || event.type === "test_response.submitted") {
+    const questionId = payload.questionId || itemIdFor(event) || sectionKey;
+    if (!candidateId || !questionId) return false;
+    await supabase("test_responses?on_conflict=candidate_id,question_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        question_id: questionId,
+        answer: payload.answer ?? payload,
+        client_updated_at: updatedAt,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    return true;
+  }
+
+  if (event.type === "outdoor_assessment.opened" || event.type === "outdoor_assessment.submitted") {
+    const examinerId = examinerIdFor(session, event);
+    const outdoorSection = sectionKey || payload.sectionKey || "outdoor";
+    if (!candidateId || !examinerId) return false;
+    await supabase("outdoor_assessments?on_conflict=candidate_id,examiner_id,section_key", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        examiner_id: examinerId,
+        mode: payload.mode || "primary",
+        section_key: outdoorSection,
+        payload,
+        submitted_at: event.type === "outdoor_assessment.submitted" ? payload.submittedAt ?? event.createdAt ?? new Date().toISOString() : null,
+        client_updated_at: updatedAt,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    return true;
+  }
+
+  if (event.type === "outdoor_score.saved") {
+    const examinerId = examinerIdFor(session, event);
+    const itemId = itemIdFor(event);
+    if (!candidateId || !examinerId || !itemId) return false;
+    await supabase("outdoor_scores?on_conflict=candidate_id,examiner_id,item_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        examiner_id: examinerId,
+        item_id: itemId,
+        score: payload.score ?? null,
+        note: payload.note ?? null,
+        payload,
+        client_updated_at: updatedAt,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    return true;
+  }
+
+  return false;
+}
+
 async function storeEvent(session, event, candidateId) {
   const createdAt = event.createdAt ? new Date(event.createdAt).toISOString() : new Date().toISOString();
 
   if (!envReady() || !session.id) {
-    return { id: event.clientEventId, duplicate: false };
+    return { id: event.clientEventId, duplicate: false, normalized: false };
   }
 
   const duplicate = await existingEvent(session.id, event.clientEventId);
-  if (duplicate) return { id: duplicate.id, duplicate: true };
+  if (duplicate) return { id: duplicate.id, duplicate: true, normalized: false };
 
   const rows = await supabase("sync_events", {
     method: "POST",
@@ -144,7 +256,8 @@ async function storeEvent(session, event, candidateId) {
     }),
   });
 
-  return { id: rows[0]?.id ?? event.clientEventId, duplicate: false };
+  const normalized = await upsertNormalizedState(session, event, candidateId);
+  return { id: rows[0]?.id ?? event.clientEventId, duplicate: false, normalized };
 }
 
 export default async function handler(request, response) {
@@ -171,7 +284,7 @@ export default async function handler(request, response) {
 
       const stored = await storeEvent(session, event, validation.candidateId ?? null);
       accepted += 1;
-      results.push({ clientEventId: event.clientEventId, ok: true, id: stored.id, duplicate: stored.duplicate });
+      results.push({ clientEventId: event.clientEventId, ok: true, id: stored.id, duplicate: stored.duplicate, normalized: stored.normalized });
     }
 
     return sendJson(response, 200, { ok: rejected === 0, accepted, rejected, results });
