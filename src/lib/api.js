@@ -39,6 +39,13 @@ export function syncBatch(sessionToken, events) {
   });
 }
 
+export function fetchCandidateEvaluation(sessionToken, candidateId) {
+  return requestJson("/api/evaluation/candidate", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, candidateId }),
+  });
+}
+
 export async function generateEvaluation(sessionToken, payload) {
   const response = await fetch("/api/evaluation/generate", {
     method: "POST",
