@@ -7,13 +7,28 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "test_response.saved",
   "test_response.submitted",
   "report_draft.saved",
-"report_photo.added",
-  "report_draft.saved",
-"report_photo.added",
+  "report_photo.added",
   "outdoor_assessment.opened",
-  "outdoor_score.saved",
   "outdoor_assessment.submitted",
+  "outdoor_score.saved",
 ]);
+
+const EVENT_TYPES_BY_ROLE = {
+  Candidate: new Set([
+    "candidate_section.opened",
+    "candidate_section.closed",
+    "candidate_section.reopened",
+    "test_response.saved",
+    "test_response.submitted",
+    "report_draft.saved",
+    "report_photo.added",
+  ]),
+  Examiner: new Set([
+    "outdoor_assessment.opened",
+    "outdoor_assessment.submitted",
+    "outdoor_score.saved",
+  ]),
+};
 
 const ASSIGNMENTS = {
   "C-001": { primary: "E-001", secondary: "E-002" },
@@ -77,11 +92,34 @@ async function resolveSession(sessionToken) {
   return session;
 }
 
+function candidateIdReferences(event) {
+  const references = [];
+
+  if (event.candidateId) references.push({ source: "candidateId", value: String(event.candidateId) });
+  if (event.payload?.candidateId) references.push({ source: "payload.candidateId", value: String(event.payload.candidateId) });
+  if (event.entityId && String(event.entityId).startsWith("C-")) {
+    references.push({ source: "entityId", value: String(event.entityId).split(":")[0] });
+  }
+
+  return references;
+}
+
 function candidateIdFor(event) {
-  if (event.candidateId) return String(event.candidateId);
-  if (event.payload?.candidateId) return String(event.payload.candidateId);
-  if (event.entityId && String(event.entityId).startsWith("C-")) return String(event.entityId).split(":")[0];
-  return null;
+  const references = candidateIdReferences(event);
+  return references[0]?.value ?? null;
+}
+
+function candidateIdConflict(event) {
+  const references = candidateIdReferences(event);
+  const uniqueValues = new Set(references.map((reference) => reference.value));
+  if (uniqueValues.size <= 1) return null;
+  return references.map((reference) => `${reference.source}=${reference.value}`).join(", ");
+}
+
+function roleEventError(session, eventType) {
+  const allowedTypes = EVENT_TYPES_BY_ROLE[session.role];
+  if (!allowedTypes) return "Role cannot sync candidate or examiner events";
+  return allowedTypes.has(eventType) ? null : `${session.role} cannot sync ${eventType}`;
 }
 
 function isAssignedExaminer(examinerId, candidateId) {
@@ -90,28 +128,34 @@ function isAssignedExaminer(examinerId, candidateId) {
 }
 
 function scopeError(session, candidateId) {
+  if (!candidateId) return "Missing candidate id for scoped sync event";
+
   if (session.role === "Candidate") {
     return candidateId === session.subject_id ? null : "Candidate can sync only their own data";
   }
 
   if (session.role === "Examiner") {
-    return candidateId && isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
+    return isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
   }
-
-  if (session.role === "Centre") return null;
 
   return "Role cannot sync this event";
 }
 
 function validateEvent(session, event) {
-  if (!event || typeof event !== "object") return { error: "Event must be an object" };
-  if (!event.clientEventId) return { error: "Missing clientEventId" };
-  if (!SUPPORTED_EVENT_TYPES.has(event.type)) return { error: "Unsupported event type" };
-  if (!event.entityType || !event.entityId) return { error: "Missing entity reference" };
+  if (!event || typeof event !== "object") return { status: 400, error: "Event must be an object" };
+  if (!event.clientEventId) return { status: 400, error: "Missing clientEventId" };
+  if (!SUPPORTED_EVENT_TYPES.has(event.type)) return { status: 400, error: "Unsupported event type" };
+  if (!event.entityType || !event.entityId) return { status: 400, error: "Missing entity reference" };
+
+  const roleError = roleEventError(session, event.type);
+  if (roleError) return { status: 403, error: roleError };
+
+  const conflict = candidateIdConflict(event);
+  if (conflict) return { status: 400, error: "Conflicting candidate id references", details: conflict };
 
   const candidateId = candidateIdFor(event);
   const error = scopeError(session, candidateId);
-  if (error) return { error, candidateId };
+  if (error) return { status: 403, error, candidateId };
 
   return { candidateId };
 }
@@ -121,7 +165,6 @@ async function existingEvent(sessionId, clientEventId) {
   const rows = await supabase(`sync_events?session_id=eq.${sessionId}&client_event_id=eq.${encodeURIComponent(clientEventId)}&select=id,client_event_id,event_type&limit=1`);
   return rows[0] ?? null;
 }
-
 
 function sectionKeyFor(event) {
   if (event.payload?.sectionKey) return String(event.payload.sectionKey);
@@ -287,24 +330,29 @@ export default async function handler(request, response) {
     const session = await resolveSession(sessionToken);
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
 
+    const validations = events.map((event) => ({ event, validation: validateEvent(session, event) }));
+    const rejected = validations.find((item) => item.validation.error);
+    if (rejected) {
+      return sendJson(response, rejected.validation.status, {
+        ok: false,
+        accepted: 0,
+        rejected: 1,
+        error: rejected.validation.error,
+        details: rejected.validation.details,
+        clientEventId: rejected.event?.clientEventId ?? null,
+      });
+    }
+
     const results = [];
     let accepted = 0;
-    let rejected = 0;
 
-    for (const event of events) {
-      const validation = validateEvent(session, event);
-      if (validation.error) {
-        rejected += 1;
-        results.push({ clientEventId: event?.clientEventId ?? null, ok: false, error: validation.error });
-        continue;
-      }
-
+    for (const { event, validation } of validations) {
       const stored = await storeEvent(session, event, validation.candidateId ?? null);
       accepted += 1;
       results.push({ clientEventId: event.clientEventId, ok: true, id: stored.id, duplicate: stored.duplicate, normalized: stored.normalized });
     }
 
-    return sendJson(response, 200, { ok: rejected === 0, accepted, rejected, results });
+    return sendJson(response, 200, { ok: true, accepted, rejected: 0, results });
   } catch (error) {
     console.error("Sync batch failed", error);
     return sendJson(response, 500, { error: "Sync batch failed" });
