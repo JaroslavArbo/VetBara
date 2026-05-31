@@ -91,6 +91,130 @@ async function readRows(table, candidateId, orderBy = "updated_at.desc") {
   return supabase(`${table}?candidate_id=eq.${encodeURIComponent(candidateId)}&select=*${order}`);
 }
 
+async function readReportEvents(candidateId) {
+  if (!envReady()) return [];
+  const types = encodeURIComponent("report_draft.saved,report_photo.added");
+  return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
+}
+
+function createReportDraft() {
+  return {
+    "Tree A": { fieldNotes: "", photos: [], finalSections: {} },
+    "Tree B": { fieldNotes: "", photos: [], finalSections: {} },
+  };
+}
+
+function buildReportDraft(events) {
+  return events.reduce((draft, event) => {
+    const payload = event.payload ?? {};
+    const treeId = payload.treeId || payload.tree || "Tree A";
+
+    if (!draft[treeId]) {
+      draft[treeId] = { fieldNotes: "", photos: [], finalSections: {} };
+    }
+
+    if (event.event_type === "report_draft.saved") {
+      const fieldKey = payload.fieldKey || payload.key;
+      const fieldType = payload.fieldType || "finalSection";
+      if (!fieldKey) return draft;
+
+      if (fieldType === "fieldNotes" || fieldKey === "fieldNotes") {
+        draft[treeId] = { ...draft[treeId], fieldNotes: payload.value ?? "" };
+      } else {
+        draft[treeId] = {
+          ...draft[treeId],
+          finalSections: {
+            ...(draft[treeId].finalSections ?? {}),
+            [fieldKey]: payload.value ?? "",
+          },
+        };
+      }
+    }
+
+    if (event.event_type === "report_photo.added") {
+      const photoId = payload.photoId || payload.id;
+      if (!photoId) return draft;
+      const existing = draft[treeId].photos ?? [];
+      if (existing.some((photo) => photo.id === photoId)) return draft;
+      draft[treeId] = {
+        ...draft[treeId],
+        photos: [
+          ...existing,
+          {
+            id: photoId,
+            caption: payload.caption || `${treeId} candidate photo ${existing.length + 1}`,
+            capturedAt: payload.capturedAt || event.created_at || null,
+          },
+        ],
+      };
+    }
+
+    return draft;
+  }, createReportDraft());
+}
+
+async function readReportEvents(candidateId) {
+  if (!envReady()) return [];
+  const types = encodeURIComponent("report_draft.saved,report_photo.added");
+  return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
+}
+
+function createReportDraft() {
+  return {
+    "Tree A": { fieldNotes: "", photos: [], finalSections: {} },
+    "Tree B": { fieldNotes: "", photos: [], finalSections: {} },
+  };
+}
+
+function buildReportDraft(events) {
+  return events.reduce((draft, event) => {
+    const payload = event.payload ?? {};
+    const treeId = payload.treeId || payload.tree || "Tree A";
+
+    if (!draft[treeId]) {
+      draft[treeId] = { fieldNotes: "", photos: [], finalSections: {} };
+    }
+
+    if (event.event_type === "report_draft.saved") {
+      const fieldKey = payload.fieldKey || payload.key;
+      const fieldType = payload.fieldType || "finalSection";
+      if (!fieldKey) return draft;
+
+      if (fieldType === "fieldNotes" || fieldKey === "fieldNotes") {
+        draft[treeId] = { ...draft[treeId], fieldNotes: payload.value ?? "" };
+      } else {
+        draft[treeId] = {
+          ...draft[treeId],
+          finalSections: {
+            ...(draft[treeId].finalSections ?? {}),
+            [fieldKey]: payload.value ?? "",
+          },
+        };
+      }
+    }
+
+    if (event.event_type === "report_photo.added") {
+      const photoId = payload.photoId || payload.id;
+      if (!photoId) return draft;
+      const existing = draft[treeId].photos ?? [];
+      if (existing.some((photo) => photo.id === photoId)) return draft;
+      draft[treeId] = {
+        ...draft[treeId],
+        photos: [
+          ...existing,
+          {
+            id: photoId,
+            caption: payload.caption || `${treeId} candidate photo ${existing.length + 1}`,
+            capturedAt: payload.capturedAt || event.created_at || null,
+          },
+        ],
+      };
+    }
+
+    return draft;
+  }, createReportDraft());
+}
+
 function scoreMode(score) {
   if (score.payload?.mode) return score.payload.mode;
   const assignment = ASSIGNMENTS[score.candidate_id];
@@ -129,12 +253,15 @@ export default async function handler(request, response) {
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
     if (!canReadCandidate(session, candidateId)) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
-    const [sections, testResponses, outdoorAssessments, outdoorScores] = await Promise.all([
-      readRows("candidate_sections", candidateId),
-      readRows("test_responses", candidateId),
-      readRows("outdoor_assessments", candidateId),
-      readRows("outdoor_scores", candidateId),
-    ]);
+  const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents] = await Promise.all([
+  readRows("candidate_sections", candidateId),
+  readRows("test_responses", candidateId),
+  readRows("outdoor_assessments", candidateId),
+  readRows("outdoor_scores", candidateId),
+  readReportEvents(candidateId),
+]);
+
+const reportDraft = buildReportDraft(reportEvents);
 
     return sendJson(response, 200, {
       ok: true,
@@ -145,7 +272,9 @@ export default async function handler(request, response) {
       testResponses,
       outdoorAssessments,
       outdoorScores,
-      summary: buildSummary(sections, testResponses, outdoorScores),
+reportEvents,
+reportDraft,
+summary: buildSummary(sections, testResponses, outdoorScores),
     });
   } catch (error) {
     console.error("Candidate evaluation read model failed", error);

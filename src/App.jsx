@@ -572,7 +572,17 @@ export default function VetBaraPrototype() {
         }));
       }
 
-      if (restoredSections.length > 0 || restoredResponses.length > 0) addAudit("Candidate state restored", candidateId, `${restoredSections.length} section(s), ${restoredResponses.length} response(s)`);
+      if (result.reportDraft && typeof result.reportDraft === "object") {
+        setReportDrafts((prev) => ({
+          ...prev,
+          [candidateId]: {
+            ...createReportDraft(),
+            ...result.reportDraft,
+          },
+        }));
+      }
+
+      if (restoredSections.length > 0 || restoredResponses.length > 0 || result.reportDraft) addAudit("Candidate state restored", candidateId, `${restoredSections.length} section(s), ${restoredResponses.length} response(s)`);
     } catch (error) {
       console.error("Candidate state restore failed", error);
       queue("Candidate state restore", `${candidateId} / sync error`);
@@ -928,8 +938,85 @@ export default function VetBaraPrototype() {
     sendSyncEvent({ clientEventId: localEventId(`test-response-saved-${loggedCandidate.id}-${qid}`), type: "test_response.saved", entityType: "test_response", entityId: `${loggedCandidate.id}:test:${qid}`, candidateId: loggedCandidate.id, payload: { sectionKey: "test", questionId: qid, answer: value, selectedAnswer: value, variantCode, updatedAt }, createdAt: updatedAt });
   }
   function submitTest() { if (!loggedCandidate) return; setCandidates((prev) => prev.map((c) => c.id === loggedCandidate.id ? { ...c, status: "Written test submitted" } : c)); closeCandidateSection("test"); }
-  function updateReport(tree, key, value, field = "section") { if (!loggedCandidate) return; setReportDrafts((prev) => { const draft = prev[loggedCandidate.id] ?? createReportDraft(); return { ...prev, [loggedCandidate.id]: { ...draft, [tree]: field === "fieldNotes" ? { ...draft[tree], fieldNotes: value } : { ...draft[tree], finalSections: { ...draft[tree].finalSections, [key]: value } } } }; }); }
-  function addReportPhoto(tree) { if (!loggedCandidate) return; setReportDrafts((prev) => { const draft = prev[loggedCandidate.id] ?? createReportDraft(); const photos = draft[tree].photos; return { ...prev, [loggedCandidate.id]: { ...draft, [tree]: { ...draft[tree], photos: [...photos, { id: `P-${photos.length + 1}`, caption: `${tree} candidate photo ${photos.length + 1}` }] } } }; }); }
+    function updateReport(tree, key, value, field = "section") {
+    if (!loggedCandidate) return;
+    const updatedAt = new Date().toISOString();
+
+    setReportDrafts((prev) => {
+      const draft = prev[loggedCandidate.id] ?? createReportDraft();
+      return {
+        ...prev,
+        [loggedCandidate.id]: {
+          ...draft,
+          [tree]: field === "fieldNotes"
+            ? { ...draft[tree], fieldNotes: value }
+            : { ...draft[tree], finalSections: { ...draft[tree].finalSections, [key]: value } },
+        },
+      };
+    });
+
+    sendSyncEvent({
+      clientEventId: localEventId(`report-draft-saved-${loggedCandidate.id}-${tree}-${key}`),
+      type: "report_draft.saved",
+      entityType: "report_draft",
+      entityId: `${loggedCandidate.id}:report:${tree}:${key}`,
+      candidateId: loggedCandidate.id,
+      payload: {
+        candidateId: loggedCandidate.id,
+        sectionKey: "report",
+        treeId: tree,
+        fieldKey: key,
+        fieldType: field === "fieldNotes" ? "fieldNotes" : "finalSection",
+        value,
+        updatedAt,
+      },
+      createdAt: updatedAt,
+    });
+  }
+  
+   function addReportPhoto(tree) {
+    if (!loggedCandidate) return;
+    const capturedAt = new Date().toISOString();
+    const draft = reportDrafts[loggedCandidate.id] ?? createReportDraft();
+    const photos = draft[tree]?.photos ?? [];
+    const photo = {
+      id: `P-${photos.length + 1}`,
+      caption: `${tree} candidate photo ${photos.length + 1}`,
+      capturedAt,
+    };
+
+    setReportDrafts((prev) => {
+      const current = prev[loggedCandidate.id] ?? createReportDraft();
+      const currentPhotos = current[tree]?.photos ?? [];
+      return {
+        ...prev,
+        [loggedCandidate.id]: {
+          ...current,
+          [tree]: {
+            ...current[tree],
+            photos: [...currentPhotos, photo],
+          },
+        },
+      };
+    });
+
+    sendSyncEvent({
+      clientEventId: localEventId(`report-photo-added-${loggedCandidate.id}-${tree}-${photo.id}`),
+      type: "report_photo.added",
+      entityType: "report_photo",
+      entityId: `${loggedCandidate.id}:report:${tree}:${photo.id}`,
+      candidateId: loggedCandidate.id,
+      payload: {
+        candidateId: loggedCandidate.id,
+        sectionKey: "report",
+        treeId: tree,
+        photoId: photo.id,
+        caption: photo.caption,
+        capturedAt,
+      },
+      createdAt: capturedAt,
+    });
+  }
   function submitReport() { if (!loggedCandidate) return; setCandidates((prev) => prev.map((c) => c.id === loggedCandidate.id ? { ...c, status: "Report submitted" } : c)); closeCandidateSection("report"); }
   function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", EXAMINERS.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
   function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
