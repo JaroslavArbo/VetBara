@@ -266,6 +266,7 @@ export default function VetBaraPrototype() {
   const [centreSetupError, setCentreSetupError] = useState("");
   const [centreSetupStatus, setCentreSetupStatus] = useState("");
   const [centreQrAccess, setCentreQrAccess] = useState({ candidates: [], examiners: [] });
+  const [centreValidationIssues, setCentreValidationIssues] = useState([]);
 
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) ?? candidates[0];
   const loggedCandidate = candidates.find((c) => c.id === loggedCandidateId) ?? null;
@@ -496,6 +497,66 @@ export default function VetBaraPrototype() {
     setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
   }
 
+  function validateCentreSetup() {
+    const issues = [];
+    const candidateIds = new Set();
+    const duplicateCandidateIds = new Set();
+    const examinerIds = new Set();
+    const duplicateExaminerIds = new Set();
+
+    candidates.forEach((candidate, index) => {
+      const label = candidate.name || candidate.id || `Candidate ${index + 1}`;
+      const id = String(candidate.id || "").trim();
+
+      if (!id) issues.push({ severity: "error", message: `${label}: candidate id is missing.` });
+      if (!String(candidate.name || "").trim()) issues.push({ severity: "error", message: `${id || label}: candidate name is missing.` });
+      if (!String(candidate.level || "").trim()) issues.push({ severity: "error", message: `${id || label}: candidate level is missing.` });
+
+      if (id) {
+        if (candidateIds.has(id)) duplicateCandidateIds.add(id);
+        candidateIds.add(id);
+      }
+    });
+
+    duplicateCandidateIds.forEach((id) => {
+      issues.push({ severity: "error", message: `Duplicate candidate id: ${id}.` });
+    });
+
+    examiners.forEach((examiner, index) => {
+      const label = examiner.name || examiner.id || `Examiner ${index + 1}`;
+      const id = String(examiner.id || "").trim();
+
+      if (!id) issues.push({ severity: "error", message: `${label}: examiner id is missing.` });
+      if (!String(examiner.name || "").trim()) issues.push({ severity: "error", message: `${id || label}: examiner name is missing.` });
+      if (!String(examiner.registrationId || "").trim()) issues.push({ severity: "warning", message: `${id || label}: examiner registration ID is missing.` });
+
+      if (id) {
+        if (examinerIds.has(id)) duplicateExaminerIds.add(id);
+        examinerIds.add(id);
+      }
+    });
+
+    duplicateExaminerIds.forEach((id) => {
+      issues.push({ severity: "error", message: `Duplicate examiner id: ${id}.` });
+    });
+
+    candidates.forEach((candidate) => {
+      const candidateId = String(candidate.id || "").trim();
+      if (!candidateId) return;
+
+      const assignment = assignments[candidateId] ?? {};
+      const primary = String(assignment.primary || "").trim();
+      const secondary = String(assignment.secondary || "").trim();
+
+      if (!primary) issues.push({ severity: "error", message: `${candidateId}: primary examiner is missing.` });
+      if (primary && !examinerIds.has(primary)) issues.push({ severity: "error", message: `${candidateId}: primary examiner does not exist.` });
+      if (secondary && !examinerIds.has(secondary)) issues.push({ severity: "error", message: `${candidateId}: secondary examiner does not exist.` });
+      if (primary && secondary && primary === secondary) issues.push({ severity: "error", message: `${candidateId}: primary and secondary examiner must be different.` });
+    });
+
+    return issues;
+  }
+
   async function handleLoadCentreSetup() {
     if (!activeSessionToken) {
       setCentreSetupError("Centre setup requires backend session.");
@@ -509,6 +570,7 @@ export default function VetBaraPrototype() {
     try {
       const result = await loadCentreSetup(activeSessionToken);
       applyCentreSetup(result);
+      setCentreValidationIssues([]);
       setCentreSetupStatus(`Loaded centre setup for exam event ${result.examEventId || "current"}.`);
     } catch (error) {
       console.error("Centre setup load failed", error);
@@ -521,6 +583,14 @@ export default function VetBaraPrototype() {
   async function handleSaveCentreSetup() {
     if (!activeSessionToken) {
       setCentreSetupError("Centre setup requires backend session.");
+      return;
+    }
+
+    const issues = validateCentreSetup();
+    setCentreValidationIssues(issues);
+
+    if (issues.some((issue) => issue.severity === "error")) {
+      setCentreSetupError("Centre setup has validation errors. Please fix them before saving.");
       return;
     }
 
