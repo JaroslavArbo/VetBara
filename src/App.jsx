@@ -284,6 +284,7 @@ function createSectionStatus(level) { return CANDIDATE_SECTIONS[level].reduce((a
 function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, outdoorMax: 58, reportMax: 117 } : { writtenMax: 46, outdoorMax: 102, reportMax: 0 }; }
 function scoreCandidate(c) { const l = scoreLimits(c.level); const w = Number(c.written ?? 0); const o = Number(c.outdoor ?? 0); const r = c.level === "Consulting" ? Number(c.report ?? 0) : 0; const total = w + o + r; const max = l.writtenMax + l.outdoorMax + l.reportMax; const pass = w / l.writtenMax >= 0.5 && o / l.outdoorMax >= 0.5 && (c.level !== "Consulting" || r / l.reportMax >= 0.5) && total / max >= 0.75; return { ...l, total, max, percentage: Math.round((total / max) * 1000) / 10, pass }; }
 function isObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
+function storedAnswerValue(row) { const answer = row?.answer; return isObject(answer) ? answer.selectedAnswer ?? answer.answer ?? answer.value ?? "" : answer ?? ""; }
 function RealQr({ value, size = 112 }) {
   const encoded = encodeURIComponent(value);
   return (
@@ -463,12 +464,14 @@ export default function VetBaraPrototype() {
     if (access.role === "Candidate" && knownCandidate(access.subjectId)) {
       setRole("Candidate");
       loginCandidate(access.subjectId);
+      hydrateCandidateProgress(access.sessionToken, access.subjectId);
       return;
     }
 
     if (access.role === "Examiner" && knownExaminer(access.subjectId)) {
       setRole("Examiner");
       loginExaminer(access.subjectId);
+      hydrateExaminerOutdoorProgress(access.sessionToken, access.subjectId);
       return;
     }
 
@@ -527,6 +530,108 @@ export default function VetBaraPrototype() {
     } finally {
       setExportLoading(false);
     }
+  }
+
+  async function hydrateCandidateProgress(sessionToken, candidateId) {
+    if (!sessionToken || !candidateId) return;
+
+    try {
+      const result = await fetchCandidateEvaluation(sessionToken, candidateId);
+      const restoredSections = Array.isArray(result.sections) ? result.sections : [];
+      const restoredResponses = Array.isArray(result.testResponses) ? result.testResponses : [];
+      const candidate = candidates.find((item) => item.id === candidateId);
+
+      if (restoredSections.length > 0) {
+        setCandidateStatus((prev) => ({
+          ...prev,
+          [candidateId]: restoredSections.reduce((next, section) => {
+            const sectionKey = section.section_key ?? section.sectionKey;
+            return sectionKey ? { ...next, [sectionKey]: section.status || next[sectionKey] || "locked" } : next;
+          }, { ...(prev[candidateId] ?? createSectionStatus(candidate?.level ?? "Practicing")) }),
+        }));
+        setCandidateTimes((prev) => ({
+          ...prev,
+          [candidateId]: restoredSections.reduce((next, section) => {
+            const sectionKey = section.section_key ?? section.sectionKey;
+            if (!sectionKey) return next;
+            const openedAt = section.opened_at ?? section.openedAt ?? next[sectionKey]?.openedAt ?? "";
+            const closedAt = section.closed_at ?? section.closedAt ?? next[sectionKey]?.closedAt ?? "";
+            return { ...next, [sectionKey]: { ...(next[sectionKey] ?? {}), openedAt, openedAtIso: openedAt, closedAt, closedAtIso: closedAt } };
+          }, { ...(prev[candidateId] ?? {}) }),
+        }));
+      }
+
+      if (restoredResponses.length > 0) {
+        setTestResponses((prev) => ({
+          ...prev,
+          [candidateId]: restoredResponses.reduce((next, row) => {
+            const questionId = row.question_id ?? row.questionId;
+            return questionId ? { ...next, [questionId]: storedAnswerValue(row) } : next;
+          }, { ...(prev[candidateId] ?? {}) }),
+        }));
+      }
+
+      if (restoredSections.length > 0 || restoredResponses.length > 0) addAudit("Candidate state restored", candidateId, `${restoredSections.length} section(s), ${restoredResponses.length} response(s)`);
+    } catch (error) {
+      console.error("Candidate state restore failed", error);
+      queue("Candidate state restore", `${candidateId} / sync error`);
+    }
+  }
+
+  async function hydrateOutdoorProgress(sessionToken, examinerId, candidateId) {
+    if (!sessionToken || !examinerId || !candidateId) return;
+    const assignment = assignments[candidateId] ?? {};
+    const mode = assignment.primary === examinerId ? "primary" : assignment.secondary === examinerId ? "secondary" : "unassigned";
+    if (mode === "unassigned") return;
+
+    try {
+      const result = await fetchCandidateEvaluation(sessionToken, candidateId);
+      const restoredScores = (Array.isArray(result.outdoorScores) ? result.outdoorScores : []).filter((score) => (score.examiner_id ?? score.examinerId) === examinerId);
+      const restoredAssessments = (Array.isArray(result.outdoorAssessments) ? result.outdoorAssessments : []).filter((assessment) => (assessment.examiner_id ?? assessment.examinerId) === examinerId);
+
+      if (restoredScores.length > 0) {
+        setOutdoor((prev) => ({
+          ...prev,
+          [candidateId]: restoredScores.reduce((next, score) => {
+            const itemId = score.item_id ?? score.itemId;
+            const rawScore = score.score ?? score.payload?.score ?? "";
+            const value = rawScore === null || rawScore === "" ? "" : Number(rawScore);
+            return itemId ? { ...next, [itemId]: value === "" ? "" : Number.isFinite(value) ? value : rawScore } : next;
+          }, { ...(prev[candidateId] ?? {}) }),
+        }));
+      }
+
+      const assessment = restoredAssessments.find((row) => (row.section_key ?? row.sectionKey) === "outdoor") ?? restoredAssessments[0];
+      if (assessment) {
+        setExaminerTimes((prev) => ({
+          ...prev,
+          [examinerId]: {
+            ...(prev[examinerId] ?? {}),
+            [candidateId]: {
+              ...(prev[examinerId]?.[candidateId] ?? {}),
+              outdoor: {
+                ...(prev[examinerId]?.[candidateId]?.outdoor ?? {}),
+                openedAt: assessment.payload?.openedAtLabel || assessment.payload?.openedAt || prev[examinerId]?.[candidateId]?.outdoor?.openedAt || "",
+                openedAtIso: assessment.payload?.openedAt || prev[examinerId]?.[candidateId]?.outdoor?.openedAtIso || null,
+                closedAt: assessment.payload?.closedAtLabel || assessment.submitted_at || assessment.submittedAt || prev[examinerId]?.[candidateId]?.outdoor?.closedAt || "",
+                closedAtIso: assessment.submitted_at || assessment.submittedAt || assessment.payload?.submittedAt || prev[examinerId]?.[candidateId]?.outdoor?.closedAtIso || null,
+              },
+            },
+          },
+        }));
+      }
+
+      if (restoredScores.length > 0 || assessment) addAudit("Outdoor state restored", candidateId, `${examinerId} / ${restoredScores.length} score(s)`);
+    } catch (error) {
+      console.error("Outdoor state restore failed", error);
+      queue("Outdoor state restore", `${candidateId} / sync error`);
+    }
+  }
+
+  async function hydrateExaminerOutdoorProgress(sessionToken, examinerId) {
+    if (!sessionToken || !examinerId) return;
+    const assigned = candidates.filter((candidate) => [assignments[candidate.id]?.primary, assignments[candidate.id]?.secondary].includes(examinerId));
+    await Promise.all(assigned.map((candidate) => hydrateOutdoorProgress(sessionToken, examinerId, candidate.id)));
   }
 
   function updateCandidate(id, patch) {
@@ -768,9 +873,37 @@ export default function VetBaraPrototype() {
   function addCandidate() { const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, birthDate: "", documentId: "", email: "", level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
   function loginCandidate(id) { setLoggedCandidateId(id); setSelectedCandidateId(id); setActiveCandidateSection("landing"); addAudit("Candidate logged in", candidates.find((c) => c.id === id)?.name ?? id, "QR accepted"); }
   function confirmCandidate() { if (!loggedCandidate) return; setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true })); addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`); }
-  function openCandidateSection(key) { if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return; const current = candidateStatus[loggedCandidate.id]?.[key]; if (current === "closed" && !window.confirm("This section is already closed. Reopening requires examiner approval. Has an examiner approved this reopening?")) return; const openedAt = nowStamp(); setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "open" } })); setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), openedAt, closedAt: null } } })); setActiveCandidateSection(key); addAudit("Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`); sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: current === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt }, createdAt: new Date().toISOString() }); }
-  function closeCandidateSection(key) { if (!loggedCandidate) return; const closedAt = nowStamp(); setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "closed" } })); setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), closedAt } } })); setActiveCandidateSection("landing"); addAudit("Candidate section closed", loggedCandidate.name, `${key} / ${closedAt}`); sendSyncEvent({ clientEventId: localEventId(`candidate-section-closed-${loggedCandidate.id}-${key}`), type: "candidate_section.closed", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, closedAt }, createdAt: new Date().toISOString() }); }
-  function updateTest(qid, value) { if (!loggedCandidate) return; setTestResponses((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [qid]: value } })); queue("Candidate test autosave", `${loggedCandidate.name} / ${qid}`); }
+  function openCandidateSection(key) {
+    if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return;
+    const current = candidateStatus[loggedCandidate.id]?.[key];
+    if (current === "closed" && !window.confirm("This section is already closed. Reopening requires examiner approval. Has an examiner approved this reopening?")) return;
+    const openedAt = nowStamp();
+    const openedAtIso = new Date().toISOString();
+    setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "open" } }));
+    setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), openedAt, openedAtIso, closedAt: null, closedAtIso: null } } }));
+    setActiveCandidateSection(key);
+    addAudit("Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`);
+    sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: current === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt: openedAtIso, openedAtLabel: openedAt }, createdAt: openedAtIso });
+  }
+  function closeCandidateSection(key) {
+    if (!loggedCandidate) return;
+    const closedAt = nowStamp();
+    const closedAtIso = new Date().toISOString();
+    const priorTime = candidateTimes[loggedCandidate.id]?.[key] ?? {};
+    setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "closed" } }));
+    setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), closedAt, closedAtIso } } }));
+    setActiveCandidateSection("landing");
+    addAudit("Candidate section closed", loggedCandidate.name, `${key} / ${closedAt}`);
+    sendSyncEvent({ clientEventId: localEventId(`candidate-section-closed-${loggedCandidate.id}-${key}`), type: "candidate_section.closed", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt: priorTime.openedAtIso ?? priorTime.openedAt ?? null, closedAt: closedAtIso, closedAtLabel: closedAt }, createdAt: closedAtIso });
+  }
+  function updateTest(qid, value) {
+    if (!loggedCandidate) return;
+    const variantCode = variants[loggedCandidate.level] ?? "";
+    const updatedAt = new Date().toISOString();
+    setTestResponses((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [qid]: value } }));
+    queue("Candidate test autosave", `${loggedCandidate.name} / ${qid}`);
+    sendSyncEvent({ clientEventId: localEventId(`test-response-saved-${loggedCandidate.id}-${qid}`), type: "test_response.saved", entityType: "test_response", entityId: `${loggedCandidate.id}:test:${qid}`, candidateId: loggedCandidate.id, payload: { sectionKey: "test", questionId: qid, answer: value, selectedAnswer: value, variantCode, updatedAt }, createdAt: updatedAt });
+  }
   function submitTest() { if (!loggedCandidate) return; setCandidates((prev) => prev.map((c) => c.id === loggedCandidate.id ? { ...c, status: "Written test submitted" } : c)); closeCandidateSection("test"); }
   function updateReport(tree, key, value, field = "section") { if (!loggedCandidate) return; setReportDrafts((prev) => { const draft = prev[loggedCandidate.id] ?? createReportDraft(); return { ...prev, [loggedCandidate.id]: { ...draft, [tree]: field === "fieldNotes" ? { ...draft[tree], fieldNotes: value } : { ...draft[tree], finalSections: { ...draft[tree].finalSections, [key]: value } } } }; }); }
   function addReportPhoto(tree) { if (!loggedCandidate) return; setReportDrafts((prev) => { const draft = prev[loggedCandidate.id] ?? createReportDraft(); const photos = draft[tree].photos; return { ...prev, [loggedCandidate.id]: { ...draft, [tree]: { ...draft[tree], photos: [...photos, { id: `P-${photos.length + 1}`, caption: `${tree} candidate photo ${photos.length + 1}` }] } } }; }); }
@@ -778,11 +911,46 @@ export default function VetBaraPrototype() {
   function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", EXAMINERS.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
   function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
   function setPrimary(candidateId, examinerId, primary) { setAssignments((prev) => { const current = prev[candidateId] ?? {}; return { ...prev, [candidateId]: primary ? { primary: examinerId, secondary: current.primary && current.primary !== examinerId ? current.primary : current.secondary } : { ...current, secondary: examinerId, primary: current.primary === examinerId ? current.secondary : current.primary } }; }); }
-  function openOutdoor(candidateId) { const c = candidates.find((x) => x.id === candidateId); if (!c || !loggedExaminer) return; const prior = examinerTimes[loggedExaminer.id]?.[candidateId]?.outdoor; if (prior?.closedAt && !window.confirm("This outdoor form is already closed. Reopening requires examiner approval. Continue?")) return; const openedAt = nowStamp(); setSelectedCandidateId(candidateId); setActiveOutdoorSection(OUTDOOR_SECTIONS[c.level][0]); setActiveExaminerPage("outdoor"); setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [candidateId]: { ...(prev[loggedExaminer.id]?.[candidateId] ?? {}), outdoor: { openedAt, closedAt: null } } } })); addAudit("Outdoor form opened", c.name, `${loggedExaminer.name} / ${openedAt}`); }
-  function updateOutdoor(itemId, value) { const item = Object.values(OUTDOOR_ITEMS[selectedCandidate.level]).flat().find((x) => x.id === itemId); const points = value === "" ? null : Math.min(Math.max(Number(value), 0), item?.max ?? 0); setOutdoor((prev) => ({ ...prev, [selectedCandidate.id]: { ...(prev[selectedCandidate.id] ?? {}), [itemId]: points } })); queue("Outdoor assessment", `${selectedCandidate.name} / ${itemId}`); sendSyncEvent({ clientEventId: localEventId(`outdoor-score-saved-${selectedCandidate.id}-${itemId}`), type: "outdoor_score.saved", entityType: "outdoor_score", entityId: `${selectedCandidate.id}:${itemId}`, candidateId: selectedCandidate.id, payload: { itemId, score: points, examinerId: loggedExaminer?.id ?? null, mode: selectedMode }, createdAt: new Date().toISOString() }); }
+  function openOutdoor(candidateId) {
+    const c = candidates.find((x) => x.id === candidateId);
+    if (!c || !loggedExaminer) return;
+    const assignment = assignments[candidateId] ?? {};
+    const mode = assignment.primary === loggedExaminer.id ? "primary" : assignment.secondary === loggedExaminer.id ? "secondary" : "unassigned";
+    if (mode === "unassigned") return;
+    const prior = examinerTimes[loggedExaminer.id]?.[candidateId]?.outdoor;
+    if (prior?.closedAt && !window.confirm("This outdoor form is already closed. Reopening requires examiner approval. Continue?")) return;
+    const openedAt = nowStamp();
+    const openedAtIso = new Date().toISOString();
+    setSelectedCandidateId(candidateId);
+    setActiveOutdoorSection(OUTDOOR_SECTIONS[c.level][0]);
+    setActiveExaminerPage("outdoor");
+    setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [candidateId]: { ...(prev[loggedExaminer.id]?.[candidateId] ?? {}), outdoor: { openedAt, openedAtIso, closedAt: null, closedAtIso: null } } } }));
+    addAudit("Outdoor form opened", c.name, `${loggedExaminer.name} / ${openedAt}`);
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-opened-${candidateId}-${loggedExaminer.id}`), type: "outdoor_assessment.opened", entityType: "outdoor_assessment", entityId: `${candidateId}:outdoor`, candidateId, payload: { candidateId, examinerId: loggedExaminer.id, mode, role: mode, sectionKey: "outdoor", openedAt: openedAtIso, openedAtLabel: openedAt }, createdAt: openedAtIso });
+    hydrateOutdoorProgress(activeSessionToken, loggedExaminer.id, candidateId);
+  }
+  function updateOutdoor(itemId, value) {
+    if (!loggedExaminer || selectedMode === "unassigned") return;
+    const item = Object.values(OUTDOOR_ITEMS[selectedCandidate.level]).flat().find((x) => x.id === itemId);
+    const points = value === "" ? null : Math.min(Math.max(Number(value), 0), item?.max ?? 0);
+    const updatedAt = new Date().toISOString();
+    setOutdoor((prev) => ({ ...prev, [selectedCandidate.id]: { ...(prev[selectedCandidate.id] ?? {}), [itemId]: points } }));
+    queue("Outdoor assessment", `${selectedCandidate.name} / ${itemId}`);
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-score-saved-${selectedCandidate.id}-${loggedExaminer.id}-${itemId}`), type: "outdoor_score.saved", entityType: "outdoor_score", entityId: `${selectedCandidate.id}:${itemId}`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: activeOutdoorSection, itemId, score: points, updatedAt }, createdAt: updatedAt });
+  }
   function outdoorTotal(candidateId, level, section) { const values = outdoor[candidateId] ?? {}; return (OUTDOOR_ITEMS[level]?.[section] ?? []).reduce((sum, item) => sum + Number(values[item.id] ?? 0), 0); }
   function outdoorMax(level, section) { return (OUTDOOR_ITEMS[level]?.[section] ?? []).reduce((sum, item) => sum + item.max, 0); }
-  function submitOutdoor() { const values = outdoor[selectedCandidate.id] ?? {}; const total = Object.values(OUTDOOR_ITEMS[selectedCandidate.level]).flat().reduce((sum, item) => sum + Number(values[item.id] ?? 0), 0); const closedAt = nowStamp(); setCandidates((prev) => prev.map((c) => c.id === selectedCandidate.id ? { ...c, outdoor: Math.min(total, scoreLimits(c.level).outdoorMax), status: "Outdoor submitted" } : c)); if (loggedExaminer) setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [selectedCandidate.id]: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id] ?? {}), outdoor: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id]?.outdoor ?? {}), closedAt } } } })); addAudit("Outdoor assessment submitted", selectedCandidate.name, `${total} points / ${closedAt}`); }
+  function submitOutdoor() {
+    if (!loggedExaminer || selectedMode === "unassigned") return;
+    const values = outdoor[selectedCandidate.id] ?? {};
+    const total = Object.values(OUTDOOR_ITEMS[selectedCandidate.level]).flat().reduce((sum, item) => sum + Number(values[item.id] ?? 0), 0);
+    const closedAt = nowStamp();
+    const submittedAt = new Date().toISOString();
+    setCandidates((prev) => prev.map((c) => c.id === selectedCandidate.id ? { ...c, outdoor: Math.min(total, scoreLimits(c.level).outdoorMax), status: "Outdoor submitted" } : c));
+    setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [selectedCandidate.id]: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id] ?? {}), outdoor: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id]?.outdoor ?? {}), closedAt, closedAtIso: submittedAt } } } }));
+    addAudit("Outdoor assessment submitted", selectedCandidate.name, `${total} points / ${closedAt}`);
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-submitted-${selectedCandidate.id}-${loggedExaminer.id}`), type: "outdoor_assessment.submitted", entityType: "outdoor_assessment", entityId: `${selectedCandidate.id}:outdoor`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: "outdoor", submittedAt, closedAtLabel: closedAt, total }, createdAt: submittedAt });
+  }
   function archivePlan() { if (!loggedExaminer || selectedCandidate.level !== "Practicing") return; setPracticingArchive((prev) => ({ ...prev, [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), { id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`, capturedBy: loggedExaminer.name }] })); }
   function updateScore(field, value) { setCandidates((prev) => prev.map((c) => c.id === selectedCandidate.id ? { ...c, [field]: value === "" ? null : Math.min(Math.max(Number(value), 0), scoreLimits(c.level)[`${field}Max`]), status: "In evaluation" } : c)); }
   function generateEvaluation() { const s = scoreCandidate(selectedCandidate); setLastEvaluation({ candidate: selectedCandidate.name, level: selectedCandidate.level, total: s.total, max: s.max, percentage: s.percentage, result: s.pass ? "PASS" : "NOT PASSED" }); }

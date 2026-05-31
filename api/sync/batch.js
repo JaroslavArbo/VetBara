@@ -136,6 +136,10 @@ function itemIdFor(event) {
   return null;
 }
 
+function objectPayload(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 function clientTimestamp(event) {
   const value = event.payload?.clientUpdatedAt || event.payload?.updatedAt || event.createdAt;
   return value ? new Date(value).toISOString() : new Date().toISOString();
@@ -152,6 +156,8 @@ async function upsertNormalizedState(session, event, candidateId) {
     if (!candidateId || !sectionKey) return false;
     const closed = event.type === "candidate_section.closed";
     const status = closed ? "closed" : "open";
+    const openedAt = payload.openedAt || payload.openedAtIso || (!closed ? event.createdAt : null);
+    const closedAt = payload.closedAt || payload.closedAtIso || (closed ? event.createdAt : null);
     await supabase("candidate_sections?on_conflict=candidate_id,section_key", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
@@ -159,8 +165,8 @@ async function upsertNormalizedState(session, event, candidateId) {
         candidate_id: candidateId,
         section_key: sectionKey,
         status,
-        opened_at: closed ? payload.openedAt ?? null : payload.openedAt ?? event.createdAt ?? new Date().toISOString(),
-        closed_at: closed ? payload.closedAt ?? event.createdAt ?? new Date().toISOString() : null,
+        opened_at: openedAt,
+        closed_at: closed ? closedAt : null,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
       }),
@@ -171,13 +177,20 @@ async function upsertNormalizedState(session, event, candidateId) {
   if (event.type === "test_response.saved" || event.type === "test_response.submitted") {
     const questionId = payload.questionId || itemIdFor(event) || sectionKey;
     if (!candidateId || !questionId) return false;
+    const answerPayload = objectPayload(payload.answer);
+    const answer = {
+      sectionKey: payload.sectionKey || answerPayload.sectionKey || sectionKey || "test",
+      selectedAnswer: payload.selectedAnswer ?? answerPayload.selectedAnswer ?? answerPayload.answer ?? payload.value ?? payload.answer ?? "",
+      variantCode: payload.variantCode ?? answerPayload.variantCode ?? null,
+      updatedAt,
+    };
     await supabase("test_responses?on_conflict=candidate_id,question_id", {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify({
         candidate_id: candidateId,
         question_id: questionId,
-        answer: payload.answer ?? payload,
+        answer,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
       }),
