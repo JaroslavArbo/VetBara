@@ -67,6 +67,13 @@ export function exportCandidateEvaluation(sessionToken, candidateId, format = "x
   });
 }
 
+export function exportCentreAuditPackage(sessionToken, format = "xls") {
+  return requestJson("/api/centre/audit-export", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, format }),
+  });
+}
+
 export function downloadBase64File({ base64, filename, mimeType }) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
