@@ -32,6 +32,20 @@ export function bootstrapSession(sessionToken) {
   });
 }
 
+export function loadCentreSetup(sessionToken) {
+  return requestJson("/api/centre/setup", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, action: "load" }),
+  });
+}
+
+export function saveCentreSetup(sessionToken, { candidates, examiners, assignments }) {
+  return requestJson("/api/centre/setup", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, action: "save", candidates, examiners, assignments }),
+  });
+}
+
 export function syncBatch(sessionToken, events) {
   return requestJson("/api/sync/batch", {
     method: "POST",
