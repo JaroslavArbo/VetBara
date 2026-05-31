@@ -457,8 +457,9 @@ export default function VetBaraPrototype() {
       setCandidates(result.candidates.map((candidate) => ({
         id: candidate.id,
         name: candidate.name || candidate.payload?.name || candidate.id,
-        birthDate: candidate.payload?.birthDate || "",
-        documentId: candidate.payload?.documentId || "",
+        birthDate: candidate.birthDate || candidate.birth_date || candidate.payload?.birthDate || candidate.payload?.birth_date || "",
+        documentId: candidate.documentId || candidate.document_id || candidate.payload?.documentId || candidate.payload?.document_id || "",
+        email: candidate.email || candidate.payload?.email || "",
         level: candidate.level || candidate.payload?.level || "Practicing",
         status: candidate.payload?.status || "Ready",
         written: candidate.payload?.written ?? null,
@@ -528,7 +529,14 @@ export default function VetBaraPrototype() {
 
     try {
            const result = await saveCentreSetup(activeSessionToken, {
-        candidates,
+         candidates: candidates.map((candidate) => ({
+          id: candidate.id,
+          name: candidate.name,
+          level: candidate.level,
+          birthDate: candidate.birthDate ?? "",
+          documentId: candidate.documentId ?? "",
+          email: candidate.email ?? "",
+        })),
         examiners: examiners.map((examiner) => ({
           id: examiner.id,
           name: examiner.name,
@@ -563,7 +571,7 @@ export default function VetBaraPrototype() {
     addAudit("Centre workspace opened", centre, "Delegated token accepted");
   }
   function toggleLevel(level) { setEnabledLevels((prev) => prev.includes(level) && prev.length > 1 ? prev.filter((x) => x !== level) : prev.includes(level) ? prev : [...prev, level]); }
-  function addCandidate() { const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, birthDate: "", documentId: "", level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
+  function addCandidate() { const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, birthDate: "", documentId: "", email: "", level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
   function loginCandidate(id) { setLoggedCandidateId(id); setSelectedCandidateId(id); setActiveCandidateSection("landing"); addAudit("Candidate logged in", candidates.find((c) => c.id === id)?.name ?? id, "QR accepted"); }
   function confirmCandidate() { if (!loggedCandidate) return; setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true })); addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`); }
   function openCandidateSection(key) { if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return; const current = candidateStatus[loggedCandidate.id]?.[key]; if (current === "closed" && !window.confirm("This section is already closed. Reopening requires examiner approval. Has an examiner approved this reopening?")) return; const openedAt = nowStamp(); setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "open" } })); setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), openedAt, closedAt: null } } })); setActiveCandidateSection(key); addAudit("Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`); sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: current === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt }, createdAt: new Date().toISOString() }); }
