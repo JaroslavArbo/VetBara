@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCandidateEvaluation, downloadBase64File, loadCentreSetup, saveCentreSetup } from "./lib/api";
+import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCandidateEvaluation, downloadBase64File, loadCentreSetup } from "./lib/api";
+
+async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage }) {
+  const response = await fetch("/api/centre/setup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionToken, action: "save", candidates, examiners, assignments, testPackage }),
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json") ? await response.json() : await response.text();
+  if (!response.ok) throw new Error(typeof body === "object" && body?.error ? body.error : `Request failed: ${response.status}`);
+  return body;
+}
 
 function Button({ children, className = "", variant = "default", ...props }) {
   const base = "inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none";
@@ -271,6 +283,7 @@ function createReportDraft() { return REPORT_TREES.reduce((acc, tree) => ({ ...a
 function createSectionStatus(level) { return CANDIDATE_SECTIONS[level].reduce((acc, sec) => ({ ...acc, [sec.key]: "locked" }), {}); }
 function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, outdoorMax: 58, reportMax: 117 } : { writtenMax: 46, outdoorMax: 102, reportMax: 0 }; }
 function scoreCandidate(c) { const l = scoreLimits(c.level); const w = Number(c.written ?? 0); const o = Number(c.outdoor ?? 0); const r = c.level === "Consulting" ? Number(c.report ?? 0) : 0; const total = w + o + r; const max = l.writtenMax + l.outdoorMax + l.reportMax; const pass = w / l.writtenMax >= 0.5 && o / l.outdoorMax >= 0.5 && (c.level !== "Consulting" || r / l.reportMax >= 0.5) && total / max >= 0.75; return { ...l, total, max, percentage: Math.round((total / max) * 1000) / 10, pass }; }
+function isObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
 function RealQr({ value, size = 112 }) {
   const encoded = encodeURIComponent(value);
   return (
@@ -580,6 +593,18 @@ export default function VetBaraPrototype() {
     }
 
     setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
+
+    if (isObject(result.testPackage)) {
+      if (Array.isArray(result.testPackage.availableVariants)) setAvailableVariants(result.testPackage.availableVariants);
+      if (isObject(result.testPackage.variants)) setVariants((previous) => ({ ...previous, ...result.testPackage.variants }));
+      if (isObject(result.testPackage.testBank)) setTestBank(result.testPackage.testBank);
+      const summary = result.testPackage.summary ?? result.testPackage.testImportSummary ?? null;
+      if (summary) setTestImportSummary(summary);
+      setTestImportError("");
+      setTestImportStatus(summary?.variants && summary?.questions
+        ? `Loaded stored test package with ${summary.variants} variant(s) and ${summary.questions} question(s).`
+        : "Loaded stored test package.");
+    }
   }
 
   function validateCentreSetup() {
@@ -690,8 +715,14 @@ export default function VetBaraPrototype() {
     setCentreSetupStatus("");
 
     try {
-           const result = await saveCentreSetup(activeSessionToken, {
-         candidates: candidates.map((candidate) => ({
+      const testPackage = testImportSummary ? {
+        availableVariants,
+        variants,
+        testBank,
+        summary: testImportSummary,
+      } : undefined;
+      const result = await saveCentreSetupWithTestPackage(activeSessionToken, {
+        candidates: candidates.map((candidate) => ({
           id: candidate.id,
           name: candidate.name,
           level: candidate.level,
@@ -707,6 +738,7 @@ export default function VetBaraPrototype() {
           email: examiner.email ?? "",
         })),
         assignments: assignmentList,
+        testPackage,
       });
       setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
       setCentreSetupStatus(`Saved centre setup for exam event ${result.examEventId || "current"}.`);

@@ -168,6 +168,37 @@ function validateAssignments(assignments, candidateIds, examinerIds) {
   return flattened;
 }
 
+function objectPayload(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function normaliseTestPackage(body, existingPackage) {
+  const source = objectPayload(body.testPackage && typeof body.testPackage === "object" ? body.testPackage : body);
+  const hasTestPackageData = Array.isArray(source.availableVariants)
+    || Object.prototype.hasOwnProperty.call(source, "variants")
+    || Object.prototype.hasOwnProperty.call(source, "testBank")
+    || Object.prototype.hasOwnProperty.call(source, "testImportSummary")
+    || Object.prototype.hasOwnProperty.call(source, "summary");
+
+  if (!hasTestPackageData) return undefined;
+
+  const previous = objectPayload(existingPackage);
+  const availableVariants = Array.isArray(source.availableVariants)
+    ? source.availableVariants
+    : Array.isArray(previous.availableVariants) ? previous.availableVariants : [];
+  const variants = objectPayload(source.variants ?? previous.variants);
+  const testBank = objectPayload(source.testBank ?? previous.testBank);
+  const summary = source.summary ?? source.testImportSummary ?? previous.summary ?? null;
+
+  return {
+    availableVariants,
+    variants,
+    testBank,
+    importedAt: source.importedAt || previous.importedAt || new Date().toISOString(),
+    summary,
+  };
+}
+
 function toAssignmentRow(assignment, centreId, examEventId) {
   return {
     exam_event_id: examEventId,
@@ -258,6 +289,7 @@ async function buildQrAccess(request, candidates, examiners, examEventId) {
 
 async function loadSetup(request, centreId, examEvent) {
   const examEventId = examEvent?.id ?? defaultExamEventId(centreId);
+  const payload = objectPayload(examEvent?.payload);
 
   if (!examEvent) {
     return {
@@ -267,6 +299,7 @@ async function loadSetup(request, centreId, examEvent) {
       examiners: [],
       assignments: [],
       qrAccess: { candidates: [], examiners: [] },
+      testPackage: null,
     };
   }
 
@@ -295,12 +328,15 @@ async function loadSetup(request, centreId, examEvent) {
       updatedAt: assignment.updated_at,
     })),
     qrAccess: await buildQrAccess(request, candidates, mappedExaminers, examEventId),
+    testPackage: payload.testPackage ?? null,
   };
 }
 
 async function saveSetup(request, centreId, body) {
   const examEvent = await ensureCurrentExamEvent(centreId);
   const examEventId = examEvent.id;
+  const existingPayload = objectPayload(examEvent.payload);
+  const testPackage = normaliseTestPackage(body, existingPayload.testPackage);
   const candidates = Array.isArray(body.candidates) ? body.candidates.map((candidate) => normaliseCandidate(candidate, centreId, examEventId)) : [];
   const examiners = Array.isArray(body.examiners) ? body.examiners.map((examiner) => normaliseExaminer(examiner, centreId, examEventId)) : [];
   const assignments = Array.isArray(body.assignments) ? body.assignments : [];
@@ -308,10 +344,22 @@ async function saveSetup(request, centreId, body) {
   const examinerIds = new Set(examiners.map((examiner) => examiner.id));
   const assignmentRows = validateAssignments(assignments, candidateIds, examinerIds).map((assignment) => toAssignmentRow(assignment, centreId, examEventId));
 
-  const [savedCandidates, savedExaminers] = await Promise.all([
+  const setupWrites = [
     candidates.length ? supabase("candidates?on_conflict=exam_event_id,id", upsertOptions(candidates)) : [],
     examiners.length ? supabase("examiners?on_conflict=exam_event_id,id", upsertOptions(examiners)) : [],
-  ]);
+  ];
+
+  if (testPackage !== undefined) {
+    setupWrites.push(supabase(`exam_events?id=eq.${encode(examEventId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        payload: { ...existingPayload, testPackage },
+        updated_at: new Date().toISOString(),
+      }),
+    }));
+  }
+
+  const [savedCandidates, savedExaminers] = await Promise.all(setupWrites);
   const savedAssignments = assignmentRows.length ? await supabase("examiner_assignments?on_conflict=exam_event_id,candidate_id,role", upsertOptions(assignmentRows)) : [];
 
   return {
