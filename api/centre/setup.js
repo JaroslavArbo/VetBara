@@ -276,11 +276,17 @@ async function loadSetup(request, centreId, examEvent) {
     supabase(`examiner_assignments?centre_id=eq.${encode(centreId)}&exam_event_id=eq.${encode(examEventId)}&select=candidate_id,examiner_id,role,payload,updated_at&order=candidate_id.asc`),
   ]);
 
+  const mappedExaminers = examiners.map((examiner) => ({
+    ...examiner,
+    registrationId: examiner.registrationId || examiner.registration_id || examiner.payload?.registrationId || examiner.payload?.registration_id || "",
+    email: examiner.email || examiner.payload?.email || "",
+  }));
+
   return {
     ok: true,
     examEventId,
     candidates,
-    examiners,
+    examiners: mappedExaminers,
     assignments: assignments.map((assignment) => ({
       candidateId: assignment.candidate_id,
       examinerId: assignment.examiner_id,
@@ -288,7 +294,7 @@ async function loadSetup(request, centreId, examEvent) {
       payload: assignment.payload,
       updatedAt: assignment.updated_at,
     })),
-    qrAccess: await buildQrAccess(request, candidates, examiners, examEventId),
+    qrAccess: await buildQrAccess(request, candidates, mappedExaminers, examEventId),
   };
 }
 
