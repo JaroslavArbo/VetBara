@@ -231,7 +231,7 @@ async function upsertNormalizedState(session, event, candidateId) {
         examiner_id: examinerId,
         item_id: itemId,
         score: payload.score ?? null,
-        note: payload.note ?? null,
+        note: payload.note ?? payload.comment ?? null,
         payload,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
