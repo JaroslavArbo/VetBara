@@ -46,6 +46,34 @@ export function fetchCandidateEvaluation(sessionToken, candidateId) {
   });
 }
 
+export function exportCandidateEvaluation(sessionToken, candidateId, format = "xls") {
+  return requestJson("/api/evaluation/export", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, candidateId, format }),
+  });
+}
+
+export function downloadBase64File({ base64, filename, mimeType }) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const blob = new Blob([bytes], { type: mimeType || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename || "VetBara_Evaluation_Draft.xls";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
 export async function generateEvaluation(sessionToken, payload) {
   const response = await fetch("/api/evaluation/generate", {
     method: "POST",
