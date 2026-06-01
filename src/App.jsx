@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp, PilotReleaseNotesPanel, PilotSmokeTestChecklist } from "./components/PilotInfoPanels";
+import { EvaluationPreviewCard } from "./components/EvaluationPreviewCard";
 
 async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage }) {
   const response = await fetch("/api/centre/setup", {
@@ -1293,113 +1294,6 @@ function ExaminerLanding({ examiner, confirmed, confirmExaminer, assignedCandida
   return <div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><h3 className="font-semibold">Confirm Examiner identity</h3>{[["Examiner name", examiner.name], ["Registration ID", examiner.registrationId]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}<Button onClick={confirmExaminer} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? "Identity confirmed" : "Confirm identity"}</Button></div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="mb-4 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-semibold">Examiner readiness</div><div className="mt-2 flex flex-wrap gap-2">{readiness.map((item) => <StatusPill key={item.label} tone={item.ready ? "good" : "warn"}>{item.label}</StatusPill>)}</div></div><h3 className="font-semibold">Assigned Candidate worklist</h3><p className="mt-1 text-sm text-slate-600">Primary Examiner must complete the full outdoor form. Secondary Examiner input is optional/supporting.</p>{assignedCandidates.length === 0 ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><div className="font-semibold">No assigned Candidates are available for this Examiner.</div><p className="mt-1">Ask the Centre to assign this Examiner as primary or secondary, save Centre Setup, then reopen the Examiner QR session.</p></div> : <div className="mt-4 grid gap-3 md:grid-cols-2">{assignedCandidates.map((c) => { const isPrimary = assignments[c.id]?.primary === examiner.id; return <div key={c.id} className="rounded-2xl border bg-white p-4"><div className="flex justify-between gap-3"><div><div className="font-semibold">{c.name}</div><div className="text-sm text-slate-600">{c.level}</div></div><StatusPill tone={isPrimary ? "good" : "default"}>{isPrimary ? "primary" : "secondary"}</StatusPill></div><label className="mt-3 flex items-center gap-2 rounded-xl bg-slate-100 p-3 text-sm"><input type="checkbox" checked={isPrimary} onChange={(e) => setPrimary(c.id, examiner.id, e.target.checked)} />I am the primary examiner for this candidate</label><Button onClick={() => openOutdoor(c.id)} disabled={!confirmed} className="mt-4 rounded-2xl">Open outdoor form</Button></div>; })}</div>}</div></div>;
 }
 function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, updateOutdoor, updateOutdoorNote, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, setActivePage, time }) { const total = OUTDOOR_SECTIONS[selectedCandidate.level].reduce((sum, s) => sum + outdoorTotal(selectedCandidate.id, selectedCandidate.level, s), 0); return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">Back to landing</Button><h3 className="font-semibold">Candidate binding</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">Active record: <strong>{selectedCandidate.name}</strong><br />Level: <strong>{selectedCandidate.level}</strong><br />Outdoor total: <strong>{total}</strong> / {scoreLimits(selectedCandidate.level).outdoorMax}<br />Opened: {time?.openedAt || "-"}<br />Closed: {time?.closedAt || "-"}</div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">Paper management plan archive</div><p className="mt-1 text-slate-600">Candidate prepares this on paper. Examiner photographs it as a pilot/archive placeholder.</p><Button onClick={archivePlan} variant="outline" className="mt-3 w-full rounded-2xl">Photograph paper plan</Button><div className="mt-2 text-xs text-slate-500">Archived photos: {(practicingArchive[selectedCandidate.id] ?? []).length}</div></div>}<div className="mt-4 space-y-2">{OUTDOOR_SECTIONS[selectedCandidate.level].map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${activeOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{OUTDOOR_TITLES[section]}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} points</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">Outdoor form detail</h3><p className="mt-1 text-sm text-slate-600">Jump between sections freely. Each question includes Notes / marking guidance.</p><div className="mt-4 space-y-3">{(OUTDOOR_ITEMS[selectedCandidate.level]?.[activeOutdoorSection] ?? []).map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="font-medium">{item.text}</div><div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><div className="mb-1 font-semibold">Notes / marking guidance</div><div>{item.notes}</div></div></div><label className="text-sm font-medium md:w-36">Points / {item.max}<input type="number" min="0" max={item.max} value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder="Examiner notes / justification" className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /></div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> Submit and close outdoor form</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? "primary - full form required" : selectedMode === "secondary" ? "secondary - optional input" : "unassigned"}</StatusPill><StatusPill tone="warn">autosave to sync queue</StatusPill></div><p className="mt-2 text-xs text-slate-500">If offline, visible local work remains and sync will retry when session/backend is available.</p></div></div>; }
-function EvaluationPreviewCard({ preview }) {
-  const summary = preview?.summary ?? {};
-  const sections = preview?.sections ?? [];
-  const outdoorScores = preview?.outdoorScores ?? [];
-  const reportSummary = preview?.reportSummary ?? null;
-  if (!preview) return null;
-
-  return (
-    <div className="mt-4 rounded-2xl border bg-white p-4 text-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="font-semibold">Evaluation preview</div>
-          <div className="mt-1 text-slate-600">
-            {preview.candidate?.name ?? preview.candidateId} / {preview.candidate?.id ?? preview.candidateId} / {preview.candidate?.level ?? "-"}
-          </div>
-        </div>
-        <StatusPill tone="good">JSON read model</StatusPill>
-      </div>
-
-      <div className="mt-4 grid gap-2 md:grid-cols-4">
-        <div className="rounded-xl bg-slate-100 p-3">
-          <div className="text-xs text-slate-500">Sections</div>
-          <div className="font-semibold">{summary.sectionsClosed ?? 0} / {summary.sectionsTotal ?? 0} closed</div>
-        </div>
-        <div className="rounded-xl bg-slate-100 p-3">
-          <div className="text-xs text-slate-500">Test responses</div>
-          <div className="font-semibold">{summary.testResponsesTotal ?? 0}</div>
-        </div>
-        <div className="rounded-xl bg-slate-100 p-3">
-          <div className="text-xs text-slate-500">Outdoor scores</div>
-          <div className="font-semibold">{summary.outdoorScoresTotal ?? 0}</div>
-        </div>
-        <div className="rounded-xl bg-slate-100 p-3">
-          <div className="text-xs text-slate-500">Outdoor total / avg</div>
-          <div className="font-semibold">{summary.outdoorScoreSum ?? 0} / {summary.outdoorScoreAverage ?? "-"}</div>
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <StatusPill tone={summary.hasPrimaryExaminerScores ? "good" : "default"}>Primary scores: {summary.hasPrimaryExaminerScores ? "yes" : "no"}</StatusPill>
-        <StatusPill tone={summary.hasSecondaryExaminerScores ? "good" : "default"}>Secondary scores: {summary.hasSecondaryExaminerScores ? "yes" : "no"}</StatusPill>
-      </div>
-
-      {reportSummary && (
-        <div className="mt-4">
-          <div className="mb-2 font-medium">Report draft summary</div>
-          <div className="grid gap-2 md:grid-cols-3">
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Report draft</div>
-              <div className="font-semibold">{reportSummary.hasReportDraft ? "yes" : "no"}</div>
-            </div>
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Trees with content</div>
-              <div className="font-semibold">{reportSummary.treesWithContent ?? 0} / {reportSummary.treesTotal ?? 0}</div>
-            </div>
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Field notes filled</div>
-              <div className="font-semibold">{reportSummary.fieldNotesFilled ?? 0}</div>
-            </div>
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Final sections filled</div>
-              <div className="font-semibold">{reportSummary.finalSectionsFilled ?? 0}</div>
-            </div>
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Photo placeholders</div>
-              <div className="font-semibold">{reportSummary.photoPlaceholdersTotal ?? 0}</div>
-            </div>
-            <div className="rounded-xl bg-slate-100 p-3">
-              <div className="text-xs text-slate-500">Submitted</div>
-              <div className="font-semibold">{reportSummary.isSubmitted ? "yes" : "no"}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {sections.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-2 font-medium">Sections</div>
-          <div className="space-y-2">
-            {sections.slice(0, 6).map((section) => (
-              <div key={section.id ?? `${section.candidate_id}:${section.section_key}`} className="flex justify-between gap-3 rounded-xl bg-slate-100 p-2">
-                <span>{section.section_key}</span>
-                <StatusPill tone={section.status === "closed" ? "good" : "warn"}>{section.status}</StatusPill>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {outdoorScores.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-2 font-medium">Outdoor scores</div>
-          <div className="space-y-2">
-            {outdoorScores.slice(0, 8).map((score) => (
-              <div key={score.id ?? `${score.candidate_id}:${score.examiner_id}:${score.item_id}`} className="grid gap-2 rounded-xl bg-slate-100 p-2 md:grid-cols-4">
-                <span>{score.item_id}</span>
-                <span>{score.examiner_id}</span>
-                <span>{score.payload?.mode ?? "-"}</span>
-                <strong>{score.score ?? "-"}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 function ScoringCard({ selectedCandidate, scoring, updateScore, generateEvaluation, lastEvaluation, loadEvaluationPreview, evaluationPreview, evaluationLoading, evaluationError, downloadDraftExport, exportLoading, exportError }) { return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={BadgeCheck} title="Examiner / Candidate scoring and evaluation" subtitle="Scoring engine uses the candidate level." /><div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><div className="font-semibold">{selectedCandidate.name}</div><div className="mt-4 text-sm text-slate-600">Status: <StatusPill>{selectedCandidate.status}</StatusPill></div></div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="grid gap-3 md:grid-cols-3"><label className="text-sm font-medium">Written / {scoring.writtenMax}<input type="number" value={selectedCandidate.written ?? ""} onChange={(e) => updateScore("written", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label><label className="text-sm font-medium">Outdoor / {scoring.outdoorMax}<input type="number" value={selectedCandidate.outdoor ?? ""} onChange={(e) => updateScore("outdoor", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>{selectedCandidate.level === "Consulting" && <label className="text-sm font-medium">Report / {scoring.reportMax}<input type="number" value={selectedCandidate.report ?? ""} onChange={(e) => updateScore("report", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>}</div><div className="mt-4 grid gap-3 md:grid-cols-5"><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">Total</div><div className="text-xl font-bold">{scoring.total} / {scoring.max}</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">Percentage</div><div className="text-xl font-bold">{scoring.percentage}%</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">Result</div><div className="text-xl font-bold">{scoring.pass ? "PASS" : "NOT PASSED"}</div></div><Button onClick={generateEvaluation} className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> Generate Evaluation</Button><Button onClick={() => loadEvaluationPreview(selectedCandidate.id)} disabled={evaluationLoading} variant="outline" className="h-full rounded-2xl">{evaluationLoading ? "Loading..." : "Load Evaluation Preview"}</Button><Button onClick={() => downloadDraftExport(selectedCandidate.id)} disabled={exportLoading} variant="outline" className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {exportLoading ? "Exporting..." : "Download Draft Export (.xls)"}</Button></div><p className="mt-3 text-xs text-slate-500">Draft Export only — not the official VETcert evaluation template.</p>{evaluationError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{evaluationError}</div>}{exportError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{exportError}</div>}{lastEvaluation && <div className="mt-4 rounded-2xl border bg-white p-4 text-sm"><div className="font-semibold">Last generated evaluation</div><div className="mt-1 text-slate-600">{lastEvaluation.candidate} / {lastEvaluation.level}: {lastEvaluation.total}/{lastEvaluation.max} ({lastEvaluation.percentage}%) - {lastEvaluation.result}</div></div>}<EvaluationPreviewCard preview={evaluationPreview} /></div></div></CardContent></Card>; }
 function AuditSyncView({ sync, setSync, audit }) {
   const syncStatusCounts = sync.reduce((counts, item) => {
