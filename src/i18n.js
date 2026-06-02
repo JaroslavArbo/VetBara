@@ -931,6 +931,24 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "app.mvpPrototype": "MVP prototype",
+  "app.offlineFirst": "offline-first",
+  "sectionStatus.locked": "locked",
+  "sectionStatus.open": "open",
+  "sectionStatus.closed": "closed"
+});
+
+Object.assign(translations.cs, {
+  "app.mvpPrototype": "MVP prototyp",
+  "app.offlineFirst": "offline-first",
+  "sectionStatus.locked": "zamčeno",
+  "sectionStatus.open": "otevřeno",
+  "sectionStatus.closed": "uzavřeno"
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
