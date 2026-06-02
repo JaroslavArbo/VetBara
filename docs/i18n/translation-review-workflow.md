@@ -6,7 +6,8 @@ This workflow explains how reviewers should complete the German, Italian, Swedis
 
 The packs are review assets only. German, Italian, Swedish, Croatian, Dutch, Norwegian, French, and Spanish are not live UI languages yet, and this workflow must not be used to enable them in the language switcher.
 
-Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish
+- ro Romanian.
 
 ## Files under review
 

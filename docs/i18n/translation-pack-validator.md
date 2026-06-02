@@ -4,7 +4,8 @@ This validator checks reviewed translation packs before approved rows are import
 
 It is intentionally strict. A translation pack can be useful for review even when many rows are still `needs_review`, but only rows marked `approved` are treated as import candidates.
 
-Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish
+- ro Romanian.
 
 ## Command
 

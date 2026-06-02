@@ -2,7 +2,8 @@
 
 Use this checklist for each German, Italian, Swedish, Croatian, Dutch, Norwegian, French, or Spanish review pass. These languages are not live UI languages yet.
 
-Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish
+- ro Romanian.
 
 ## Pack setup
 
