@@ -1,0 +1,54 @@
+# German and Italian translation review packs
+
+## Purpose
+
+These files prepare reviewable German and Italian translation packs from the current English i18n dictionary in `src/i18n.js`. They are documentation/data export only. German and Italian are not enabled in the runtime UI yet.
+
+## Files
+
+- `de-translation-pack.json` and `de-translation-pack.csv` contain the German review pack.
+- `it-translation-pack.json` and `it-translation-pack.csv` contain the Italian review pack.
+
+Each row contains `key`, `en`, `cs`, `target`, `notes`, and `status`. The `target` column is intentionally blank for this milestone, and every row is marked `needs_review`. Reviewers should fill only the `target` value and leave the key and source values unchanged.
+
+## Review process
+
+1. Open either the JSON or CSV pack for the language being reviewed.
+2. Translate only the `target` field.
+3. Keep `status` as `needs_review` until the language owner has approved the row.
+4. After approval, update `status` to the agreed reviewed-state value in the downstream import step.
+5. Do not change source keys, English values, protected terms, or placeholder syntax.
+
+## Protected terms
+
+The following terms are protected and should remain exactly as written unless a product owner explicitly approves a localized term:
+
+- Roles and portals: `Candidate`, `Examiner`, `Centre`, `Admin`.
+- Level/type values and role values: `Practicing`, `Consulting`, `primary`, `secondary`.
+- Data mode values: `backend-loaded pilot data`, `demo fallback data`.
+- Workflow labels: `Centre Setup`, `Candidate QR`, `Examiner QR`, `Centre QR`, `Draft Export`, `Centre Audit Package`, `sync queue`, `pilot/archive placeholder`.
+- Scoring values: `PASS`, `NOT PASSED`.
+- Import/export field names: `correctAnswer`, `variantCode`, `questionId`, `optionA`, `optionB`, `optionC`, `optionD`, `VARIANT_CODE`.
+
+`correctAnswer` appears only in the existing CSV/JSON import helper context. Do not expose or reuse it outside that context.
+
+## Placeholder rules
+
+Preserve placeholders exactly, including braces and spelling:
+
+- `{role}`
+- `{label}`
+- `{event}`
+- `{variants}`
+- `{questions}`
+- `{message}`
+
+If a reviewed target contains a placeholder, it must contain the same placeholder set as the English source value.
+
+## Later import into `src/i18n.js`
+
+After German and Italian translations are reviewed, import approved `target` values into new `translations.de` and `translations.it` dictionaries in `src/i18n.js`. The import should preserve the same key set as `translations.en`. Only after that import is complete and validated should the runtime language switcher be changed to expose German or Italian.
+
+## Current runtime behavior
+
+This milestone does not enable German or Italian in the UI, does not change backend code, does not change schema, does not change QR payloads, and does not change scoring or import/export behavior.
