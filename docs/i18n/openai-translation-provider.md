@@ -75,3 +75,11 @@ This provider does not change runtime app code.
 It does not enable German, Italian, Swedish, Croatian, Dutch, Norwegian, French, Spanish, Romanian, or any other UI language.
 
 It does not change backend, schema, QR payloads, scoring, PASS/FAIL logic, or import/export formats.
+
+## Native characters and diacritics
+
+The provider should use native target-language characters and diacritics.
+
+For German, use `ä`, `ö`, `ü`, and `ß` where linguistically appropriate. Do not transliterate these as `ae`, `oe`, `ue`, or `ss` unless the source text or a protected token already uses that spelling.
+
+Reviewers should still check all generated target values.

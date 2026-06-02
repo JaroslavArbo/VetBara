@@ -1,3 +1,44 @@
+const TARGET_LANGUAGE_NAMES = {
+  de: "German (Germany, standard orthography with ä, ö, ü, ß)",
+  it: "Italian",
+  sv: "Swedish",
+  hr: "Croatian",
+  nl: "Dutch",
+  no: "Norwegian",
+  fr: "French",
+  es: "Spanish",
+  ro: "Romanian",
+};
+
+const GERMAN_ASCII_TRANSLITERATION_PATTERNS = [
+  /\bfuer\b/i,
+  /\boeffnen\b/i,
+  /\bschliessen\b/i,
+  /\bbestaetigen\b/i,
+  /\bwaehlen\b/i,
+  /\bpruef/i,
+  /\bueber/i,
+  /\bmuessen\b/i,
+  /\bkoennen\b/i,
+  /\bzurueck/i,
+];
+
+function targetLanguageName(code) {
+  return TARGET_LANGUAGE_NAMES[code] ?? code;
+}
+
+function assertNativeOrthography({ text, targetLanguage }) {
+  if (targetLanguage !== "de") return;
+
+  const matched = GERMAN_ASCII_TRANSLITERATION_PATTERNS.find((pattern) => pattern.test(text));
+  if (matched) {
+    throw new Error(
+      `German translation appears to use ASCII transliteration instead of native diacritics: ${matched}`
+    );
+  }
+}
+
+
 export async function translateText({ provider = "mock", source, targetLanguage }) {
   if (!source && source !== "") {
     throw new Error("translateText requires source");
@@ -42,6 +83,9 @@ async function translateWithOpenAI({ source, targetLanguage }) {
             "Translate only the user-facing prose.",
             "Preserve every __VETBARA_*__ mask token exactly.",
             "Preserve placeholders such as {role}, {label}, {event}, {variants}, {questions}, {message}, and {variant} exactly if present.",
+            "Use native target-language characters and diacritics.",
+            "For German, use standard German orthography with ä, ö, ü, and ß where linguistically appropriate.",
+            "For German, never write ASCII transliterations such as ae, oe, ue, fuer, oeffnen, schliessen, Pruefung, or bestaetigen unless that exact spelling is inside a protected mask token.",
             "Return only the translated target text.",
             "Do not add quotes.",
             "Do not add explanations.",
@@ -49,7 +93,7 @@ async function translateWithOpenAI({ source, targetLanguage }) {
         },
         {
           role: "user",
-          content: `Target language: ${targetLanguage}\nText:\n${source}`,
+          content: `Target language: ${targetLanguageName(targetLanguage)}\nText:\n${source}`,
         },
       ],
     }),
@@ -71,5 +115,7 @@ async function translateWithOpenAI({ source, targetLanguage }) {
     throw new Error("OpenAI translation failed: unexpected response shape");
   }
 
-  return text.trim();
+  const trimmed = text.trim();
+  assertNativeOrthography({ text: trimmed, targetLanguage });
+  return trimmed;
 }
