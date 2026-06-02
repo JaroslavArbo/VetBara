@@ -549,6 +549,74 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "centre.access.title": "Certification centre / Open delegated workspace",
+  "centre.access.subtitle": "Open workspace using Centre QR received from Admin.",
+  "centre.access.placeholder": "Paste centre token",
+  "centre.access.open": "Open centre workspace",
+  "centre.access.prototypeToken": "Prototype token",
+
+  "centre.config.title": "Centre / Configure levels, variants, candidates and examiners",
+  "centre.config.subtitle": "One exam can contain Practicing, Consulting or both. Each candidate has primary and secondary examiner.",
+
+  "centre.setupPersistence.title": "Centre Setup persistence",
+  "centre.setupPersistence.helper": "Load or save the current Centre Setup through the backend. Returned Candidate QR and Examiner QR links are shown in the QR access pack below.",
+  "centre.setupPersistence.load": "Load Centre Setup",
+  "centre.setupPersistence.loading": "Loading...",
+  "centre.setupPersistence.save": "Save Centre Setup",
+  "centre.setupPersistence.saving": "Saving...",
+  "centre.setupPersistence.auditExport": "Download Centre Audit Package (.xls)",
+  "centre.setupPersistence.exporting": "Exporting...",
+  "centre.setupPersistence.unsaved": "Unsaved local changes",
+  "centre.setupPersistence.saved": "Saved / no local changes",
+  "centre.setupPersistence.saveHelper": "Click Save Centre Setup to persist roster, examiners, assignments, variants, and imported tests.",
+
+  "centre.dataMode.title": "Centre data mode",
+  "centre.dataMode.backendHelper": "This session uses backend-loaded pilot data.",
+  "centre.dataMode.demoHelper": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data.",
+  "centre.dataMode.saveAfterChanges": "Save Centre Setup after changing roster, examiners, assignments, or imported tests.",
+  "centre.dataMode.backend": "backend-loaded pilot data",
+  "centre.dataMode.demo": "demo fallback data",
+
+  "centre.copy.copied": "Copied {label} QR link",
+  "centre.copy.unavailable": "Copy unavailable. Select and copy {label} QR link manually."
+});
+
+Object.assign(translations.cs, {
+  "centre.access.title": "Certifikační centrum / otevření delegovaného pracovního prostoru",
+  "centre.access.subtitle": "Otevřete pracovní prostor pomocí Centre QR získaného od Admina.",
+  "centre.access.placeholder": "Vložte token centra",
+  "centre.access.open": "Otevřít pracovní prostor centra",
+  "centre.access.prototypeToken": "Prototypový token",
+
+  "centre.config.title": "Centrum / nastavení úrovní, variant, kandidátů a zkoušejících",
+  "centre.config.subtitle": "Jedna zkouška může obsahovat úroveň Practicing, Consulting nebo obě. Každý kandidát má primary a secondary examiner.",
+
+  "centre.setupPersistence.title": "Ukládání Centre Setup",
+  "centre.setupPersistence.helper": "Načtěte nebo uložte aktuální Centre Setup přes backend. Vrácené Candidate QR a Examiner QR odkazy se zobrazí níže v QR access packu.",
+  "centre.setupPersistence.load": "Načíst Centre Setup",
+  "centre.setupPersistence.loading": "Načítám...",
+  "centre.setupPersistence.save": "Uložit Centre Setup",
+  "centre.setupPersistence.saving": "Ukládám...",
+  "centre.setupPersistence.auditExport": "Stáhnout Centre Audit Package (.xls)",
+  "centre.setupPersistence.exporting": "Exportuji...",
+  "centre.setupPersistence.unsaved": "Neuložené lokální změny",
+  "centre.setupPersistence.saved": "Uloženo / žádné lokální změny",
+  "centre.setupPersistence.saveHelper": "Kliknutím na Save Centre Setup uložíte roster, zkoušející, přiřazení, varianty a importované testy.",
+
+  "centre.dataMode.title": "Datový režim centra",
+  "centre.dataMode.backendHelper": "Tato session používá backend-loaded pilot data.",
+  "centre.dataMode.demoHelper": "Tato session používá demo fallback data pouze pro testování. Načtením Centre Setup použijete backend-loaded pilot data.",
+  "centre.dataMode.saveAfterChanges": "Po změně rosteru, zkoušejících, přiřazení nebo importovaných testů uložte Centre Setup.",
+  "centre.dataMode.backend": "backend-loaded pilot data",
+  "centre.dataMode.demo": "demo fallback data",
+
+  "centre.copy.copied": "Zkopírován QR odkaz: {label}",
+  "centre.copy.unavailable": "Kopírování není dostupné. Označte a ručně zkopírujte QR odkaz: {label}."
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
