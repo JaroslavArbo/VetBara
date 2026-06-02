@@ -639,6 +639,46 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "centre.candidates.title": "Candidate list",
+  "centre.candidates.add": "Add candidate",
+  "centre.candidateDetails.title": "Candidate details",
+  "centre.candidateDetails.id": "Candidate ID",
+  "centre.candidateDetails.name": "Name",
+  "centre.candidateDetails.level": "Level",
+  "centre.candidateDetails.birthDate": "Birth date",
+  "centre.candidateDetails.documentId": "Document ID",
+  "centre.candidateDetails.email": "Email",
+
+  "centre.examiners.title": "Examiner list",
+  "centre.examiners.add": "Add examiner",
+  "centre.examinerDetails.id": "ID",
+  "centre.examinerDetails.name": "Name",
+  "centre.examinerDetails.registrationId": "Registration ID",
+  "centre.examinerDetails.email": "Email"
+});
+
+Object.assign(translations.cs, {
+  "centre.candidates.title": "Seznam kandidátů",
+  "centre.candidates.add": "Přidat kandidáta",
+  "centre.candidateDetails.title": "Detail kandidáta",
+  "centre.candidateDetails.id": "ID kandidáta",
+  "centre.candidateDetails.name": "Jméno",
+  "centre.candidateDetails.level": "Úroveň",
+  "centre.candidateDetails.birthDate": "Datum narození",
+  "centre.candidateDetails.documentId": "ID dokladu",
+  "centre.candidateDetails.email": "E-mail",
+
+  "centre.examiners.title": "Seznam zkoušejících",
+  "centre.examiners.add": "Přidat zkoušejícího",
+  "centre.examinerDetails.id": "ID",
+  "centre.examinerDetails.name": "Jméno",
+  "centre.examinerDetails.registrationId": "Registrační ID",
+  "centre.examinerDetails.email": "E-mail"
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
