@@ -1,13 +1,15 @@
 # Translation review checklist
 
-Use this checklist for each German, Italian, Swedish, Croatian, Dutch, Norwegian, or French review pass. These languages are not live UI languages yet.
+Use this checklist for each German, Italian, Swedish, Croatian, Dutch, Norwegian, French, or Spanish review pass. These languages are not live UI languages yet.
+
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
 
 ## Pack setup
 
-- [ ] Review one language pack at a time: German, Italian, Swedish, Croatian, Dutch, Norwegian, or French.
+- [ ] Review one language pack at a time: German, Italian, Swedish, Croatian, Dutch, Norwegian, French, or Spanish.
 - [ ] Choose one editable format for the pass: CSV or JSON.
 - [ ] Confirm the file keeps the expected fields: `key`, `en`, `cs`, `target`, `notes`, `status`.
-- [ ] Confirm source fields `key`, `en`, and `cs` were not edited.
+- [ ] Confirm source fields `key`, `en`, `cs`, and `notes` were not edited.
 - [ ] Confirm every row uses one of these statuses: `needs_review`, `approved`, `rejected`, `needs_discussion`.
 
 ## Target review
@@ -99,5 +101,5 @@ Target must preserve placeholders exactly. The translated sentence may reorder p
 - [ ] Confirm all importable rows are marked `approved`.
 - [ ] Confirm every `approved` row has a non-empty `target`.
 - [ ] Confirm no row marked `rejected`, `needs_review`, or `needs_discussion` is imported.
-- [ ] Confirm approved targets are ready for the matching future dictionary: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, or `translations.fr`.
-- [ ] Confirm German, Italian, Swedish, Croatian, Dutch, Norwegian, and French remain disabled in the UI until a later implementation milestone explicitly enables them.
+- [ ] Confirm approved targets are ready for the matching future dictionary: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, `translations.fr`, or `translations.es`.
+- [ ] Confirm German, Italian, Swedish, Croatian, Dutch, Norwegian, French, and Spanish remain disabled in the UI until a later implementation milestone explicitly enables them.

@@ -2,9 +2,11 @@
 
 ## Purpose
 
-This workflow explains how reviewers should complete the German, Italian, Swedish, Croatian, Dutch, Norwegian, and French translation packs prepared from `src/i18n.js`.
+This workflow explains how reviewers should complete the German, Italian, Swedish, Croatian, Dutch, Norwegian, French, and Spanish translation packs prepared from `src/i18n.js`.
 
-The packs are review assets only. German, Italian, Swedish, Croatian, Dutch, Norwegian, and French are not live UI languages yet, and this workflow must not be used to enable them in the language switcher.
+The packs are review assets only. German, Italian, Swedish, Croatian, Dutch, Norwegian, French, and Spanish are not live UI languages yet, and this workflow must not be used to enable them in the language switcher.
+
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
 
 ## Files under review
 
@@ -24,8 +26,12 @@ Reviewers may work from either format:
 - `docs/i18n/no-translation-pack.json`
 - `docs/i18n/fr-translation-pack.csv`
 - `docs/i18n/fr-translation-pack.json`
+- `docs/i18n/es-translation-pack.csv`
+- `docs/i18n/es-translation-pack.json`
 
 The CSV and JSON packs represent the same rows. Choose one source of truth for each review round to avoid conflicting edits.
+
+For the short external reviewer handoff, send `docs/i18n/reviewer-handoff.md` with the language CSV.
 
 Each row contains:
 
@@ -33,7 +39,7 @@ Each row contains:
 - `en`: English source text; do not edit.
 - `cs`: Czech source/reference text; do not edit.
 - `target`: reviewer translation for the pack language.
-- `notes`: protection, placeholder, or terminology guidance.
+- `notes`: protection, placeholder, or terminology guidance; do not edit.
 - `status`: review state.
 
 ## Required status values
@@ -53,9 +59,9 @@ When editing CSV:
 
 - Keep UTF-8 encoding.
 - Keep the header exactly: `key,en,cs,target,notes,status`.
-- Edit only `target`, `status`, and reviewer-facing additions to `notes`.
+- Edit only `target`, `status`, and an optional reviewer comment column if maintainers add one for a review round.
 - Do not reorder rows unless the import owner explicitly asks for sorting changes.
-- Do not edit source keys or source-language values.
+- Do not edit source keys, source-language values, or `notes`.
 
 Use a spreadsheet editor only if it preserves UTF-8, quotes, commas, and braces exactly. After editing, export back to CSV without changing the delimiter or header.
 
@@ -65,9 +71,9 @@ When editing JSON:
 
 - Keep valid JSON.
 - Keep each object field name unchanged.
-- Edit only `target`, `status`, and reviewer-facing additions to `notes`.
+- Edit only `target`, `status`, and an optional reviewer comment field if maintainers add one for a review round.
 - Do not reorder keys inside objects unless the import owner agrees.
-- Do not edit source keys or source-language values.
+- Do not edit source keys, source-language values, or `notes`.
 
 JSON is useful for technical review because placeholders and escaped characters are easier to inspect precisely.
 
@@ -201,9 +207,9 @@ When review is complete:
 2. Confirm every approved row has a non-empty `target`.
 3. Confirm every approved target preserves the same placeholder set as the English source.
 4. Confirm protected data values and CSV/import field names remain unchanged.
-5. Import approved targets into the matching future dictionary in `src/i18n.js`: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, or `translations.fr`.
+5. Import approved targets into the matching future dictionary in `src/i18n.js`: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, `translations.fr`, or `translations.es`.
 6. Keep the imported key set aligned with `translations.en`.
 7. Run build and UI smoke tests after import.
 8. Enable any reviewed language in the UI only in a later milestone after import validation and product approval.
 
-German, Italian, Swedish, Croatian, Dutch, Norwegian, and French are not enabled in the UI by this workflow.
+German, Italian, Swedish, Croatian, Dutch, Norwegian, French, and Spanish are not enabled in the UI by this workflow.

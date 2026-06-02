@@ -4,6 +4,8 @@ This validator checks reviewed translation packs before approved rows are import
 
 It is intentionally strict. A translation pack can be useful for review even when many rows are still `needs_review`, but only rows marked `approved` are treated as import candidates.
 
+Review-pack languages are de German, it Italian, sv Swedish, hr Croatian, nl Dutch, no Norwegian, fr French, and es Spanish.
+
 ## Command
 
 Run:
@@ -15,6 +17,7 @@ node scripts/validate-i18n-pack.mjs docs/i18n/hr-translation-pack.json
 node scripts/validate-i18n-pack.mjs docs/i18n/nl-translation-pack.json
 node scripts/validate-i18n-pack.mjs docs/i18n/no-translation-pack.json
 node scripts/validate-i18n-pack.mjs docs/i18n/fr-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/es-translation-pack.json
 
 ## Accepted statuses
 
@@ -96,6 +99,6 @@ These terms may be discussed during translation review, but they must not be sil
 
 The validator does not import translations.
 
-It does not enable German, Italian, Swedish, Croatian, Dutch, Norwegian, or French in the UI.
+It does not enable German, Italian, Swedish, Croatian, Dutch, Norwegian, French, or Spanish in the UI.
 
 It does not check linguistic quality. Human review is still required.
