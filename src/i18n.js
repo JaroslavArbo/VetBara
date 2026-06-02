@@ -755,6 +755,46 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "status.centreQrRequired": "Open the Centre portal with a valid Centre QR session, then try again.",
+  "status.centreSetup.loadedEvent": "Loaded Centre Setup for exam event {event}.",
+  "status.centreSetup.savedEvent": "Saved Centre Setup for exam event {event}.",
+  "status.centreSetup.loadFailed": "Centre Setup could not be loaded. Check the session and try again.",
+  "status.centreSetup.saveFailed": "Centre Setup could not be saved. Check the Centre session and try again.",
+  "status.centreAuditExport.sessionRequired": "Open the Centre portal with a valid Centre QR session before downloading the Audit Package.",
+
+  "status.testImport.importedFull": "Imported {variants} variants and {questions} questions.",
+  "status.testImport.failedWithMessage": "Test import failed: {message}",
+  "status.testImport.fileReadFailed": "Test import failed: the file could not be read.",
+  "status.testImport.summary": "Imported {variants} variant(s), {questions} question(s).",
+
+  "status.evaluation.previewSessionRequired": "Open this portal with a valid QR session before loading the evaluation preview.",
+  "status.evaluation.previewUnavailable": "Evaluation preview is unavailable. Reopen the Examiner QR session and try again.",
+  "status.export.sessionRequired": "Open this portal with a valid QR session before downloading the Draft Export.",
+  "status.export.unavailable": "Draft Export is unavailable. Reopen the Examiner QR session and try again."
+});
+
+Object.assign(translations.cs, {
+  "status.centreQrRequired": "Otevřete portál Centra pomocí platné Centre QR session a zkuste to znovu.",
+  "status.centreSetup.loadedEvent": "Centre Setup načten pro zkušební událost {event}.",
+  "status.centreSetup.savedEvent": "Centre Setup uložen pro zkušební událost {event}.",
+  "status.centreSetup.loadFailed": "Centre Setup se nepodařilo načíst. Zkontrolujte session a zkuste to znovu.",
+  "status.centreSetup.saveFailed": "Centre Setup se nepodařilo uložit. Zkontrolujte Centre session a zkuste to znovu.",
+  "status.centreAuditExport.sessionRequired": "Před stažením Audit Package otevřete portál Centra pomocí platné Centre QR session.",
+
+  "status.testImport.importedFull": "Importováno: {variants} variant(y) a {questions} otázka/otázek.",
+  "status.testImport.failedWithMessage": "Import testu selhal: {message}",
+  "status.testImport.fileReadFailed": "Import testu selhal: soubor se nepodařilo přečíst.",
+  "status.testImport.summary": "Importováno: {variants} variant(y), {questions} otázka/otázek.",
+
+  "status.evaluation.previewSessionRequired": "Před načtením náhledu vyhodnocení otevřete tento portál pomocí platné QR session.",
+  "status.evaluation.previewUnavailable": "Náhled vyhodnocení není dostupný. Znovu otevřete Examiner QR session a zkuste to znovu.",
+  "status.export.sessionRequired": "Před stažením pracovního exportu otevřete tento portál pomocí platné QR session.",
+  "status.export.unavailable": "Pracovní export není dostupný. Znovu otevřete Examiner QR session a zkuste to znovu."
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
