@@ -377,6 +377,90 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "examiner.identity.title": "Confirm Examiner identity",
+  "examiner.identity.name": "Examiner name",
+  "examiner.identity.registrationId": "Registration ID",
+  "examiner.identity.confirmed": "Identity confirmed",
+  "examiner.identity.confirm": "Confirm identity",
+
+  "examiner.readiness.title": "Examiner readiness",
+  "examiner.readiness.identity": "Identity confirmed",
+  "examiner.readiness.assignments": "Assignments available",
+  "examiner.worklist.title": "Assigned Candidate worklist",
+  "examiner.worklist.helper": "Primary Examiner must complete the full outdoor form. Secondary Examiner input is optional/supporting.",
+  "examiner.worklist.emptyTitle": "No assigned Candidates are available for this Examiner.",
+  "examiner.worklist.emptyHelper": "Ask the Centre to assign this Examiner as primary or secondary, save Centre Setup, then reopen the Examiner QR session.",
+  "examiner.worklist.primaryCheckbox": "I am the primary examiner for this candidate",
+  "examiner.worklist.openOutdoor": "Open outdoor form",
+  "examiner.role.primary": "primary",
+  "examiner.role.secondary": "secondary",
+
+  "outdoor.backToLanding": "Back to landing",
+  "outdoor.candidateBinding": "Candidate binding",
+  "outdoor.activeRecord": "Active record",
+  "outdoor.level": "Level",
+  "outdoor.total": "Outdoor total",
+  "outdoor.paperArchive.title": "Paper management plan archive",
+  "outdoor.paperArchive.helper": "Candidate prepares this on paper. Examiner photographs it as a pilot/archive placeholder.",
+  "outdoor.paperArchive.button": "Photograph paper plan",
+  "outdoor.paperArchive.photos": "Archived photos",
+  "outdoor.points": "points",
+  "outdoor.detail.title": "Outdoor form detail",
+  "outdoor.detail.helper": "Jump between sections freely. Each question includes Notes / marking guidance.",
+  "outdoor.notesGuidance": "Notes / marking guidance",
+  "outdoor.pointsLabel": "Points",
+  "outdoor.examinerNotes": "Examiner notes / justification",
+  "outdoor.submit": "Submit and close outdoor form",
+  "outdoor.mode.primary": "primary - full form required",
+  "outdoor.mode.secondary": "secondary - optional input",
+  "outdoor.mode.unassigned": "unassigned",
+  "outdoor.autosave": "autosave to sync queue"
+});
+
+Object.assign(translations.cs, {
+  "examiner.identity.title": "Potvrzení identity zkoušejícího",
+  "examiner.identity.name": "Jméno zkoušejícího",
+  "examiner.identity.registrationId": "Registrační ID",
+  "examiner.identity.confirmed": "Identita potvrzena",
+  "examiner.identity.confirm": "Potvrdit identitu",
+
+  "examiner.readiness.title": "Připravenost zkoušejícího",
+  "examiner.readiness.identity": "Identita potvrzena",
+  "examiner.readiness.assignments": "Přiřazení dostupná",
+  "examiner.worklist.title": "Seznam přiřazených kandidátů",
+  "examiner.worklist.helper": "Primary Examiner musí vyplnit celý outdoor formulář. Secondary Examiner input je volitelný/podpůrný.",
+  "examiner.worklist.emptyTitle": "Pro tohoto zkoušejícího nejsou dostupní žádní přiřazení kandidáti.",
+  "examiner.worklist.emptyHelper": "Požádejte Centrum, aby zkoušejícího přiřadilo jako primary nebo secondary, uložilo Centre Setup a znovu otevřelo Examiner QR session.",
+  "examiner.worklist.primaryCheckbox": "Jsem primary examiner pro tohoto kandidáta",
+  "examiner.worklist.openOutdoor": "Otevřít outdoor formulář",
+  "examiner.role.primary": "primary",
+  "examiner.role.secondary": "secondary",
+
+  "outdoor.backToLanding": "Zpět na úvodní stránku",
+  "outdoor.candidateBinding": "Vazba na kandidáta",
+  "outdoor.activeRecord": "Aktivní záznam",
+  "outdoor.level": "Úroveň",
+  "outdoor.total": "Outdoor celkem",
+  "outdoor.paperArchive.title": "Archiv papírového management plánu",
+  "outdoor.paperArchive.helper": "Kandidát připravuje tuto část na papíře. Zkoušející ji vyfotí jako pilot/archive placeholder.",
+  "outdoor.paperArchive.button": "Vyfotit papírový plán",
+  "outdoor.paperArchive.photos": "Archivované fotografie",
+  "outdoor.points": "bodů",
+  "outdoor.detail.title": "Detail outdoor formuláře",
+  "outdoor.detail.helper": "Mezi sekcemi lze volně přepínat. Každá otázka obsahuje poznámky / hodnoticí vodítko.",
+  "outdoor.notesGuidance": "Poznámky / hodnoticí vodítko",
+  "outdoor.pointsLabel": "Body",
+  "outdoor.examinerNotes": "Poznámky zkoušejícího / zdůvodnění",
+  "outdoor.submit": "Odeslat a uzavřít outdoor formulář",
+  "outdoor.mode.primary": "primary - vyžaduje celý formulář",
+  "outdoor.mode.secondary": "secondary - volitelný vstup",
+  "outdoor.mode.unassigned": "nepřiřazeno",
+  "outdoor.autosave": "automatické ukládání do sync queue"
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
