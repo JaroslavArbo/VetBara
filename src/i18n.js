@@ -795,6 +795,36 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "auditSync.title": "Sync queue / audit trail",
+  "auditSync.subtitle": "Sync queue shows local actions waiting for backend confirmation or already recorded during this session.",
+  "auditSync.markAllSynced": "Mark all synced",
+  "auditSync.queue": "Sync queue",
+  "auditSync.audit": "Audit trail",
+  "auditSync.emptyQueue": "No sync queue items.",
+  "auditSync.emptyAudit": "No audit entries yet.",
+  "auditSync.status": "Status",
+  "auditSync.time": "Time",
+  "auditSync.type": "Type",
+  "auditSync.detail": "Detail"
+});
+
+Object.assign(translations.cs, {
+  "auditSync.title": "Sync queue / auditní stopa",
+  "auditSync.subtitle": "Sync queue zobrazuje lokální akce čekající na potvrzení backendem nebo už zaznamenané v této session.",
+  "auditSync.markAllSynced": "Označit vše jako synchronizované",
+  "auditSync.queue": "Sync queue",
+  "auditSync.audit": "Auditní stopa",
+  "auditSync.emptyQueue": "Sync queue neobsahuje žádné položky.",
+  "auditSync.emptyAudit": "Zatím nejsou žádné auditní záznamy.",
+  "auditSync.status": "Stav",
+  "auditSync.time": "Čas",
+  "auditSync.type": "Typ",
+  "auditSync.detail": "Detail"
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
