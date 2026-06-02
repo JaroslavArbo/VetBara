@@ -1,13 +1,18 @@
-# German and Italian translation review packs
+# Translation review packs
 
 ## Purpose
 
-These files prepare reviewable German and Italian translation packs from the current English i18n dictionary in `src/i18n.js`. They are documentation/data export only. German and Italian are not enabled in the runtime UI yet.
+These files prepare reviewable translation packs from the current English i18n dictionary in `src/i18n.js`. They are documentation/data export only. German, Italian, Swedish, Croatian, Dutch, Norwegian, and French are not enabled in the runtime UI yet.
 
 ## Files
 
 - `de-translation-pack.json` and `de-translation-pack.csv` contain the German review pack.
 - `it-translation-pack.json` and `it-translation-pack.csv` contain the Italian review pack.
+- `sv-translation-pack.json` and `sv-translation-pack.csv` contain the Swedish review pack.
+- `hr-translation-pack.json` and `hr-translation-pack.csv` contain the Croatian review pack.
+- `nl-translation-pack.json` and `nl-translation-pack.csv` contain the Dutch review pack.
+- `no-translation-pack.json` and `no-translation-pack.csv` contain the Norwegian review pack.
+- `fr-translation-pack.json` and `fr-translation-pack.csv` contain the French review pack.
 
 Each row contains `key`, `en`, `cs`, `target`, `notes`, and `status`. The `target` column is intentionally blank for this milestone, and every row is marked `needs_review`. Reviewers should fill only the `target` value and leave the key and source values unchanged.
 
@@ -48,8 +53,8 @@ If a reviewed target contains a placeholder, it must contain the same placeholde
 
 ## Later import into `src/i18n.js`
 
-After German and Italian translations are reviewed, import approved `target` values into new `translations.de` and `translations.it` dictionaries in `src/i18n.js`. The import should preserve the same key set as `translations.en`. Only after that import is complete and validated should the runtime language switcher be changed to expose German or Italian.
+After translations are reviewed, import approved `target` values into the matching future dictionaries in `src/i18n.js`: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, and `translations.fr`. The import should preserve the same key set as `translations.en`. Only after that import is complete and validated should the runtime language switcher be changed to expose any of these languages.
 
 ## Current runtime behavior
 
-This milestone does not enable German or Italian in the UI, does not change backend code, does not change schema, does not change QR payloads, and does not change scoring or import/export behavior.
+This milestone does not enable German, Italian, Swedish, Croatian, Dutch, Norwegian, or French in the UI, does not change backend code, does not change schema, does not change QR payloads, and does not change scoring or import/export behavior.

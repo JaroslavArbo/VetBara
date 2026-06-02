@@ -1,10 +1,10 @@
-# German and Italian translation review workflow
+# Translation review workflow
 
 ## Purpose
 
-This workflow explains how reviewers should complete the German and Italian translation packs prepared from `src/i18n.js`.
+This workflow explains how reviewers should complete the German, Italian, Swedish, Croatian, Dutch, Norwegian, and French translation packs prepared from `src/i18n.js`.
 
-The packs are review assets only. German and Italian are not live UI languages yet, and this workflow must not be used to enable them in the language switcher.
+The packs are review assets only. German, Italian, Swedish, Croatian, Dutch, Norwegian, and French are not live UI languages yet, and this workflow must not be used to enable them in the language switcher.
 
 ## Files under review
 
@@ -14,6 +14,16 @@ Reviewers may work from either format:
 - `docs/i18n/de-translation-pack.json`
 - `docs/i18n/it-translation-pack.csv`
 - `docs/i18n/it-translation-pack.json`
+- `docs/i18n/sv-translation-pack.csv`
+- `docs/i18n/sv-translation-pack.json`
+- `docs/i18n/hr-translation-pack.csv`
+- `docs/i18n/hr-translation-pack.json`
+- `docs/i18n/nl-translation-pack.csv`
+- `docs/i18n/nl-translation-pack.json`
+- `docs/i18n/no-translation-pack.csv`
+- `docs/i18n/no-translation-pack.json`
+- `docs/i18n/fr-translation-pack.csv`
+- `docs/i18n/fr-translation-pack.json`
 
 The CSV and JSON packs represent the same rows. Choose one source of truth for each review round to avoid conflicting edits.
 
@@ -22,7 +32,7 @@ Each row contains:
 - `key`: stable i18n key; do not edit.
 - `en`: English source text; do not edit.
 - `cs`: Czech source/reference text; do not edit.
-- `target`: German or Italian reviewer translation.
+- `target`: reviewer translation for the pack language.
 - `notes`: protection, placeholder, or terminology guidance.
 - `status`: review state.
 
@@ -191,9 +201,9 @@ When review is complete:
 2. Confirm every approved row has a non-empty `target`.
 3. Confirm every approved target preserves the same placeholder set as the English source.
 4. Confirm protected data values and CSV/import field names remain unchanged.
-5. Import approved German targets into a future `translations.de` dictionary and approved Italian targets into a future `translations.it` dictionary in `src/i18n.js`.
+5. Import approved targets into the matching future dictionary in `src/i18n.js`: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, or `translations.fr`.
 6. Keep the imported key set aligned with `translations.en`.
 7. Run build and UI smoke tests after import.
-8. Enable German or Italian in the UI only in a later milestone after import validation and product approval.
+8. Enable any reviewed language in the UI only in a later milestone after import validation and product approval.
 
-German and Italian are not enabled in the UI by this workflow.
+German, Italian, Swedish, Croatian, Dutch, Norwegian, and French are not enabled in the UI by this workflow.

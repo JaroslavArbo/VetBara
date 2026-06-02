@@ -1,10 +1,10 @@
 # Translation review checklist
 
-Use this checklist for each German or Italian review pass. German and Italian are not live UI languages yet.
+Use this checklist for each German, Italian, Swedish, Croatian, Dutch, Norwegian, or French review pass. These languages are not live UI languages yet.
 
 ## Pack setup
 
-- [ ] Review one language pack at a time: German or Italian.
+- [ ] Review one language pack at a time: German, Italian, Swedish, Croatian, Dutch, Norwegian, or French.
 - [ ] Choose one editable format for the pass: CSV or JSON.
 - [ ] Confirm the file keeps the expected fields: `key`, `en`, `cs`, `target`, `notes`, `status`.
 - [ ] Confirm source fields `key`, `en`, and `cs` were not edited.
@@ -99,6 +99,5 @@ Target must preserve placeholders exactly. The translated sentence may reorder p
 - [ ] Confirm all importable rows are marked `approved`.
 - [ ] Confirm every `approved` row has a non-empty `target`.
 - [ ] Confirm no row marked `rejected`, `needs_review`, or `needs_discussion` is imported.
-- [ ] Confirm approved German targets are ready for a future `translations.de` dictionary.
-- [ ] Confirm approved Italian targets are ready for a future `translations.it` dictionary.
-- [ ] Confirm German and Italian remain disabled in the UI until a later implementation milestone explicitly enables them.
+- [ ] Confirm approved targets are ready for the matching future dictionary: `translations.de`, `translations.it`, `translations.sv`, `translations.hr`, `translations.nl`, `translations.no`, or `translations.fr`.
+- [ ] Confirm German, Italian, Swedish, Croatian, Dutch, Norwegian, and French remain disabled in the UI until a later implementation milestone explicitly enables them.
