@@ -235,6 +235,148 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "candidate.identity.title": "Confirm identity",
+  "candidate.identity.helper": "Check your name and document details before opening exam sections.",
+  "candidate.identity.confirm": "Confirm identity",
+  "candidate.sections.title": "Exam sections",
+  "candidate.sections.open": "Open section",
+  "candidate.sections.reopen": "Reopen section",
+  "candidate.sections.closed": "Closed",
+  "candidate.sections.opened": "Open",
+  "candidate.sections.locked": "Locked",
+
+  "test.title": "Written test",
+  "test.helper": "Answer the questions for the selected variant. Answers are saved to the sync queue.",
+  "test.noQuestions": "No written test questions are available for this variant.",
+  "test.answer": "Answer",
+  "test.save": "Save answer",
+  "test.submit": "Submit and close written test",
+  "test.back": "Back to sections",
+
+  "report.title": "Consulting report draft",
+  "report.helper": "Prepare field notes and final text for the Consulting report. Photo entries are pilot/archive placeholders, not real uploads.",
+  "report.tree": "Tree",
+  "report.fieldNotes": "Field notes",
+  "report.finalText": "Final text",
+  "report.photoPlaceholder": "Photo placeholder / archive note",
+  "report.addPhoto": "Add photo placeholder",
+  "report.submit": "Submit and close report",
+  "report.back": "Back to sections"
+});
+
+Object.assign(translations.cs, {
+  "candidate.identity.title": "Potvrzení identity",
+  "candidate.identity.helper": "Před otevřením částí zkoušky zkontrolujte své jméno a údaje dokladu.",
+  "candidate.identity.confirm": "Potvrdit identitu",
+  "candidate.sections.title": "Části zkoušky",
+  "candidate.sections.open": "Otevřít část",
+  "candidate.sections.reopen": "Znovu otevřít část",
+  "candidate.sections.closed": "Uzavřeno",
+  "candidate.sections.opened": "Otevřeno",
+  "candidate.sections.locked": "Zamčeno",
+
+  "test.title": "Písemný test",
+  "test.helper": "Odpovězte na otázky vybrané varianty. Odpovědi se ukládají do sync queue.",
+  "test.noQuestions": "Pro tuto variantu nejsou dostupné žádné otázky písemného testu.",
+  "test.answer": "Odpověď",
+  "test.save": "Uložit odpověď",
+  "test.submit": "Odeslat a uzavřít písemný test",
+  "test.back": "Zpět na části zkoušky",
+
+  "report.title": "Návrh Consulting reportu",
+  "report.helper": "Připravte terénní poznámky a finální text pro Consulting report. Foto položky jsou pilot/archive placeholders, nikoli skutečný upload.",
+  "report.tree": "Strom",
+  "report.fieldNotes": "Terénní poznámky",
+  "report.finalText": "Finální text",
+  "report.photoPlaceholder": "Foto placeholder / archivní poznámka",
+  "report.addPhoto": "Přidat foto placeholder",
+  "report.submit": "Odeslat a uzavřít report",
+  "report.back": "Zpět na části zkoušky"
+});
+
+
+
+Object.assign(translations.en, {
+  "common.back": "Back",
+  "common.offlineRetry": "If offline, visible local work remains and sync will retry when session/backend is available.",
+  "common.opened": "Opened",
+  "common.closed": "Closed",
+  "common.points": "point(s)",
+
+  "candidate.identity.detailsTitle": "Confirm personal details",
+  "candidate.identity.name": "Candidate name",
+  "candidate.identity.birthDate": "Date of birth",
+  "candidate.identity.documentId": "Document / registration ID",
+  "candidate.identity.examLevel": "Exam level",
+  "candidate.identity.warning": "Confirm identity before opening exam sections.",
+  "candidate.identity.confirmed": "Identity confirmed",
+
+  "candidate.landing.title": "Candidate landing page",
+  "candidate.landing.helper": "Review which sections are ready before opening work for this exam attempt.",
+  "candidate.readiness.title": "Candidate readiness",
+  "candidate.readiness.identity": "Identity confirmed",
+  "candidate.readiness.writtenTest": "Written test available",
+  "candidate.readiness.report": "Report section available",
+  "candidate.section.confirmFirst": "Confirm identity first.",
+  "candidate.section.closed": "This section is closed.",
+  "candidate.section.open": "This section is open.",
+  "candidate.section.locked": "This section is locked.",
+  "candidate.section.requestReopen": "Request reopen",
+
+  "test.variantAutosave": "Variant: {variant}. Autosaved to the sync queue. Final submit closes this section.",
+  "test.askCentre": "Ask the Centre to import/select a test package and save Centre Setup.",
+  "test.question": "Question",
+  "test.writeAnswer": "Write your answer here",
+
+  "report.titleFull": "Consulting report - 2 trees",
+  "report.photos": "Photos",
+  "report.photoHelper": "Photo entries are pilot/archive placeholders, not real uploads yet.",
+  "report.addPhotoShort": "Add photo",
+  "report.fieldPlaceholder": "Field observations and rough notes..."
+});
+
+Object.assign(translations.cs, {
+  "common.back": "Zpět",
+  "common.offlineRetry": "Pokud je zařízení offline, viditelná lokální práce zůstane zachována a sync se zkusí zopakovat, až bude dostupná session/backend.",
+  "common.opened": "Otevřeno",
+  "common.closed": "Uzavřeno",
+  "common.points": "bodů",
+
+  "candidate.identity.detailsTitle": "Potvrzení osobních údajů",
+  "candidate.identity.name": "Jméno kandidáta",
+  "candidate.identity.birthDate": "Datum narození",
+  "candidate.identity.documentId": "Doklad / registrační ID",
+  "candidate.identity.examLevel": "Úroveň zkoušky",
+  "candidate.identity.warning": "Před otevřením částí zkoušky potvrďte identitu.",
+  "candidate.identity.confirmed": "Identita potvrzena",
+
+  "candidate.landing.title": "Úvodní stránka kandidáta",
+  "candidate.landing.helper": "Zkontrolujte, které části jsou připravené, než otevřete práci pro tento pokus.",
+  "candidate.readiness.title": "Připravenost kandidáta",
+  "candidate.readiness.identity": "Identita potvrzena",
+  "candidate.readiness.writtenTest": "Písemný test dostupný",
+  "candidate.readiness.report": "Report dostupný",
+  "candidate.section.confirmFirst": "Nejprve potvrďte identitu.",
+  "candidate.section.closed": "Tato část je uzavřená.",
+  "candidate.section.open": "Tato část je otevřená.",
+  "candidate.section.locked": "Tato část je zamčená.",
+  "candidate.section.requestReopen": "Požádat o znovuotevření",
+
+  "test.variantAutosave": "Varianta: {variant}. Odpovědi se ukládají do sync queue. Finální odeslání tuto část uzavře.",
+  "test.askCentre": "Požádejte Centrum o import/výběr testového balíčku a uložení Centre Setup.",
+  "test.question": "Otázka",
+  "test.writeAnswer": "Sem napište odpověď",
+
+  "report.titleFull": "Consulting report - 2 stromy",
+  "report.photos": "Fotografie",
+  "report.photoHelper": "Foto položky jsou pilot/archive placeholders, nejde zatím o skutečný upload.",
+  "report.addPhotoShort": "Přidat fotografii",
+  "report.fieldPlaceholder": "Terénní pozorování a pracovní poznámky..."
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
