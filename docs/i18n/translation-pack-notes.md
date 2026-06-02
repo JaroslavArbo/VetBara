@@ -13,7 +13,8 @@ These files prepare reviewable translation packs from the current English i18n d
 - `nl-translation-pack.json` and `nl-translation-pack.csv` contain the nl Dutch review pack.
 - `no-translation-pack.json` and `no-translation-pack.csv` contain the no Norwegian review pack.
 - `fr-translation-pack.json` and `fr-translation-pack.csv` contain the fr French review pack.
-- `es-translation-pack.json` and `es-translation-pack.csv` contain the es Spanish review pack.
+- `es-translation-pack.json` and `es-translation-pack.csv` contain the es Spanish
+- ro Romanian review pack.
 
 Each row contains `key`, `en`, `cs`, `target`, `notes`, and `status`. The `target` column is intentionally blank for this milestone, and every row is marked `needs_review`. Reviewers should fill only the `target` value, update `status` when appropriate, and leave `key`, `en`, `cs`, and `notes` unchanged.
 
