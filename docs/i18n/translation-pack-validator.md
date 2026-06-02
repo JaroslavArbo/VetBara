@@ -10,6 +10,11 @@ Run:
 
 node scripts/validate-i18n-pack.mjs docs/i18n/de-translation-pack.json
 node scripts/validate-i18n-pack.mjs docs/i18n/it-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/sv-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/hr-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/nl-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/no-translation-pack.json
+node scripts/validate-i18n-pack.mjs docs/i18n/fr-translation-pack.json
 
 ## Accepted statuses
 
@@ -91,6 +96,6 @@ These terms may be discussed during translation review, but they must not be sil
 
 The validator does not import translations.
 
-It does not enable German or Italian in the UI.
+It does not enable German, Italian, Swedish, Croatian, Dutch, Norwegian, or French in the UI.
 
 It does not check linguistic quality. Human review is still required.
