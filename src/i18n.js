@@ -617,6 +617,28 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "centre.levels.title": "Levels",
+  "centre.variants.title": "Approved test variants",
+  "centre.variants.helper": "Import CSV or JSON package with real tests. The selected variant is then shown to candidates.",
+  "centre.variants.import": "Import tests",
+  "centre.variants.noImported": "No imported variant",
+  "centre.variants.csvHelper": "CSV columns: variantCode, level, language, questionId, type, points, text, optionA, optionB, optionC, optionD, correctAnswer. JSON format: { \"variants\": [...], \"questions\": { \"VARIANT_CODE\": [...] } }.",
+  "centre.variants.importedSummary": "Imported summary: {variants} variant(s), {questions} question(s)."
+});
+
+Object.assign(translations.cs, {
+  "centre.levels.title": "Úrovně",
+  "centre.variants.title": "Schválené testové varianty",
+  "centre.variants.helper": "Importujte CSV nebo JSON balíček se skutečnými testy. Vybraná varianta se poté zobrazí kandidátům.",
+  "centre.variants.import": "Importovat testy",
+  "centre.variants.noImported": "Žádná importovaná varianta",
+  "centre.variants.csvHelper": "CSV sloupce: variantCode, level, language, questionId, type, points, text, optionA, optionB, optionC, optionD, correctAnswer. JSON formát: { \"variants\": [...], \"questions\": { \"VARIANT_CODE\": [...] } }.",
+  "centre.variants.importedSummary": "Souhrn importu: {variants} variant(y), {questions} otázka/otázek."
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
