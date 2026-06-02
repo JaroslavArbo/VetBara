@@ -697,6 +697,64 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "centre.workflow.title": "Pilot workflow status",
+  "centre.workflow.helper": "Pilot workflow status across setup, assignments, candidate sections, responses, report drafts and outdoor scoring.",
+  "centre.workflow.syncHelper": "Use the sync queue panel to review sync status after smoke test.",
+  "centre.workflow.setupIssues": "Centre Setup issue(s)",
+  "centre.workflow.candidates": "candidates",
+  "centre.workflow.examiners": "examiners",
+  "centre.workflow.assignments": "assignments",
+  "centre.workflow.testPackageImported": "test package imported",
+  "centre.workflow.noTestPackage": "no test package",
+  "centre.workflow.demoWarning": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data; counts may reflect demo fallback state until then.",
+
+  "centre.workflow.candidate": "Candidate",
+  "centre.workflow.level": "Level",
+  "centre.workflow.primaryExaminer": "Primary Examiner",
+  "centre.workflow.secondaryExaminer": "Secondary Examiner",
+  "centre.workflow.identity": "Identity",
+  "centre.workflow.writtenTest": "Written test",
+  "centre.workflow.report": "Report",
+  "centre.workflow.responses": "Responses",
+  "centre.workflow.outdoorScores": "Outdoor scores",
+  "centre.workflow.confirmed": "confirmed",
+  "centre.workflow.notConfirmed": "not confirmed",
+  "centre.workflow.closedAt": "Closed",
+  "centre.workflow.sections": "sections",
+  "centre.workflow.photos": "photos"
+});
+
+Object.assign(translations.cs, {
+  "centre.workflow.title": "Stav pilotního workflow",
+  "centre.workflow.helper": "Stav pilotního workflow napříč setupem, přiřazeními, částmi kandidáta, odpověďmi, návrhy reportů a outdoor skórováním.",
+  "centre.workflow.syncHelper": "Po smoke testu použijte sync queue panel pro kontrolu stavu synchronizace.",
+  "centre.workflow.setupIssues": "problém(ů) v Centre Setup",
+  "centre.workflow.candidates": "kandidátů",
+  "centre.workflow.examiners": "zkoušejících",
+  "centre.workflow.assignments": "přiřazení",
+  "centre.workflow.testPackageImported": "testový balíček importován",
+  "centre.workflow.noTestPackage": "žádný testový balíček",
+  "centre.workflow.demoWarning": "Tato session používá demo fallback data pouze pro testování. Načtěte Centre Setup pro použití backend-loaded pilot data; počty mohou do té doby odpovídat demo fallback stavu.",
+
+  "centre.workflow.candidate": "Kandidát",
+  "centre.workflow.level": "Úroveň",
+  "centre.workflow.primaryExaminer": "Primary Examiner",
+  "centre.workflow.secondaryExaminer": "Secondary Examiner",
+  "centre.workflow.identity": "Identita",
+  "centre.workflow.writtenTest": "Písemný test",
+  "centre.workflow.report": "Report",
+  "centre.workflow.responses": "Odpovědi",
+  "centre.workflow.outdoorScores": "Outdoor skóre",
+  "centre.workflow.confirmed": "potvrzeno",
+  "centre.workflow.notConfirmed": "nepotvrzeno",
+  "centre.workflow.closedAt": "Uzavřeno",
+  "centre.workflow.sections": "sekcí",
+  "centre.workflow.photos": "fotografií"
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
