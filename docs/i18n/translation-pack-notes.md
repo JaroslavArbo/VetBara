@@ -42,6 +42,7 @@ Preserve placeholders exactly, including braces and spelling:
 - `{variants}`
 - `{questions}`
 - `{message}`
+- `{variant}`
 
 If a reviewed target contains a placeholder, it must contain the same placeholder set as the English source value.
 
