@@ -825,6 +825,112 @@ Object.assign(translations.cs, {
 });
 
 
+
+Object.assign(translations.en, {
+  "common.open": "Open",
+  "common.close": "Close",
+  "common.save": "Save",
+  "common.load": "Load",
+  "common.download": "Download",
+  "common.import": "Import",
+  "common.export": "Export",
+  "common.submit": "Submit",
+  "common.confirm": "Confirm",
+  "common.add": "Add",
+  "common.cancel": "Cancel",
+  "common.review": "Review",
+  "common.ready": "Ready",
+  "common.missing": "Missing",
+  "common.yes": "yes",
+  "common.no": "no"
+});
+
+Object.assign(translations.cs, {
+  "common.open": "Otevřít",
+  "common.close": "Zavřít",
+  "common.save": "Uložit",
+  "common.load": "Načíst",
+  "common.download": "Stáhnout",
+  "common.import": "Importovat",
+  "common.export": "Exportovat",
+  "common.submit": "Odeslat",
+  "common.confirm": "Potvrdit",
+  "common.add": "Přidat",
+  "common.cancel": "Zrušit",
+  "common.review": "Zkontrolovat",
+  "common.ready": "Připraveno",
+  "common.missing": "Chybí",
+  "common.yes": "ano",
+  "common.no": "ne"
+});
+
+
+
+Object.assign(translations.en, {
+  "app.heroTitle": "Digital VETcert examination system",
+  "app.dedicatedPortal": "Dedicated {role} portal",
+  "workspace.current": "Current workspace",
+  "workspace.candidates": "candidates",
+
+  "qrScanner.helper": "Allow camera access and point the tablet at a VetBara QR.",
+  "qrScanner.scan": "Scan {role} QR",
+
+  "admin.openExam.title": "Admin / Open exam event",
+  "admin.openExam.subtitle": "Admin sets centre, date, place and exam language, then sends centre access QR.",
+  "admin.centre": "Certification centre",
+  "admin.examLanguage": "Exam language",
+  "admin.examDate": "Exam date",
+  "admin.place": "Place",
+  "admin.centreAccess.title": "Centre access link / QR",
+  "admin.centreAccess.send": "Send centre link / QR",
+  "admin.centreAccess.scan": "Scan centre QR",
+
+  "admin.multilingual.title": "Admin / Multilingual layer",
+  "admin.multilingual.subtitle": "UI translations are managed separately from exam content.",
+  "admin.multilingual.sourceTerms": "EN source + national terms",
+  "admin.multilingual.needsReview": "needs review",
+  "admin.multilingual.export": "Export translation XLSX",
+
+  "status.openedForCentre": "Opened for Centre",
+  "audit.centreAccessSent": "Centre access link sent",
+  "status.testImport.loadedStoredFull": "Loaded stored test package with {variants} variant(s) and {questions} question(s).",
+  "status.testImport.loadedStored": "Loaded stored test package.",
+  "status.centreAuditExport.unavailable": "The Centre Audit Package requires a valid Centre session. Reopen the Centre QR and try again."
+});
+
+Object.assign(translations.cs, {
+  "app.heroTitle": "Digitální zkušební systém VETcert",
+  "app.dedicatedPortal": "Vyhrazený portál: {role}",
+  "workspace.current": "Aktuální pracovní prostor",
+  "workspace.candidates": "kandidátů",
+
+  "qrScanner.helper": "Povolte přístup ke kameře a namiřte tablet na VetBara QR.",
+  "qrScanner.scan": "Skenovat {role} QR",
+
+  "admin.openExam.title": "Admin / otevření zkušební události",
+  "admin.openExam.subtitle": "Admin nastaví centrum, datum, místo a jazyk zkoušky a potom odešle Centre access QR.",
+  "admin.centre": "Certifikační centrum",
+  "admin.examLanguage": "Jazyk zkoušky",
+  "admin.examDate": "Datum zkoušky",
+  "admin.place": "Místo",
+  "admin.centreAccess.title": "Centre access link / QR",
+  "admin.centreAccess.send": "Odeslat centre link / QR",
+  "admin.centreAccess.scan": "Skenovat centre QR",
+
+  "admin.multilingual.title": "Admin / vícejazyčná vrstva",
+  "admin.multilingual.subtitle": "Překlady UI jsou spravované odděleně od obsahu zkoušky.",
+  "admin.multilingual.sourceTerms": "EN zdroj + národní termíny",
+  "admin.multilingual.needsReview": "vyžaduje kontrolu",
+  "admin.multilingual.export": "Exportovat translation XLSX",
+
+  "status.openedForCentre": "Otevřeno pro Centrum",
+  "audit.centreAccessSent": "Centre access link odeslán",
+  "status.testImport.loadedStoredFull": "Načten uložený testový balíček: {variants} variant(y), {questions} otázka/otázek.",
+  "status.testImport.loadedStored": "Načten uložený testový balíček.",
+  "status.centreAuditExport.unavailable": "Centre Audit Package vyžaduje platnou Centre session. Znovu otevřete Centre QR a zkuste to znovu."
+});
+
+
 export function makeTranslator(language) {
   return function t(key) {
     return translations[language]?.[key] ?? translations.en[key] ?? key;
