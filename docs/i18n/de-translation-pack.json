@@ -203,7 +203,7 @@
     "key": "help.candidate.identity",
     "en": "Confirm your identity before opening sections.",
     "cs": "Před otevřením sekcí potvrďte svou identitu.",
-    "target": "bestätigen your Identitaet before opening Abschnitte.",
+    "target": "bestätigen your Identität before opening Abschnitte.",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -251,7 +251,7 @@
     "key": "help.examiner.identity",
     "en": "Confirm your identity before opening outdoor forms.",
     "cs": "Před otevřením outdoor forms potvrďte svou identitu.",
-    "target": "bestätigen your Identitaet before opening Outdoor forms.",
+    "target": "bestätigen your Identität before opening Outdoor forms.",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -699,7 +699,7 @@
     "key": "candidate.view.subtitle",
     "en": "Candidate opens only their own QR workspace, confirms identity, then completes each exam section.",
     "cs": "Kandidát otevře pouze svůj vlastní QR pracovní prostor, potvrdí identitu a poté dokončí jednotlivé části zkoušky.",
-    "target": "Candidate opens only their own QR workspace, confirms Identitaet, then completes each exam Abschnitt.",
+    "target": "Candidate opens only their own QR workspace, confirms Identität, then completes each exam Abschnitt.",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -739,7 +739,7 @@
     "key": "examiner.view.subtitle",
     "en": "Examiner logs in, confirms identity, sees assigned candidates and opens outdoor forms.",
     "cs": "Zkoušející se přihlásí, potvrdí identitu, vidí přiřazené kandidáty a otevírá outdoor formuláře.",
-    "target": "Examiner logs in, confirms Identitaet, sees zugewiesen Kandidaten and opens Outdoor forms.",
+    "target": "Examiner logs in, confirms Identität, sees zugewiesen Kandidaten and opens Outdoor forms.",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -771,7 +771,7 @@
     "key": "candidate.identity.title",
     "en": "Confirm identity",
     "cs": "Potvrzení identity",
-    "target": "Identitaet bestätigen",
+    "target": "Identität bestätigen",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -779,7 +779,7 @@
     "key": "candidate.identity.helper",
     "en": "Check your name and document details before opening exam sections.",
     "cs": "Před otevřením částí zkoušky zkontrolujte své jméno a údaje dokladu.",
-    "target": "Check your Name and Dokument details before opening Pruefungsabschnitte.",
+    "target": "Check your Name and Dokument details before opening Prüfungsabschnitte.",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -787,7 +787,7 @@
     "key": "candidate.identity.confirm",
     "en": "Confirm identity",
     "cs": "Potvrdit identitu",
-    "target": "Identitaet bestätigen",
+    "target": "Identität bestätigen",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -795,7 +795,7 @@
     "key": "candidate.sections.title",
     "en": "Exam sections",
     "cs": "Části zkoušky",
-    "target": "Pruefungsabschnitte",
+    "target": "Prüfungsabschnitte",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1051,7 +1051,7 @@
     "key": "candidate.identity.warning",
     "en": "Confirm identity before opening exam sections.",
     "cs": "Před otevřením částí zkoušky potvrďte identitu.",
-    "target": "Identitaet bestätigen before opening Pruefungsabschnitte.",
+    "target": "Identität bestätigen before opening Prüfungsabschnitte.",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1059,7 +1059,7 @@
     "key": "candidate.identity.confirmed",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "Identitaet bestaetigt",
+    "target": "Identität bestaetigt",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1091,7 +1091,7 @@
     "key": "candidate.readiness.identity",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "Identitaet bestaetigt",
+    "target": "Identität bestaetigt",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1115,7 +1115,7 @@
     "key": "candidate.section.confirmFirst",
     "en": "Confirm identity first.",
     "cs": "Nejprve potvrďte identitu.",
-    "target": "Identitaet bestätigen first.",
+    "target": "Identität bestätigen first.",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1227,7 +1227,7 @@
     "key": "examiner.identity.title",
     "en": "Confirm Examiner identity",
     "cs": "Potvrzení identity zkoušejícího",
-    "target": "bestätigen Examiner Identitaet",
+    "target": "bestätigen Examiner Identität",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1251,7 +1251,7 @@
     "key": "examiner.identity.confirmed",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "Identitaet bestaetigt",
+    "target": "Identität bestaetigt",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1259,7 +1259,7 @@
     "key": "examiner.identity.confirm",
     "en": "Confirm identity",
     "cs": "Potvrdit identitu",
-    "target": "Identitaet bestätigen",
+    "target": "Identität bestätigen",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1275,7 +1275,7 @@
     "key": "examiner.readiness.identity",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "Identitaet bestaetigt",
+    "target": "Identität bestaetigt",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2363,7 +2363,7 @@
     "key": "centre.workflow.identity",
     "en": "Identity",
     "cs": "Identita",
-    "target": "Identitaet",
+    "target": "Identität",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2451,7 +2451,7 @@
     "key": "status.centreSetup.loadedEvent",
     "en": "Loaded Centre Setup for exam event {event}.",
     "cs": "Centre Setup načten pro zkušební událost {event}.",
-    "target": "geladen Centre Setup for Pruefungsereignis {event}.",
+    "target": "geladen Centre Setup for Prüfungsereignis {event}.",
     "notes": "Preserve placeholder(s) exactly: {event}. Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2459,7 +2459,7 @@
     "key": "status.centreSetup.savedEvent",
     "en": "Saved Centre Setup for exam event {event}.",
     "cs": "Centre Setup uložen pro zkušební událost {event}.",
-    "target": "gespeichert Centre Setup for Pruefungsereignis {event}.",
+    "target": "gespeichert Centre Setup for Prüfungsereignis {event}.",
     "notes": "Preserve placeholder(s) exactly: {event}. Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2819,7 +2819,7 @@
     "key": "admin.openExam.title",
     "en": "Admin / Open exam event",
     "cs": "Admin / otevření zkušební události",
-    "target": "Admin / öffnen Pruefungsereignis",
+    "target": "Admin / öffnen Prüfungsereignis",
     "notes": "Protected term(s): Admin. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2827,7 +2827,7 @@
     "key": "admin.openExam.subtitle",
     "en": "Admin sets centre, date, place and exam language, then sends centre access QR.",
     "cs": "Admin nastaví centrum, datum, místo a jazyk zkoušky a potom odešle Centre access QR.",
-    "target": "Admin sets centre, Datum, Ort and Pruefungssprache, then sends Zentrumszugang QR.",
+    "target": "Admin sets centre, Datum, Ort and Prüfungssprache, then sends Zentrumszugang QR.",
     "notes": "Protected term(s): Admin. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2843,7 +2843,7 @@
     "key": "admin.examLanguage",
     "en": "Exam language",
     "cs": "Jazyk zkoušky",
-    "target": "Pruefungssprache",
+    "target": "Prüfungssprache",
     "notes": "Draft target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
