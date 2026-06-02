@@ -11,7 +11,7 @@
     "key": "app.subtitle",
     "en": "Pilot digital examination workspace",
     "cs": "Pilotní digitální zkušební prostředí",
-    "target": "Pilotarbetsyta foer digital examination",
+    "target": "Pilotarbetsyta för digital examination",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -19,7 +19,7 @@
     "key": "language.label",
     "en": "Language",
     "cs": "Jazyk",
-    "target": "spraak",
+    "target": "Spraak",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -51,7 +51,7 @@
     "key": "scanner.open",
     "en": "Open QR scanner",
     "cs": "Otevřít QR skener",
-    "target": "oeppna QR scanner",
+    "target": "Öppna QR scanner",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -59,7 +59,7 @@
     "key": "scanner.close",
     "en": "Close scanner",
     "cs": "Zavřít skener",
-    "target": "Staeng skanner",
+    "target": "Stäng skanner",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -67,7 +67,7 @@
     "key": "pilot.smoke.title",
     "en": "Pilot smoke-test checklist",
     "cs": "Kontrolní pilotní smoke-test checklist",
-    "target": "Checklista foer pilot smoke-test",
+    "target": "Checklista för pilot smoke-test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -75,7 +75,7 @@
     "key": "pilot.smoke.subtitle",
     "en": "Use this after each deploy to confirm the pilot workflow still works.",
     "cs": "Použijte po každém nasazení pro ověření, že pilotní workflow stále funguje.",
-    "target": "Anvaend detta efter varje deploy foer att bekraefta att pilotarbetsfloede fortfarande fungerar.",
+    "target": "Använd detta efter varje deploy för att bekräfta att pilotarbetsflödet fortfarande fungerar.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -83,7 +83,7 @@
     "key": "pilot.smoke.loadCentre",
     "en": "Load Centre Setup",
     "cs": "Načíst Centre Setup",
-    "target": "laes in Centre Setup",
+    "target": "Läs in Centre Setup",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -91,7 +91,7 @@
     "key": "pilot.smoke.candidatesExaminers",
     "en": "Confirm candidates and examiners are visible",
     "cs": "Ověřit, že jsou vidět kandidáti a zkoušející",
-    "target": "bekraefta kandidater and examinatorer are synlig",
+    "target": "Bekräfta kandidater och examinatorer är synlig",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -99,7 +99,7 @@
     "key": "pilot.smoke.testPackage",
     "en": "Import or verify test package",
     "cs": "Importovat nebo ověřit testový balíček",
-    "target": "importera or verify test paket",
+    "target": "Importera eller verifiera testpaket",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -107,7 +107,7 @@
     "key": "pilot.smoke.candidateQr",
     "en": "Open Candidate QR and save a written test answer",
     "cs": "Otevřít Candidate QR a uložit odpověď ve written test",
-    "target": "oeppna Candidate QR and spara a Skriftligt prov svar",
+    "target": "Öppna Candidate QR och spara en Skriftligt test svar",
     "notes": "Protected term(s): Candidate, Candidate QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -115,7 +115,7 @@
     "key": "pilot.smoke.report",
     "en": "For Consulting Candidate, save report draft and pilot/archive placeholder",
     "cs": "U Consulting kandidáta uložit návrh reportu a pilot/archive placeholder",
-    "target": "For Consulting Candidate, spara rapport utkast and pilot/archive placeholder",
+    "target": "För Consulting Candidate, spara rapport utkast och pilot/archive placeholder",
     "notes": "Protected term(s): Candidate, Consulting, pilot/archive placeholder. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -123,7 +123,7 @@
     "key": "pilot.smoke.examinerQr",
     "en": "Open Examiner QR and save outdoor score and note",
     "cs": "Otevřít Examiner QR a uložit outdoor skóre a poznámku",
-    "target": "oeppna Examiner QR and spara utomhus score and note",
+    "target": "Öppna Examiner QR och spara utomhus poäng och anteckning",
     "notes": "Protected term(s): Examiner, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -131,7 +131,7 @@
     "key": "pilot.smoke.preview",
     "en": "Load Evaluation Preview",
     "cs": "Načíst Evaluation Preview",
-    "target": "laes in Foerhandsvisning av utvaerdering",
+    "target": "Läs in Foerhandsvisning av utvaerdering",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -139,7 +139,7 @@
     "key": "pilot.smoke.draftExport",
     "en": "Download Draft Export",
     "cs": "Stáhnout Draft Export",
-    "target": "haemta Draft Export",
+    "target": "Haemta Draft Export",
     "notes": "Protected term(s): Draft Export. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -147,7 +147,7 @@
     "key": "pilot.smoke.auditExport",
     "en": "Download Centre Audit Package",
     "cs": "Stáhnout Centre Audit Package",
-    "target": "haemta Centre Audit Package",
+    "target": "Haemta Centre Audit Package",
     "notes": "Protected term(s): Centre, Centre Audit Package. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -155,7 +155,7 @@
     "key": "pilot.release.title",
     "en": "Pilot release notes",
     "cs": "Poznámky k pilotní verzi",
-    "target": "Versionsnoteringar foer pilot",
+    "target": "Versionsnoteringar för pilot",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -163,7 +163,7 @@
     "key": "pilot.release.subtitle",
     "en": "This panel describes the pilot prototype scope. It is not the official VETcert certification output.",
     "cs": "Tento panel popisuje rozsah pilotního prototypu. Nejde o oficiální certifikační výstup VETcert.",
-    "target": "This panel describes the pilot prototype scope. It is not the official VETcert certification output.",
+    "target": "Den här panelen beskriver pilotprototypens omfattning. Det är inte den officiella VETcert-certifieringsutdata.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -171,7 +171,7 @@
     "key": "pilot.release.available",
     "en": "Available in this pilot",
     "cs": "Dostupné v tomto pilotu",
-    "target": "tillgaenglig in this pilot",
+    "target": "Tillgängligt i denna pilot",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -179,7 +179,7 @@
     "key": "pilot.release.notIncluded",
     "en": "Not included yet",
     "cs": "Zatím není zahrnuto",
-    "target": "Not included yet",
+    "target": "Inte inkluderat ännu",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -187,7 +187,7 @@
     "key": "help.candidate.title",
     "en": "Candidate quick help",
     "cs": "Rychlá nápověda pro kandidáta",
-    "target": "Candidate quick help",
+    "target": "Candidate snabbhjälp",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -195,7 +195,7 @@
     "key": "help.candidate.qr",
     "en": "Scan your personal Candidate QR issued by the Centre.",
     "cs": "Naskenujte svůj osobní Candidate QR vydaný Centrem.",
-    "target": "skanna your personal Candidate QR issued by the Centre.",
+    "target": "Skanna din personliga Candidate QR utfärdad av Centre.",
     "notes": "Protected term(s): Candidate, Centre, Candidate QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -203,7 +203,7 @@
     "key": "help.candidate.identity",
     "en": "Confirm your identity before opening sections.",
     "cs": "Před otevřením sekcí potvrďte svou identitu.",
-    "target": "bekraefta your identitet before opening avsnitt.",
+    "target": "Bekräfta din identitet innan du öppnar avsnitt.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -211,7 +211,7 @@
     "key": "help.candidate.autosave",
     "en": "Written test answers autosave to the sync queue.",
     "cs": "Odpovědi ve written test se automaticky ukládají do sync queue.",
-    "target": "Skriftligt prov svar autosave to the sync queue.",
+    "target": "Skriftligt test svar sparas automatiskt till sync queue.",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -219,7 +219,7 @@
     "key": "help.candidate.photos",
     "en": "Consulting report photo entries are pilot/archive placeholders, not real uploads yet.",
     "cs": "Foto položky v Consulting reportu jsou zatím pilot/archive placeholders, nejde o skutečný upload.",
-    "target": "Consulting rapport photo entries are pilot/archive placeholders, not real uploads yet.",
+    "target": "Consulting rapport fotoposter är pilot/archive placeholders, not riktiga uppladdningar ännu.",
     "notes": "Protected term(s): Consulting, pilot/archive placeholder. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -227,7 +227,7 @@
     "key": "help.candidate.ask",
     "en": "If something looks wrong, ask Centre staff before final submit.",
     "cs": "Pokud něco vypadá špatně, před finálním odesláním se zeptejte personálu Centra.",
-    "target": "If something looks wrong, ask Centre staff before final skicka.",
+    "target": "Om något ser fel ut, fråga Centre personal innan slutlig inlämning.",
     "notes": "Protected term(s): Centre. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -235,7 +235,7 @@
     "key": "help.examiner.title",
     "en": "Examiner quick help",
     "cs": "Rychlá nápověda pro zkoušejícího",
-    "target": "Examiner quick help",
+    "target": "Examiner snabbhjälp",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -243,7 +243,7 @@
     "key": "help.examiner.qr",
     "en": "Scan your personal Examiner QR issued by the Centre.",
     "cs": "Naskenujte svůj osobní Examiner QR vydaný Centrem.",
-    "target": "skanna your personal Examiner QR issued by the Centre.",
+    "target": "Skanna din personliga Examiner QR utfärdad av Centre.",
     "notes": "Protected term(s): Examiner, Centre, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -251,7 +251,7 @@
     "key": "help.examiner.identity",
     "en": "Confirm your identity before opening outdoor forms.",
     "cs": "Před otevřením outdoor forms potvrďte svou identitu.",
-    "target": "bekraefta your identitet before opening utomhus forms.",
+    "target": "Bekräfta din identitet innan du öppnar utomhus formulär.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -259,7 +259,7 @@
     "key": "help.examiner.assigned",
     "en": "Only assigned Candidates are shown.",
     "cs": "Zobrazují se pouze přiřazení kandidáti.",
-    "target": "Only tilldelad Candidates are visas.",
+    "target": "Endast tilldelad Candidates är visas.",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -267,7 +267,7 @@
     "key": "help.examiner.primary",
     "en": "Primary Examiner completes the full outdoor form; Secondary input is supporting.",
     "cs": "Primary Examiner vyplňuje celý outdoor form; Secondary input je podpůrný.",
-    "target": "Primary Examiner completes the full utomhus form; Secondary input is stoedjande.",
+    "target": "Primary Examiner slutför fullständigt utomhusformulär; Secondary inmatning är stödjande.",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -275,7 +275,7 @@
     "key": "help.examiner.autosave",
     "en": "Scores and notes autosave to the sync queue.",
     "cs": "Skóre a poznámky se automaticky ukládají do sync queue.",
-    "target": "Scores and notes autosave to the sync queue.",
+    "target": "Poäng och anteckningar sparas automatiskt till sync queue.",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -283,7 +283,7 @@
     "key": "help.examiner.missing",
     "en": "If assigned Candidates are missing, ask the Centre to assign and save Centre Setup.",
     "cs": "Pokud přiřazení kandidáti chybí, požádejte Centrum o přiřazení a uložení Centre Setup.",
-    "target": "If tilldelad Candidates are saknas, ask the Centre to assign and spara Centre Setup.",
+    "target": "Om tilldelad Candidates är saknas, fråga Centre till tilldela och spara Centre Setup.",
     "notes": "Protected term(s): Candidate, Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -299,7 +299,7 @@
     "key": "centre.validation.ready",
     "en": "Ready for pilot smoke test",
     "cs": "Připraveno pro pilotní smoke test",
-    "target": "klar for pilot smoke test",
+    "target": "Klar för pilot smoke test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -307,7 +307,7 @@
     "key": "centre.validation.action",
     "en": "Action required before pilot smoke test",
     "cs": "Před pilotním smoke testem je potřeba zásah",
-    "target": "Action kraevs before pilot smoke test",
+    "target": "Action kraevs innan pilot smoke test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -315,7 +315,7 @@
     "key": "centre.validation.helper",
     "en": "Errors should be fixed before distributing QR links. Warnings can be reviewed during pilot preparation.",
     "cs": "Chyby je vhodné opravit před distribucí QR odkazů. Varování lze vyhodnotit během přípravy pilotu.",
-    "target": "Errors should be fixed before distributing QR links. Warnings can be reviewed during pilot preparation.",
+    "target": "Fel ska åtgärdas innan distribution av QR-länkar. Varningar kan granskas under pilotförberedelse.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -323,7 +323,7 @@
     "key": "centre.validation.empty",
     "en": "No validation issues. Setup is ready for pilot smoke test.",
     "cs": "Žádné validační problémy. Setup je připraven pro pilotní smoke test.",
-    "target": "nej validation issues. Setup is klar for pilot smoke test.",
+    "target": "Nej validation issues. Setup är klar för pilot smoke test.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -331,7 +331,7 @@
     "key": "centre.guardrails.title",
     "en": "Pilot readiness guardrails",
     "cs": "Pilotní guardrails připravenosti",
-    "target": "Skyddsregler foer pilotberedskap",
+    "target": "Skyddsregler för pilotberedskap",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -339,7 +339,7 @@
     "key": "centre.guardrails.helper",
     "en": "These guardrails do not block demo testing, but they should be resolved before a real pilot run.",
     "cs": "Tyto guardrails neblokují demo testování, ale před reálným pilotem by měly být vyřešeny.",
-    "target": "These guardrails do not block demo testing, but they should be resolved before a real pilot run.",
+    "target": "These guardrails do not block demo testning, but they should be resolved innan en riktiga pilot run.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -355,7 +355,7 @@
     "key": "centre.guardrails.validation",
     "en": "Fix validation errors before distributing QR links.",
     "cs": "Opravte validační chyby před distribucí QR odkazů.",
-    "target": "Fix validation errors before distributing QR links.",
+    "target": "Fix validation errors innan distribution av QR-länkar.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -363,7 +363,7 @@
     "key": "centre.guardrails.unsaved",
     "en": "Save Centre Setup before distributing QR links.",
     "cs": "Uložte Centre Setup před distribucí QR odkazů.",
-    "target": "spara Centre Setup before distributing QR links.",
+    "target": "Spara Centre Setup innan distribution av QR-länkar.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -371,7 +371,7 @@
     "key": "centre.guardrails.testPackage",
     "en": "Import/select a test package before written test pilot runs.",
     "cs": "Importujte/vyberte testový balíček před pilotním během written test.",
-    "target": "importera/select a test paket before Skriftligt prov pilot runs.",
+    "target": "Importera/select en testpaket innan Skriftligt test pilot runs.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -379,7 +379,7 @@
     "key": "centre.guardrails.backend",
     "en": "Load backend Centre Setup before pilot testing with real users.",
     "cs": "Před testováním s reálnými uživateli načtěte backendový Centre Setup.",
-    "target": "laes in backend Centre Setup before pilot testing with real users.",
+    "target": "Läs in backend Centre Setup innan pilot testning med riktiga users.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -395,7 +395,7 @@
     "key": "centre.run.helper",
     "en": "Use this summary before sharing Candidate or Examiner QR links.",
     "cs": "Použijte tento souhrn před sdílením Candidate QR nebo Examiner QR odkazů.",
-    "target": "Use this sammanfattning before sharing Candidate or Examiner QR links.",
+    "target": "Use Detta sammanfattning innan sharing Candidate eller Examiner QR länkar.",
     "notes": "Protected term(s): Candidate, Examiner, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -427,7 +427,7 @@
     "key": "centre.run.testPackage",
     "en": "Test package",
     "cs": "Testový balíček",
-    "target": "Test paket",
+    "target": "Testpaket",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -459,7 +459,7 @@
     "key": "centre.run.saved",
     "en": "Saved / no local changes",
     "cs": "Uloženo / žádné lokální změny",
-    "target": "sparad / nej lokal changes",
+    "target": "Sparad / nej lokal changes",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -475,7 +475,7 @@
     "key": "centre.run.imported",
     "en": "Imported",
     "cs": "Importováno",
-    "target": "importerad",
+    "target": "Importerad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -483,7 +483,7 @@
     "key": "centre.run.missing",
     "en": "Missing",
     "cs": "Chybí",
-    "target": "saknas",
+    "target": "Saknas",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -491,7 +491,7 @@
     "key": "centre.run.qrReady",
     "en": "Ready after setup is saved and backend-loaded",
     "cs": "Připraveno po uložení setupu a načtení backendových dat",
-    "target": "klar after setup is sparad and backend-inlaest",
+    "target": "Klar efter setup är sparad och backend-inlaest",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -499,7 +499,7 @@
     "key": "centre.run.review",
     "en": "Review guardrails",
     "cs": "Zkontrolovat guardrails",
-    "target": "granska guardrails",
+    "target": "Granska guardrails",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -507,7 +507,7 @@
     "key": "centre.network.title",
     "en": "Network readiness checklist",
     "cs": "Kontrola připravenosti sítě",
-    "target": "Checklista foer naetverksberedskap",
+    "target": "Checklista för naetverksberedskap",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -515,7 +515,7 @@
     "key": "centre.network.helper",
     "en": "Use this before distributing Candidate QR and Examiner QR links during a pilot session.",
     "cs": "Použijte před distribucí Candidate QR a Examiner QR odkazů během pilotní zkoušky.",
-    "target": "Use this before distributing Candidate QR and Examiner QR links during a pilot session.",
+    "target": "Use Detta innan distribution av Candidate QR och Examiner QR länkar under en pilot session.",
     "notes": "Protected term(s): Candidate, Examiner, Candidate QR, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -523,7 +523,7 @@
     "key": "centre.network.wifi",
     "en": "Stable Wi-Fi/router is running",
     "cs": "Stabilní Wi-Fi/router běží",
-    "target": "Stable Wi-Fi/router is running",
+    "target": "Stable Wi-Fi/router är running",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -539,7 +539,7 @@
     "key": "centre.network.url",
     "en": "Deployed VetBara URL opens on tablets",
     "cs": "Nasazená URL VetBara se otevře na tabletech",
-    "target": "Deployed VetBara URL opens on tablets",
+    "target": "Deployed VetBara URL öppnas on tablets",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -547,7 +547,7 @@
     "key": "centre.network.centreQr",
     "en": "Centre QR/session opens",
     "cs": "Centre QR/session se otevře",
-    "target": "Centre QR/session opens",
+    "target": "Centre QR/session öppnas",
     "notes": "Protected term(s): Centre, Centre QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -555,7 +555,7 @@
     "key": "centre.network.candidateQr",
     "en": "Candidate QR opens on a tablet",
     "cs": "Candidate QR se otevře na tabletu",
-    "target": "Candidate QR opens on a surfplatta",
+    "target": "Candidate QR öppnas on en surfplatta",
     "notes": "Protected term(s): Candidate, Candidate QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -563,7 +563,7 @@
     "key": "centre.network.examinerQr",
     "en": "Examiner QR opens on a tablet",
     "cs": "Examiner QR se otevře na tabletu",
-    "target": "Examiner QR opens on a surfplatta",
+    "target": "Examiner QR öppnas on en surfplatta",
     "notes": "Protected term(s): Examiner, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -571,7 +571,7 @@
     "key": "centre.network.setup",
     "en": "Save/Load Centre Setup tested",
     "cs": "Save/Load Centre Setup otestováno",
-    "target": "spara/laes in Centre Setup tested",
+    "target": "Spara/läs in Centre Setup testad",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -587,7 +587,7 @@
     "key": "centre.network.export",
     "en": "Export download tested",
     "cs": "Stažení exportu otestováno",
-    "target": "exportera haemta tested",
+    "target": "Exportera haemta testad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -595,7 +595,7 @@
     "key": "qr.title",
     "en": "Centre / QR access pack",
     "cs": "Centrum / QR access pack",
-    "target": "Centre / QR access pack",
+    "target": "Centre / QR åtkomstpaket",
     "notes": "Protected term(s): Centre. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -603,7 +603,7 @@
     "key": "qr.subtitle",
     "en": "Give each Candidate or Examiner only their own Candidate QR or Examiner QR link. Backend-loaded QR URLs appear after Load/Save Centre Setup; demo fallback QR links are for local prototype testing only.",
     "cs": "Každému kandidátovi nebo zkoušejícímu předejte pouze jeho vlastní Candidate QR nebo Examiner QR odkaz. Backend-loaded QR URL se zobrazí po Load/Save Centre Setup; demo fallback QR odkazy jsou jen pro lokální testování prototypu.",
-    "target": "Give each Candidate or Examiner only their own Candidate QR or Examiner QR laenk. backend-inlaest QR URLs appear after laes in/spara Centre Setup; demo fallback QR links are for lokal prototype testing only.",
+    "target": "Ge varje Candidate eller Examiner Endast sin egen Candidate QR eller Examiner QR laenk. backend-inlaest QR-URL:er visas efter läs in/spara Centre Setup; demo fallback QR-länkar är för lokal prototyp testning Endast.",
     "notes": "Protected term(s): Candidate, Examiner, Centre, Centre Setup, Candidate QR, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -611,7 +611,7 @@
     "key": "qr.candidateLinks",
     "en": "Candidate QR links",
     "cs": "Candidate QR odkazy",
-    "target": "Candidate QR links",
+    "target": "Candidate QR länkar",
     "notes": "Protected term(s): Candidate, Candidate QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -619,7 +619,7 @@
     "key": "qr.examinerLinks",
     "en": "Examiner QR links",
     "cs": "Examiner QR odkazy",
-    "target": "Examiner QR links",
+    "target": "Examiner QR länkar",
     "notes": "Protected term(s): Examiner, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -667,7 +667,7 @@
     "key": "common.scanQr",
     "en": "Scan QR",
     "cs": "Skenovat QR",
-    "target": "skanna QR",
+    "target": "Skanna QR",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -675,7 +675,7 @@
     "key": "common.loggedIn",
     "en": "Logged in",
     "cs": "Přihlášeno",
-    "target": "Logged in",
+    "target": "Inloggad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -691,7 +691,7 @@
     "key": "candidate.view.title",
     "en": "Candidate / Tablet login and workspace",
     "cs": "Kandidát / Přihlášení na tabletu a pracovní prostor",
-    "target": "Candidate / surfplatta login and workspace",
+    "target": "Candidate / surfplatta login och arbetsyta",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -699,7 +699,7 @@
     "key": "candidate.view.subtitle",
     "en": "Candidate opens only their own QR workspace, confirms identity, then completes each exam section.",
     "cs": "Kandidát otevře pouze svůj vlastní QR pracovní prostor, potvrdí identitu a poté dokončí jednotlivé části zkoušky.",
-    "target": "Candidate opens only their own QR workspace, confirms identitet, then completes each exam avsnitt.",
+    "target": "Candidate öppnas Endast sin egen QR arbetsyta, bekräftar identitet, then slutför each examensavsnitt.",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -715,7 +715,7 @@
     "key": "candidate.qrAccess.helper",
     "en": "Scan the personal QR issued by the Centre. This portal only shows the current Candidate workspace.",
     "cs": "Naskenujte osobní QR vydaný Centrem. Tento portál zobrazuje pouze aktuální pracovní prostor kandidáta.",
-    "target": "skanna the personal QR issued by the Centre. This portal only shows the current Candidate workspace.",
+    "target": "Skanna personlig QR utfärdad av Centre. Detta portal Endast shows current Candidate arbetsyta.",
     "notes": "Protected term(s): Candidate, Centre. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -723,7 +723,7 @@
     "key": "candidate.empty",
     "en": "No Candidate is logged in. Scan the personal Candidate QR issued by the Centre.",
     "cs": "Není přihlášen žádný kandidát. Naskenujte osobní Candidate QR vydaný Centrem.",
-    "target": "nej Candidate is logged in. skanna the personal Candidate QR issued by the Centre.",
+    "target": "Nej Candidate är inloggad. skanna personlig Candidate QR utfärdad av Centre.",
     "notes": "Protected term(s): Candidate, Centre, Candidate QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -731,7 +731,7 @@
     "key": "examiner.view.title",
     "en": "Examiner / Landing page and Outdoor exercises",
     "cs": "Zkoušející / Úvodní stránka a outdoor cvičení",
-    "target": "Examiner / Landing page and utomhus exercises",
+    "target": "Examiner / landningssida och utomhus exercises",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -739,7 +739,7 @@
     "key": "examiner.view.subtitle",
     "en": "Examiner logs in, confirms identity, sees assigned candidates and opens outdoor forms.",
     "cs": "Zkoušející se přihlásí, potvrdí identitu, vidí přiřazené kandidáty a otevírá outdoor formuláře.",
-    "target": "Examiner logs in, confirms identitet, sees tilldelad kandidater and opens utomhus forms.",
+    "target": "Examiner loggar in, bekräftar identitet, ser tilldelad kandidater och öppnas utomhus formulär.",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -755,7 +755,7 @@
     "key": "examiner.qrAccess.helper",
     "en": "Scan the personal Examiner QR issued by the Centre. This portal only shows assigned Candidate work.",
     "cs": "Naskenujte osobní Examiner QR vydaný Centrem. Tento portál zobrazuje pouze přiřazenou práci kandidátů.",
-    "target": "skanna the personal Examiner QR issued by the Centre. This portal only shows tilldelad Candidate work.",
+    "target": "Skanna personlig Examiner QR utfärdad av Centre. Detta portal Endast shows tilldelad Candidate arbete.",
     "notes": "Protected term(s): Candidate, Examiner, Centre, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -763,7 +763,7 @@
     "key": "examiner.empty",
     "en": "No Examiner is logged in. Scan the personal Examiner QR issued by the Centre.",
     "cs": "Není přihlášen žádný zkoušející. Naskenujte osobní Examiner QR vydaný Centrem.",
-    "target": "nej Examiner is logged in. skanna the personal Examiner QR issued by the Centre.",
+    "target": "Nej Examiner är inloggad. skanna personlig Examiner QR utfärdad av Centre.",
     "notes": "Protected term(s): Examiner, Centre, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -771,7 +771,7 @@
     "key": "candidate.identity.title",
     "en": "Confirm identity",
     "cs": "Potvrzení identity",
-    "target": "Bekraefta identitet",
+    "target": "Bekräfta identitet",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -779,7 +779,7 @@
     "key": "candidate.identity.helper",
     "en": "Check your name and document details before opening exam sections.",
     "cs": "Před otevřením částí zkoušky zkontrolujte své jméno a údaje dokladu.",
-    "target": "Check your namn and dokument details before opening exam avsnitt.",
+    "target": "Check din namn och dokument details innan du öppnar examensavsnitt.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -787,7 +787,7 @@
     "key": "candidate.identity.confirm",
     "en": "Confirm identity",
     "cs": "Potvrdit identitu",
-    "target": "Bekraefta identitet",
+    "target": "Bekräfta identitet",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -795,7 +795,7 @@
     "key": "candidate.sections.title",
     "en": "Exam sections",
     "cs": "Části zkoušky",
-    "target": "Exam avsnitt",
+    "target": "Examensavsnitt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -803,7 +803,7 @@
     "key": "candidate.sections.open",
     "en": "Open section",
     "cs": "Otevřít část",
-    "target": "oeppna avsnitt",
+    "target": "Öppna avsnitt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -819,7 +819,7 @@
     "key": "candidate.sections.closed",
     "en": "Closed",
     "cs": "Uzavřeno",
-    "target": "Closed",
+    "target": "Stängd",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -827,7 +827,7 @@
     "key": "candidate.sections.opened",
     "en": "Open",
     "cs": "Otevřeno",
-    "target": "oeppna",
+    "target": "Öppna",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -843,7 +843,7 @@
     "key": "test.title",
     "en": "Written test",
     "cs": "Písemný test",
-    "target": "Skriftligt prov",
+    "target": "Skriftligt test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -851,7 +851,7 @@
     "key": "test.helper",
     "en": "Answer the questions for the selected variant. Answers are saved to the sync queue.",
     "cs": "Odpovězte na otázky vybrané varianty. Odpovědi se ukládají do sync queue.",
-    "target": "svar the fragor for the vald variant. svar are sparad to the sync queue.",
+    "target": "Svar frågor för vald variant. svar sparas till sync queue.",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -859,7 +859,7 @@
     "key": "test.noQuestions",
     "en": "No written test questions are available for this variant.",
     "cs": "Pro tuto variantu nejsou dostupné žádné otázky písemného testu.",
-    "target": "nej Skriftligt prov fragor are tillgaenglig for this variant.",
+    "target": "Nej Skriftligt test frågor är tillgänglig för Detta variant.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -867,7 +867,7 @@
     "key": "test.answer",
     "en": "Answer",
     "cs": "Odpověď",
-    "target": "svar",
+    "target": "Svar",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -875,7 +875,7 @@
     "key": "test.save",
     "en": "Save answer",
     "cs": "Uložit odpověď",
-    "target": "spara svar",
+    "target": "Spara svar",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -883,7 +883,7 @@
     "key": "test.submit",
     "en": "Submit and close written test",
     "cs": "Odeslat a uzavřít písemný test",
-    "target": "skicka and staeng Skriftligt prov",
+    "target": "Skicka och stäng Skriftligt test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -891,7 +891,7 @@
     "key": "test.back",
     "en": "Back to sections",
     "cs": "Zpět na části zkoušky",
-    "target": "Back to avsnitt",
+    "target": "Tillbaka till avsnitt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -907,7 +907,7 @@
     "key": "report.helper",
     "en": "Prepare field notes and final text for the Consulting report. Photo entries are pilot/archive placeholders, not real uploads.",
     "cs": "Připravte terénní poznámky a finální text pro Consulting report. Foto položky jsou pilot/archive placeholders, nikoli skutečný upload.",
-    "target": "Prepare field notes and final text for the Consulting rapport. Photo entries are pilot/archive placeholders, not real uploads.",
+    "target": "Förbered fältanteckningar och sluttext för Consulting rapport. fotoposter är pilot/archive placeholders, not riktiga uppladdningar.",
     "notes": "Protected term(s): Consulting, pilot/archive placeholder. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -923,7 +923,7 @@
     "key": "report.fieldNotes",
     "en": "Field notes",
     "cs": "Terénní poznámky",
-    "target": "Field notes",
+    "target": "Fältanteckningar",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -931,7 +931,7 @@
     "key": "report.finalText",
     "en": "Final text",
     "cs": "Finální text",
-    "target": "Final text",
+    "target": "Sluttext",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -939,7 +939,7 @@
     "key": "report.photoPlaceholder",
     "en": "Photo placeholder / archive note",
     "cs": "Foto placeholder / archivní poznámka",
-    "target": "Photo placeholder / archive note",
+    "target": "Photo placeholder / archive anteckning",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -947,7 +947,7 @@
     "key": "report.addPhoto",
     "en": "Add photo placeholder",
     "cs": "Přidat foto placeholder",
-    "target": "laegg till photo placeholder",
+    "target": "Laegg till photo placeholder",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -955,7 +955,7 @@
     "key": "report.submit",
     "en": "Submit and close report",
     "cs": "Odeslat a uzavřít report",
-    "target": "skicka and staeng rapport",
+    "target": "Skicka och stäng rapport",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -963,7 +963,7 @@
     "key": "report.back",
     "en": "Back to sections",
     "cs": "Zpět na části zkoušky",
-    "target": "Back to avsnitt",
+    "target": "Tillbaka till avsnitt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -979,7 +979,7 @@
     "key": "common.offlineRetry",
     "en": "If offline, visible local work remains and sync will retry when session/backend is available.",
     "cs": "Pokud je zařízení offline, viditelná lokální práce zůstane zachována a sync se zkusí zopakovat, až bude dostupná session/backend.",
-    "target": "If offline, synlig lokal work remains and sync will retry when session/backend is tillgaenglig.",
+    "target": "Om offline, synlig lokal arbete remains och sync will retry when session/backend är tillgänglig.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -987,7 +987,7 @@
     "key": "common.opened",
     "en": "Opened",
     "cs": "Otevřeno",
-    "target": "Opened",
+    "target": "Öppnad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -995,7 +995,7 @@
     "key": "common.closed",
     "en": "Closed",
     "cs": "Uzavřeno",
-    "target": "Closed",
+    "target": "Stängd",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1011,7 +1011,7 @@
     "key": "candidate.identity.detailsTitle",
     "en": "Confirm personal details",
     "cs": "Potvrzení osobních údajů",
-    "target": "bekraefta personal details",
+    "target": "Bekräfta personlig details",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1027,7 +1027,7 @@
     "key": "candidate.identity.birthDate",
     "en": "Date of birth",
     "cs": "Datum narození",
-    "target": "datum of birth",
+    "target": "Datum of birth",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1035,7 +1035,7 @@
     "key": "candidate.identity.documentId",
     "en": "Document / registration ID",
     "cs": "Doklad / registrační ID",
-    "target": "dokument / registration ID",
+    "target": "Dokument / registration ID",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1051,7 +1051,7 @@
     "key": "candidate.identity.warning",
     "en": "Confirm identity before opening exam sections.",
     "cs": "Před otevřením částí zkoušky potvrďte identitu.",
-    "target": "Bekraefta identitet before opening exam avsnitt.",
+    "target": "Bekräfta identitet innan du öppnar examensavsnitt.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1059,7 +1059,7 @@
     "key": "candidate.identity.confirmed",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "identitet bekraeftad",
+    "target": "Identitet bekraeftad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1067,7 +1067,7 @@
     "key": "candidate.landing.title",
     "en": "Candidate landing page",
     "cs": "Úvodní stránka kandidáta",
-    "target": "Candidate landing page",
+    "target": "Candidate landningssida",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1075,7 +1075,7 @@
     "key": "candidate.landing.helper",
     "en": "Review which sections are ready before opening work for this exam attempt.",
     "cs": "Zkontrolujte, které části jsou připravené, než otevřete práci pro tento pokus.",
-    "target": "granska which avsnitt are klar before opening work for this exam attempt.",
+    "target": "Granska which avsnitt är klar innan du öppnar arbete för Detta exam försök.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1091,7 +1091,7 @@
     "key": "candidate.readiness.identity",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "identitet bekraeftad",
+    "target": "Identitet bekraeftad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1099,7 +1099,7 @@
     "key": "candidate.readiness.writtenTest",
     "en": "Written test available",
     "cs": "Písemný test dostupný",
-    "target": "Skriftligt prov tillgaenglig",
+    "target": "Skriftligt test tillgänglig",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1107,7 +1107,7 @@
     "key": "candidate.readiness.report",
     "en": "Report section available",
     "cs": "Report dostupný",
-    "target": "rapport avsnitt tillgaenglig",
+    "target": "Rapport avsnitt tillgänglig",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1115,7 +1115,7 @@
     "key": "candidate.section.confirmFirst",
     "en": "Confirm identity first.",
     "cs": "Nejprve potvrďte identitu.",
-    "target": "Bekraefta identitet first.",
+    "target": "Bekräfta identitet first.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1123,7 +1123,7 @@
     "key": "candidate.section.closed",
     "en": "This section is closed.",
     "cs": "Tato část je uzavřená.",
-    "target": "This avsnitt is closed.",
+    "target": "Detta avsnitt är stängd.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1131,7 +1131,7 @@
     "key": "candidate.section.open",
     "en": "This section is open.",
     "cs": "Tato část je otevřená.",
-    "target": "This avsnitt is oeppna.",
+    "target": "Detta avsnitt är öppna.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1139,7 +1139,7 @@
     "key": "candidate.section.locked",
     "en": "This section is locked.",
     "cs": "Tato část je zamčená.",
-    "target": "This avsnitt is locked.",
+    "target": "Detta avsnitt är locked.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1155,7 +1155,7 @@
     "key": "test.variantAutosave",
     "en": "Variant: {variant}. Autosaved to the sync queue. Final submit closes this section.",
     "cs": "Varianta: {variant}. Odpovědi se ukládají do sync queue. Finální odeslání tuto část uzavře.",
-    "target": "variant: {variant}. Autosaved to the sync queue. Final skicka closes this avsnitt.",
+    "target": "Variant: {variant}. Autosaved till sync queue. slutlig inlämning closes Detta avsnitt.",
     "notes": "Preserve placeholder(s) exactly: {variant}. Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1163,7 +1163,7 @@
     "key": "test.askCentre",
     "en": "Ask the Centre to import/select a test package and save Centre Setup.",
     "cs": "Požádejte Centrum o import/výběr testového balíčku a uložení Centre Setup.",
-    "target": "Ask the Centre to importera/select a test paket and spara Centre Setup.",
+    "target": "Fråga Centre till importera/select en testpaket och spara Centre Setup.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1179,7 +1179,7 @@
     "key": "test.writeAnswer",
     "en": "Write your answer here",
     "cs": "Sem napište odpověď",
-    "target": "Write your svar here",
+    "target": "Write din svar here",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1195,7 +1195,7 @@
     "key": "report.photos",
     "en": "Photos",
     "cs": "Fotografie",
-    "target": "foton",
+    "target": "Foton",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1203,7 +1203,7 @@
     "key": "report.photoHelper",
     "en": "Photo entries are pilot/archive placeholders, not real uploads yet.",
     "cs": "Foto položky jsou pilot/archive placeholders, nejde zatím o skutečný upload.",
-    "target": "Photo entries are pilot/archive placeholders, not real uploads yet.",
+    "target": "Fotoposter är pilot/archive placeholders, not riktiga uppladdningar ännu.",
     "notes": "Protected term(s): pilot/archive placeholder. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1211,7 +1211,7 @@
     "key": "report.addPhotoShort",
     "en": "Add photo",
     "cs": "Přidat fotografii",
-    "target": "laegg till photo",
+    "target": "Laegg till photo",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1219,7 +1219,7 @@
     "key": "report.fieldPlaceholder",
     "en": "Field observations and rough notes...",
     "cs": "Terénní pozorování a pracovní poznámky...",
-    "target": "Field observations and rough notes...",
+    "target": "Field observations och rough anteckningar...",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1227,7 +1227,7 @@
     "key": "examiner.identity.title",
     "en": "Confirm Examiner identity",
     "cs": "Potvrzení identity zkoušejícího",
-    "target": "bekraefta Examiner identitet",
+    "target": "Bekräfta Examiner identitet",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1251,7 +1251,7 @@
     "key": "examiner.identity.confirmed",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "identitet bekraeftad",
+    "target": "Identitet bekraeftad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1259,7 +1259,7 @@
     "key": "examiner.identity.confirm",
     "en": "Confirm identity",
     "cs": "Potvrdit identitu",
-    "target": "Bekraefta identitet",
+    "target": "Bekräfta identitet",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1275,7 +1275,7 @@
     "key": "examiner.readiness.identity",
     "en": "Identity confirmed",
     "cs": "Identita potvrzena",
-    "target": "identitet bekraeftad",
+    "target": "Identitet bekraeftad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1283,7 +1283,7 @@
     "key": "examiner.readiness.assignments",
     "en": "Assignments available",
     "cs": "Přiřazení dostupná",
-    "target": "Assignments tillgaenglig",
+    "target": "Assignments tillgänglig",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1291,7 +1291,7 @@
     "key": "examiner.worklist.title",
     "en": "Assigned Candidate worklist",
     "cs": "Seznam přiřazených kandidátů",
-    "target": "tilldelad Candidate worklist",
+    "target": "Tilldelad Candidate worklist",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1299,7 +1299,7 @@
     "key": "examiner.worklist.helper",
     "en": "Primary Examiner must complete the full outdoor form. Secondary Examiner input is optional/supporting.",
     "cs": "Primary Examiner musí vyplnit celý outdoor formulář. Secondary Examiner input je volitelný/podpůrný.",
-    "target": "Primary Examiner must complete the full utomhus form. Secondary Examiner input is valfri/stoedjande.",
+    "target": "Primary Examiner must complete fullständigt utomhusformulär. Secondary Examiner inmatning är valfri/stödjande.",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1307,7 +1307,7 @@
     "key": "examiner.worklist.emptyTitle",
     "en": "No assigned Candidates are available for this Examiner.",
     "cs": "Pro tohoto zkoušejícího nejsou dostupní žádní přiřazení kandidáti.",
-    "target": "nej tilldelad Candidates are tillgaenglig for this Examiner.",
+    "target": "Nej tilldelad Candidates är tillgänglig för Detta Examiner.",
     "notes": "Protected term(s): Candidate, Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1315,7 +1315,7 @@
     "key": "examiner.worklist.emptyHelper",
     "en": "Ask the Centre to assign this Examiner as primary or secondary, save Centre Setup, then reopen the Examiner QR session.",
     "cs": "Požádejte Centrum, aby zkoušejícího přiřadilo jako primary nebo secondary, uložilo Centre Setup a znovu otevřelo Examiner QR session.",
-    "target": "Ask the Centre to assign this Examiner as primary or secondary, spara Centre Setup, then reopen the Examiner QR session.",
+    "target": "Fråga Centre till tilldela Detta Examiner as primary eller secondary, spara Centre Setup, then reopen Examiner QR session.",
     "notes": "Protected term(s): Examiner, Centre, primary, secondary, Centre Setup, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1323,7 +1323,7 @@
     "key": "examiner.worklist.primaryCheckbox",
     "en": "I am the primary examiner for this candidate",
     "cs": "Jsem primary examiner pro tohoto kandidáta",
-    "target": "I am the primary examinator for this kandidat",
+    "target": "I am primary examinator för Detta kandidat",
     "notes": "Protected term(s): primary. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1331,7 +1331,7 @@
     "key": "examiner.worklist.openOutdoor",
     "en": "Open outdoor form",
     "cs": "Otevřít outdoor formulář",
-    "target": "oeppna utomhus form",
+    "target": "Öppna utomhus form",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1355,7 +1355,7 @@
     "key": "outdoor.backToLanding",
     "en": "Back to landing",
     "cs": "Zpět na úvodní stránku",
-    "target": "Back to landing",
+    "target": "Tillbaka till landing",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1379,7 +1379,7 @@
     "key": "outdoor.level",
     "en": "Level",
     "cs": "Úroveň",
-    "target": "nivaa",
+    "target": "Nivaa",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1387,7 +1387,7 @@
     "key": "outdoor.total",
     "en": "Outdoor total",
     "cs": "Outdoor celkem",
-    "target": "utomhus totalt",
+    "target": "Utomhus totalt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1403,7 +1403,7 @@
     "key": "outdoor.paperArchive.helper",
     "en": "Candidate prepares this on paper. Examiner photographs it as a pilot/archive placeholder.",
     "cs": "Kandidát připravuje tuto část na papíře. Zkoušející ji vyfotí jako pilot/archive placeholder.",
-    "target": "Candidate prepares this on paper. Examiner photographs it as a pilot/archive placeholder.",
+    "target": "Candidate prepares Detta on paper. Examiner photographs it as en pilot/archive placeholder.",
     "notes": "Protected term(s): Candidate, Examiner, pilot/archive placeholder. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1427,7 +1427,7 @@
     "key": "outdoor.points",
     "en": "points",
     "cs": "bodů",
-    "target": "poaeng",
+    "target": "poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1435,7 +1435,7 @@
     "key": "outdoor.detail.title",
     "en": "Outdoor form detail",
     "cs": "Detail outdoor formuláře",
-    "target": "utomhus form detalj",
+    "target": "Utomhus form detalj",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1443,7 +1443,7 @@
     "key": "outdoor.detail.helper",
     "en": "Jump between sections freely. Each question includes Notes / marking guidance.",
     "cs": "Mezi sekcemi lze volně přepínat. Každá otázka obsahuje poznámky / hodnoticí vodítko.",
-    "target": "Jump between avsnitt freely. Each question includes Notes / marking guidance.",
+    "target": "Jump between avsnitt freely. Each question includes anteckningar / marking guidance.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1451,7 +1451,7 @@
     "key": "outdoor.notesGuidance",
     "en": "Notes / marking guidance",
     "cs": "Poznámky / hodnoticí vodítko",
-    "target": "Notes / marking guidance",
+    "target": "Anteckningar / marking guidance",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1459,7 +1459,7 @@
     "key": "outdoor.pointsLabel",
     "en": "Points",
     "cs": "Body",
-    "target": "poaeng",
+    "target": "Poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1467,7 +1467,7 @@
     "key": "outdoor.examinerNotes",
     "en": "Examiner notes / justification",
     "cs": "Poznámky zkoušejícího / zdůvodnění",
-    "target": "Examiner notes / justification",
+    "target": "Examiner anteckningar / justification",
     "notes": "Protected term(s): Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1475,7 +1475,7 @@
     "key": "outdoor.submit",
     "en": "Submit and close outdoor form",
     "cs": "Odeslat a uzavřít outdoor formulář",
-    "target": "skicka and staeng utomhus form",
+    "target": "Skicka och stäng utomhus form",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1483,7 +1483,7 @@
     "key": "outdoor.mode.primary",
     "en": "primary - full form required",
     "cs": "primary - vyžaduje celý formulář",
-    "target": "primary - full form kraevs",
+    "target": "primary - fullständigt form kraevs",
     "notes": "Protected term(s): primary. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1491,7 +1491,7 @@
     "key": "outdoor.mode.secondary",
     "en": "secondary - optional input",
     "cs": "secondary - volitelný vstup",
-    "target": "secondary - valfri input",
+    "target": "secondary - valfri inmatning",
     "notes": "Protected term(s): secondary. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1507,7 +1507,7 @@
     "key": "outdoor.autosave",
     "en": "autosave to sync queue",
     "cs": "automatické ukládání do sync queue",
-    "target": "autosave to sync queue",
+    "target": "sparas automatiskt till sync queue",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1515,7 +1515,7 @@
     "key": "scoring.title",
     "en": "Examiner / Candidate scoring and evaluation",
     "cs": "Zkoušející / skórování a vyhodnocení kandidáta",
-    "target": "Examiner / Candidate scoring and evaluation",
+    "target": "Examiner / Candidate scoring och evaluation",
     "notes": "Protected term(s): Candidate, Examiner. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1523,7 +1523,7 @@
     "key": "scoring.subtitle",
     "en": "Scoring engine uses the candidate level.",
     "cs": "Skórovací engine používá úroveň kandidáta.",
-    "target": "Scoring engine uses the kandidat nivaa.",
+    "target": "Scoring engine uses kandidat nivaa.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1531,7 +1531,7 @@
     "key": "scoring.status",
     "en": "Status",
     "cs": "Stav",
-    "target": "status",
+    "target": "Status",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1539,7 +1539,7 @@
     "key": "scoring.written",
     "en": "Written",
     "cs": "Písemný test",
-    "target": "skriftligt",
+    "target": "Skriftligt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1547,7 +1547,7 @@
     "key": "scoring.outdoor",
     "en": "Outdoor",
     "cs": "Outdoor",
-    "target": "utomhus",
+    "target": "Utomhus",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1555,7 +1555,7 @@
     "key": "scoring.report",
     "en": "Report",
     "cs": "Report",
-    "target": "rapport",
+    "target": "Rapport",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1563,7 +1563,7 @@
     "key": "scoring.total",
     "en": "Total",
     "cs": "Celkem",
-    "target": "totalt",
+    "target": "Totalt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1571,7 +1571,7 @@
     "key": "scoring.percentage",
     "en": "Percentage",
     "cs": "Procenta",
-    "target": "procent",
+    "target": "Procent",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1579,7 +1579,7 @@
     "key": "scoring.result",
     "en": "Result",
     "cs": "Výsledek",
-    "target": "resultat",
+    "target": "Resultat",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1611,7 +1611,7 @@
     "key": "scoring.loadPreview",
     "en": "Load Evaluation Preview",
     "cs": "Načíst náhled vyhodnocení",
-    "target": "laes in Foerhandsvisning av utvaerdering",
+    "target": "Läs in Foerhandsvisning av utvaerdering",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1627,7 +1627,7 @@
     "key": "scoring.downloadDraftExport",
     "en": "Download Draft Export (.xls)",
     "cs": "Stáhnout pracovní export (.xls)",
-    "target": "haemta Draft Export (.xls)",
+    "target": "Haemta Draft Export (.xls)",
     "notes": "Protected term(s): Draft Export. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1643,7 +1643,7 @@
     "key": "scoring.draftOnly",
     "en": "Draft Export only — not the official VETcert evaluation template.",
     "cs": "Pouze pracovní export — nejde o oficiální šablonu vyhodnocení VETcert.",
-    "target": "Draft Export only — not the official VETcert evaluation template.",
+    "target": "Draft Export Endast — not official VETcert evaluation template.",
     "notes": "Protected term(s): Draft Export. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1667,7 +1667,7 @@
     "key": "evaluation.preview.helper",
     "en": "Backend-loaded preview of the current Candidate evaluation data.",
     "cs": "Backendový náhled aktuálních dat vyhodnocení kandidáta.",
-    "target": "backend-inlaest foerhandsvisning of the current Candidate evaluation data.",
+    "target": "Backend-inlaest foerhandsvisning of current Candidate evaluation data.",
     "notes": "Protected term(s): Candidate. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1675,7 +1675,7 @@
     "key": "evaluation.preview.summary",
     "en": "Summary",
     "cs": "Souhrn",
-    "target": "sammanfattning",
+    "target": "Sammanfattning",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1683,7 +1683,7 @@
     "key": "evaluation.preview.written",
     "en": "Written",
     "cs": "Písemný test",
-    "target": "skriftligt",
+    "target": "Skriftligt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1691,7 +1691,7 @@
     "key": "evaluation.preview.outdoor",
     "en": "Outdoor",
     "cs": "Outdoor",
-    "target": "utomhus",
+    "target": "Utomhus",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1699,7 +1699,7 @@
     "key": "evaluation.preview.report",
     "en": "Report",
     "cs": "Report",
-    "target": "rapport",
+    "target": "Rapport",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1707,7 +1707,7 @@
     "key": "evaluation.preview.total",
     "en": "Total",
     "cs": "Celkem",
-    "target": "totalt",
+    "target": "Totalt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1715,7 +1715,7 @@
     "key": "evaluation.preview.percentage",
     "en": "Percentage",
     "cs": "Procenta",
-    "target": "procent",
+    "target": "Procent",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1723,7 +1723,7 @@
     "key": "evaluation.preview.result",
     "en": "Result",
     "cs": "Výsledek",
-    "target": "resultat",
+    "target": "Resultat",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1731,7 +1731,7 @@
     "key": "evaluation.preview.outdoorScores",
     "en": "Outdoor scores",
     "cs": "Outdoor skóre",
-    "target": "utomhus scores",
+    "target": "Utomhus Poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1739,7 +1739,7 @@
     "key": "evaluation.preview.reportSummary",
     "en": "Report summary",
     "cs": "Souhrn reportu",
-    "target": "rapport sammanfattning",
+    "target": "Rapport sammanfattning",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1747,7 +1747,7 @@
     "key": "evaluation.preview.hasReportDraft",
     "en": "Report draft",
     "cs": "Návrh reportu",
-    "target": "rapport utkast",
+    "target": "Rapport utkast",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1755,7 +1755,7 @@
     "key": "evaluation.preview.treesWithContent",
     "en": "Trees with content",
     "cs": "Stromy s obsahem",
-    "target": "Trees with content",
+    "target": "Trees med content",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1763,7 +1763,7 @@
     "key": "evaluation.preview.fieldNotesFilled",
     "en": "Field notes filled",
     "cs": "Vyplněné terénní poznámky",
-    "target": "Field notes filled",
+    "target": "Fältanteckningar filled",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1795,7 +1795,7 @@
     "key": "evaluation.preview.primaryScores",
     "en": "Primary scores",
     "cs": "Primary skóre",
-    "target": "Primary scores",
+    "target": "Primary Poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1803,7 +1803,7 @@
     "key": "evaluation.preview.secondaryScores",
     "en": "Secondary scores",
     "cs": "Secondary skóre",
-    "target": "Secondary scores",
+    "target": "Secondary Poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1827,7 +1827,7 @@
     "key": "centre.access.title",
     "en": "Certification centre / Open delegated workspace",
     "cs": "Certifikační centrum / otevření delegovaného pracovního prostoru",
-    "target": "Certification centre / oeppna delegated workspace",
+    "target": "Certification centre / öppna delegated arbetsyta",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1835,7 +1835,7 @@
     "key": "centre.access.subtitle",
     "en": "Open workspace using Centre QR received from Admin.",
     "cs": "Otevřete pracovní prostor pomocí Centre QR získaného od Admina.",
-    "target": "oeppna workspace using Centre QR received from Admin.",
+    "target": "Öppna arbetsyta using Centre QR received från Admin.",
     "notes": "Protected term(s): Centre, Admin, Centre QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1851,7 +1851,7 @@
     "key": "centre.access.open",
     "en": "Open centre workspace",
     "cs": "Otevřít pracovní prostor centra",
-    "target": "oeppna centre workspace",
+    "target": "Öppna centre arbetsyta",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1859,7 +1859,7 @@
     "key": "centre.access.prototypeToken",
     "en": "Prototype token",
     "cs": "Prototypový token",
-    "target": "Prototype token",
+    "target": "Prototyp token",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1867,7 +1867,7 @@
     "key": "centre.config.title",
     "en": "Centre / Configure levels, variants, candidates and examiners",
     "cs": "Centrum / nastavení úrovní, variant, kandidátů a zkoušejících",
-    "target": "Centre / Configure nivaaer, varianter, kandidater and examinatorer",
+    "target": "Centre / Configure nivaaer, varianter, kandidater och examinatorer",
     "notes": "Protected term(s): Centre. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1875,7 +1875,7 @@
     "key": "centre.config.subtitle",
     "en": "One exam can contain Practicing, Consulting or both. Each candidate has primary and secondary examiner.",
     "cs": "Jedna zkouška může obsahovat úroveň Practicing, Consulting nebo obě. Každý kandidát má primary a secondary examiner.",
-    "target": "One exam can contain Practicing, Consulting or both. Each kandidat has primary and secondary examinator.",
+    "target": "One exam can contain Practicing, Consulting eller both. Each kandidat has primary och secondary examinator.",
     "notes": "Protected term(s): Practicing, Consulting, primary, secondary. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1891,7 +1891,7 @@
     "key": "centre.setupPersistence.helper",
     "en": "Load or save the current Centre Setup through the backend. Returned Candidate QR and Examiner QR links are shown in the QR access pack below.",
     "cs": "Načtěte nebo uložte aktuální Centre Setup přes backend. Vrácené Candidate QR a Examiner QR odkazy se zobrazí níže v QR access packu.",
-    "target": "laes in or spara the current Centre Setup through the backend. Returned Candidate QR and Examiner QR links are visas in the QR access pack below.",
+    "target": "Läs in eller spara current Centre Setup through backend. Returned Candidate QR och Examiner QR länkar är visas in QR åtkomstpaket below.",
     "notes": "Protected term(s): Candidate, Examiner, Centre, Centre Setup, Candidate QR, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1899,7 +1899,7 @@
     "key": "centre.setupPersistence.load",
     "en": "Load Centre Setup",
     "cs": "Načíst Centre Setup",
-    "target": "laes in Centre Setup",
+    "target": "Läs in Centre Setup",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1915,7 +1915,7 @@
     "key": "centre.setupPersistence.save",
     "en": "Save Centre Setup",
     "cs": "Uložit Centre Setup",
-    "target": "spara Centre Setup",
+    "target": "Spara Centre Setup",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1931,7 +1931,7 @@
     "key": "centre.setupPersistence.auditExport",
     "en": "Download Centre Audit Package (.xls)",
     "cs": "Stáhnout Centre Audit Package (.xls)",
-    "target": "haemta Centre Audit Package (.xls)",
+    "target": "Haemta Centre Audit Package (.xls)",
     "notes": "Protected term(s): Centre, Centre Audit Package. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1955,7 +1955,7 @@
     "key": "centre.setupPersistence.saved",
     "en": "Saved / no local changes",
     "cs": "Uloženo / žádné lokální změny",
-    "target": "sparad / nej lokal changes",
+    "target": "Sparad / nej lokal changes",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -1963,7 +1963,7 @@
     "key": "centre.setupPersistence.saveHelper",
     "en": "Click Save Centre Setup to persist roster, examiners, assignments, variants, and imported tests.",
     "cs": "Kliknutím na Save Centre Setup uložíte roster, zkoušející, přiřazení, varianty a importované testy.",
-    "target": "Click spara Centre Setup to persist roster, examinatorer, assignments, varianter, and importerad tests.",
+    "target": "Click spara Centre Setup till persist roster, examinatorer, assignments, varianter, och importerad tests.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1979,7 +1979,7 @@
     "key": "centre.dataMode.backendHelper",
     "en": "This session uses backend-loaded pilot data.",
     "cs": "Tato session používá backend-loaded pilot data.",
-    "target": "This session uses backend-loaded pilot data.",
+    "target": "Detta session uses backend-loaded pilot data.",
     "notes": "Protected term(s): backend-loaded pilot data. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1987,7 +1987,7 @@
     "key": "centre.dataMode.demoHelper",
     "en": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data.",
     "cs": "Tato session používá demo fallback data pouze pro testování. Načtením Centre Setup použijete backend-loaded pilot data.",
-    "target": "This session uses demo fallback data for testing only. laes in Centre Setup to use backend-loaded pilot data.",
+    "target": "Detta session uses demo fallback data för testning Endast. läs in Centre Setup till use backend-loaded pilot data.",
     "notes": "Protected term(s): Centre, backend-loaded pilot data, demo fallback data, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -1995,7 +1995,7 @@
     "key": "centre.dataMode.saveAfterChanges",
     "en": "Save Centre Setup after changing roster, examiners, assignments, or imported tests.",
     "cs": "Po změně rosteru, zkoušejících, přiřazení nebo importovaných testů uložte Centre Setup.",
-    "target": "spara Centre Setup after changing roster, examinatorer, assignments, or importerad tests.",
+    "target": "Spara Centre Setup efter changing roster, examinatorer, assignments, eller importerad tests.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2019,7 +2019,7 @@
     "key": "centre.copy.copied",
     "en": "Copied {label} QR link",
     "cs": "Zkopírován QR odkaz: {label}",
-    "target": "kopierad {label} QR laenk",
+    "target": "Kopierad {label} QR laenk",
     "notes": "Preserve placeholder(s) exactly: {label}.",
     "status": "needs_review"
   },
@@ -2027,7 +2027,7 @@
     "key": "centre.copy.unavailable",
     "en": "Copy unavailable. Select and copy {label} QR link manually.",
     "cs": "Kopírování není dostupné. Označte a ručně zkopírujte QR odkaz: {label}.",
-    "target": "Copy inte tillgaenglig. Select and copy {label} QR laenk manually.",
+    "target": "Copy inte tillgänglig. Select och copy {label} QR laenk manually.",
     "notes": "Preserve placeholder(s) exactly: {label}.",
     "status": "needs_review"
   },
@@ -2035,7 +2035,7 @@
     "key": "centre.levels.title",
     "en": "Levels",
     "cs": "Úrovně",
-    "target": "nivaaer",
+    "target": "Nivaaer",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2051,7 +2051,7 @@
     "key": "centre.variants.helper",
     "en": "Import CSV or JSON package with real tests. The selected variant is then shown to candidates.",
     "cs": "Importujte CSV nebo JSON balíček se skutečnými testy. Vybraná varianta se poté zobrazí kandidátům.",
-    "target": "importera CSV or JSON paket with real tests. The vald variant is then visas to kandidater.",
+    "target": "Importera CSV eller JSON paket med riktiga tests. vald variant är then visas till kandidater.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2059,7 +2059,7 @@
     "key": "centre.variants.import",
     "en": "Import tests",
     "cs": "Importovat testy",
-    "target": "importera tests",
+    "target": "Importera tests",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2067,7 +2067,7 @@
     "key": "centre.variants.noImported",
     "en": "No imported variant",
     "cs": "Žádná importovaná varianta",
-    "target": "nej importerad variant",
+    "target": "Nej importerad variant",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2083,7 +2083,7 @@
     "key": "centre.variants.importedSummary",
     "en": "Imported summary: {variants} variant(s), {questions} question(s).",
     "cs": "Souhrn importu: {variants} variant(y), {questions} otázka/otázek.",
-    "target": "importerad sammanfattning: {variants} variant(s), {questions} question(s).",
+    "target": "Importerad sammanfattning: {variants} variant(s), {questions} question(s).",
     "notes": "Preserve placeholder(s) exactly: {variants}, {questions}.",
     "status": "needs_review"
   },
@@ -2099,7 +2099,7 @@
     "key": "centre.candidates.add",
     "en": "Add candidate",
     "cs": "Přidat kandidáta",
-    "target": "laegg till kandidat",
+    "target": "Laegg till kandidat",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2123,7 +2123,7 @@
     "key": "centre.candidateDetails.name",
     "en": "Name",
     "cs": "Jméno",
-    "target": "namn",
+    "target": "Namn",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2131,7 +2131,7 @@
     "key": "centre.candidateDetails.level",
     "en": "Level",
     "cs": "Úroveň",
-    "target": "nivaa",
+    "target": "Nivaa",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2139,7 +2139,7 @@
     "key": "centre.candidateDetails.birthDate",
     "en": "Birth date",
     "cs": "Datum narození",
-    "target": "foedelsedatum",
+    "target": "Födelsedatum",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2147,7 +2147,7 @@
     "key": "centre.candidateDetails.documentId",
     "en": "Document ID",
     "cs": "ID dokladu",
-    "target": "dokument ID",
+    "target": "Dokument ID",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2155,7 +2155,7 @@
     "key": "centre.candidateDetails.email",
     "en": "Email",
     "cs": "E-mail",
-    "target": "e-post",
+    "target": "E-post",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2171,7 +2171,7 @@
     "key": "centre.examiners.add",
     "en": "Add examiner",
     "cs": "Přidat zkoušejícího",
-    "target": "laegg till examinator",
+    "target": "Laegg till examinator",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2187,7 +2187,7 @@
     "key": "centre.examinerDetails.name",
     "en": "Name",
     "cs": "Jméno",
-    "target": "namn",
+    "target": "Namn",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2203,7 +2203,7 @@
     "key": "centre.examinerDetails.email",
     "en": "Email",
     "cs": "E-mail",
-    "target": "e-post",
+    "target": "E-post",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2227,7 +2227,7 @@
     "key": "centre.assignments.level",
     "en": "Level",
     "cs": "Úroveň",
-    "target": "nivaa",
+    "target": "Nivaa",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2251,7 +2251,7 @@
     "key": "centre.workflow.title",
     "en": "Pilot workflow status",
     "cs": "Stav pilotního workflow",
-    "target": "Pilot arbetsfloede status",
+    "target": "Pilot arbetsflöde status",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2259,7 +2259,7 @@
     "key": "centre.workflow.helper",
     "en": "Pilot workflow status across setup, assignments, candidate sections, responses, report drafts and outdoor scoring.",
     "cs": "Stav pilotního workflow napříč setupem, přiřazeními, částmi kandidáta, odpověďmi, návrhy reportů a outdoor skórováním.",
-    "target": "Pilot arbetsfloede status across setup, assignments, kandidat avsnitt, svar, rapport drafts and utomhus scoring.",
+    "target": "Pilot arbetsflöde status across setup, assignments, kandidat avsnitt, svar, rapport drafts och utomhus scoring.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2267,7 +2267,7 @@
     "key": "centre.workflow.syncHelper",
     "en": "Use the sync queue panel to review sync status after smoke test.",
     "cs": "Po smoke testu použijte sync queue panel pro kontrolu stavu synchronizace.",
-    "target": "Use the sync queue panel to granska sync status after smoke test.",
+    "target": "Use sync queue panel till granska sync status efter smoke test.",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2307,7 +2307,7 @@
     "key": "centre.workflow.testPackageImported",
     "en": "test package imported",
     "cs": "testový balíček importován",
-    "target": "test paket importerad",
+    "target": "testpaket importerad",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2315,7 +2315,7 @@
     "key": "centre.workflow.noTestPackage",
     "en": "no test package",
     "cs": "žádný testový balíček",
-    "target": "nej test paket",
+    "target": "nej testpaket",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2323,7 +2323,7 @@
     "key": "centre.workflow.demoWarning",
     "en": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data; counts may reflect demo fallback state until then.",
     "cs": "Tato session používá demo fallback data pouze pro testování. Načtěte Centre Setup pro použití backend-loaded pilot data; počty mohou do té doby odpovídat demo fallback stavu.",
-    "target": "This session uses demo fallback data for testing only. laes in Centre Setup to use backend-loaded pilot data; counts may reflect demo fallback state until then.",
+    "target": "Detta session uses demo fallback data för testning Endast. läs in Centre Setup till use backend-loaded pilot data; counts may reflect demo fallback state until then.",
     "notes": "Protected term(s): Centre, backend-loaded pilot data, demo fallback data, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2339,7 +2339,7 @@
     "key": "centre.workflow.level",
     "en": "Level",
     "cs": "Úroveň",
-    "target": "nivaa",
+    "target": "Nivaa",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2363,7 +2363,7 @@
     "key": "centre.workflow.identity",
     "en": "Identity",
     "cs": "Identita",
-    "target": "identitet",
+    "target": "Identitet",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2371,7 +2371,7 @@
     "key": "centre.workflow.writtenTest",
     "en": "Written test",
     "cs": "Písemný test",
-    "target": "Skriftligt prov",
+    "target": "Skriftligt test",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2379,7 +2379,7 @@
     "key": "centre.workflow.report",
     "en": "Report",
     "cs": "Report",
-    "target": "rapport",
+    "target": "Rapport",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2387,7 +2387,7 @@
     "key": "centre.workflow.responses",
     "en": "Responses",
     "cs": "Odpovědi",
-    "target": "svar",
+    "target": "Svar",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2395,7 +2395,7 @@
     "key": "centre.workflow.outdoorScores",
     "en": "Outdoor scores",
     "cs": "Outdoor skóre",
-    "target": "utomhus scores",
+    "target": "Utomhus Poäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2419,7 +2419,7 @@
     "key": "centre.workflow.closedAt",
     "en": "Closed",
     "cs": "Uzavřeno",
-    "target": "Closed",
+    "target": "Stängd",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2443,7 +2443,7 @@
     "key": "status.centreQrRequired",
     "en": "Open the Centre portal with a valid Centre QR session, then try again.",
     "cs": "Otevřete portál Centra pomocí platné Centre QR session a zkuste to znovu.",
-    "target": "oeppna the Centre portal with a valid Centre QR session, then try again.",
+    "target": "Öppna Centre portal med en valid Centre QR session, then try again.",
     "notes": "Protected term(s): Centre, Centre QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2451,7 +2451,7 @@
     "key": "status.centreSetup.loadedEvent",
     "en": "Loaded Centre Setup for exam event {event}.",
     "cs": "Centre Setup načten pro zkušební událost {event}.",
-    "target": "inlaest Centre Setup for exam event {event}.",
+    "target": "Inlaest Centre Setup för exam event {event}.",
     "notes": "Preserve placeholder(s) exactly: {event}. Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2459,7 +2459,7 @@
     "key": "status.centreSetup.savedEvent",
     "en": "Saved Centre Setup for exam event {event}.",
     "cs": "Centre Setup uložen pro zkušební událost {event}.",
-    "target": "sparad Centre Setup for exam event {event}.",
+    "target": "Sparad Centre Setup för exam event {event}.",
     "notes": "Preserve placeholder(s) exactly: {event}. Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2467,7 +2467,7 @@
     "key": "status.centreSetup.loadFailed",
     "en": "Centre Setup could not be loaded. Check the session and try again.",
     "cs": "Centre Setup se nepodařilo načíst. Zkontrolujte session a zkuste to znovu.",
-    "target": "Centre Setup could not be inlaest. Check the session and try again.",
+    "target": "Centre Setup could not be inlaest. Check session och try again.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2475,7 +2475,7 @@
     "key": "status.centreSetup.saveFailed",
     "en": "Centre Setup could not be saved. Check the Centre session and try again.",
     "cs": "Centre Setup se nepodařilo uložit. Zkontrolujte Centre session a zkuste to znovu.",
-    "target": "Centre Setup could not be sparad. Check the Centre session and try again.",
+    "target": "Centre Setup could not be sparad. Check Centre session och try again.",
     "notes": "Protected term(s): Centre, Centre Setup. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2483,7 +2483,7 @@
     "key": "status.centreAuditExport.sessionRequired",
     "en": "Open the Centre portal with a valid Centre QR session before downloading the Audit Package.",
     "cs": "Před stažením Audit Package otevřete portál Centra pomocí platné Centre QR session.",
-    "target": "oeppna the Centre portal with a valid Centre QR session before downloading the Audit paket.",
+    "target": "Öppna Centre portal med en valid Centre QR session innan downloading Audit paket.",
     "notes": "Protected term(s): Centre, Centre QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2491,7 +2491,7 @@
     "key": "status.testImport.importedFull",
     "en": "Imported {variants} variants and {questions} questions.",
     "cs": "Importováno: {variants} variant(y) a {questions} otázka/otázek.",
-    "target": "importerad {variants} varianter and {questions} fragor.",
+    "target": "Importerad {variants} varianter och {questions} frågor.",
     "notes": "Preserve placeholder(s) exactly: {variants}, {questions}.",
     "status": "needs_review"
   },
@@ -2507,7 +2507,7 @@
     "key": "status.testImport.fileReadFailed",
     "en": "Test import failed: the file could not be read.",
     "cs": "Import testu selhal: soubor se nepodařilo přečíst.",
-    "target": "Test importera misslyckades: the fil could not be read.",
+    "target": "Test importera misslyckades: fil could not be read.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2515,7 +2515,7 @@
     "key": "status.testImport.summary",
     "en": "Imported {variants} variant(s), {questions} question(s).",
     "cs": "Importováno: {variants} variant(y), {questions} otázka/otázek.",
-    "target": "importerad {variants} variant(s), {questions} question(s).",
+    "target": "Importerad {variants} variant(s), {questions} question(s).",
     "notes": "Preserve placeholder(s) exactly: {variants}, {questions}.",
     "status": "needs_review"
   },
@@ -2523,7 +2523,7 @@
     "key": "status.evaluation.previewSessionRequired",
     "en": "Open this portal with a valid QR session before loading the evaluation preview.",
     "cs": "Před načtením náhledu vyhodnocení otevřete tento portál pomocí platné QR session.",
-    "target": "oeppna this portal with a valid QR session before loading the Foerhandsvisning av utvaerdering.",
+    "target": "Öppna Detta portal med en valid QR session innan loading Foerhandsvisning av utvaerdering.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2531,7 +2531,7 @@
     "key": "status.evaluation.previewUnavailable",
     "en": "Evaluation preview is unavailable. Reopen the Examiner QR session and try again.",
     "cs": "Náhled vyhodnocení není dostupný. Znovu otevřete Examiner QR session a zkuste to znovu.",
-    "target": "Foerhandsvisning av utvaerdering is inte tillgaenglig. Reopen the Examiner QR session and try again.",
+    "target": "Foerhandsvisning av utvaerdering är inte tillgänglig. Reopen Examiner QR session och try again.",
     "notes": "Protected term(s): Examiner, Examiner QR. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2539,7 +2539,7 @@
     "key": "status.export.sessionRequired",
     "en": "Open this portal with a valid QR session before downloading the Draft Export.",
     "cs": "Před stažením pracovního exportu otevřete tento portál pomocí platné QR session.",
-    "target": "oeppna this portal with a valid QR session before downloading the Draft Export.",
+    "target": "Öppna Detta portal med en valid QR session innan downloading Draft Export.",
     "notes": "Protected term(s): Draft Export. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2547,7 +2547,7 @@
     "key": "status.export.unavailable",
     "en": "Draft Export is unavailable. Reopen the Examiner QR session and try again.",
     "cs": "Pracovní export není dostupný. Znovu otevřete Examiner QR session a zkuste to znovu.",
-    "target": "Draft Export is inte tillgaenglig. Reopen the Examiner QR session and try again.",
+    "target": "Draft Export är inte tillgänglig. Reopen Examiner QR session och try again.",
     "notes": "Protected term(s): Examiner, Examiner QR, Draft Export. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2563,7 +2563,7 @@
     "key": "auditSync.subtitle",
     "en": "Sync queue shows local actions waiting for backend confirmation or already recorded during this session.",
     "cs": "Sync queue zobrazuje lokální akce čekající na potvrzení backendem nebo už zaznamenané v této session.",
-    "target": "Sync queue shows lokal actions waiting for backend confirmation or already recorded during this session.",
+    "target": "Sync queue shows lokal actions waiting för backend confirmation eller already recorded under Detta session.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2595,7 +2595,7 @@
     "key": "auditSync.emptyQueue",
     "en": "No sync queue items.",
     "cs": "Sync queue neobsahuje žádné položky.",
-    "target": "nej sync queue items.",
+    "target": "Nej sync queue items.",
     "notes": "Protected term(s): sync queue. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2603,7 +2603,7 @@
     "key": "auditSync.emptyAudit",
     "en": "No audit entries yet.",
     "cs": "Zatím nejsou žádné auditní záznamy.",
-    "target": "nej audit entries yet.",
+    "target": "Nej audit entries ännu.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2611,7 +2611,7 @@
     "key": "auditSync.status",
     "en": "Status",
     "cs": "Stav",
-    "target": "status",
+    "target": "Status",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2619,7 +2619,7 @@
     "key": "auditSync.time",
     "en": "Time",
     "cs": "Čas",
-    "target": "tid",
+    "target": "Tid",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2627,7 +2627,7 @@
     "key": "auditSync.type",
     "en": "Type",
     "cs": "Typ",
-    "target": "typ",
+    "target": "Typ",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2635,7 +2635,7 @@
     "key": "auditSync.detail",
     "en": "Detail",
     "cs": "Detail",
-    "target": "detalj",
+    "target": "Detalj",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2643,7 +2643,7 @@
     "key": "common.open",
     "en": "Open",
     "cs": "Otevřít",
-    "target": "oeppna",
+    "target": "Öppna",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2651,7 +2651,7 @@
     "key": "common.close",
     "en": "Close",
     "cs": "Zavřít",
-    "target": "staeng",
+    "target": "Stäng",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2659,7 +2659,7 @@
     "key": "common.save",
     "en": "Save",
     "cs": "Uložit",
-    "target": "spara",
+    "target": "Spara",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2667,7 +2667,7 @@
     "key": "common.load",
     "en": "Load",
     "cs": "Načíst",
-    "target": "laes in",
+    "target": "Läs in",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2675,7 +2675,7 @@
     "key": "common.download",
     "en": "Download",
     "cs": "Stáhnout",
-    "target": "haemta",
+    "target": "Haemta",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2683,7 +2683,7 @@
     "key": "common.import",
     "en": "Import",
     "cs": "Importovat",
-    "target": "importera",
+    "target": "Importera",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2691,7 +2691,7 @@
     "key": "common.export",
     "en": "Export",
     "cs": "Exportovat",
-    "target": "exportera",
+    "target": "Exportera",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2699,7 +2699,7 @@
     "key": "common.submit",
     "en": "Submit",
     "cs": "Odeslat",
-    "target": "skicka",
+    "target": "Skicka",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2707,7 +2707,7 @@
     "key": "common.confirm",
     "en": "Confirm",
     "cs": "Potvrdit",
-    "target": "bekraefta",
+    "target": "Bekräfta",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2715,7 +2715,7 @@
     "key": "common.add",
     "en": "Add",
     "cs": "Přidat",
-    "target": "laegg till",
+    "target": "Laegg till",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2723,7 +2723,7 @@
     "key": "common.cancel",
     "en": "Cancel",
     "cs": "Zrušit",
-    "target": "avbryt",
+    "target": "Avbryt",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2731,7 +2731,7 @@
     "key": "common.review",
     "en": "Review",
     "cs": "Zkontrolovat",
-    "target": "granska",
+    "target": "Granska",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2739,7 +2739,7 @@
     "key": "common.ready",
     "en": "Ready",
     "cs": "Připraveno",
-    "target": "klar",
+    "target": "Klar",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2747,7 +2747,7 @@
     "key": "common.missing",
     "en": "Missing",
     "cs": "Chybí",
-    "target": "saknas",
+    "target": "Saknas",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2787,7 +2787,7 @@
     "key": "workspace.current",
     "en": "Current workspace",
     "cs": "Aktuální pracovní prostor",
-    "target": "Current workspace",
+    "target": "Current arbetsyta",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2803,7 +2803,7 @@
     "key": "qrScanner.helper",
     "en": "Allow camera access and point the tablet at a VetBara QR.",
     "cs": "Povolte přístup ke kameře a namiřte tablet na VetBara QR.",
-    "target": "Allow camera access and point the surfplatta at a VetBara QR.",
+    "target": "Allow camera access och point surfplatta at en VetBara QR.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2811,7 +2811,7 @@
     "key": "qrScanner.scan",
     "en": "Scan {role} QR",
     "cs": "Skenovat {role} QR",
-    "target": "skanna {role} QR",
+    "target": "Skanna {role} QR",
     "notes": "Preserve placeholder(s) exactly: {role}.",
     "status": "needs_review"
   },
@@ -2819,7 +2819,7 @@
     "key": "admin.openExam.title",
     "en": "Admin / Open exam event",
     "cs": "Admin / otevření zkušební události",
-    "target": "Admin / oeppna exam event",
+    "target": "Admin / öppna exam event",
     "notes": "Protected term(s): Admin. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2827,7 +2827,7 @@
     "key": "admin.openExam.subtitle",
     "en": "Admin sets centre, date, place and exam language, then sends centre access QR.",
     "cs": "Admin nastaví centrum, datum, místo a jazyk zkoušky a potom odešle Centre access QR.",
-    "target": "Admin sets centre, datum, plats and exam spraak, then sends centre access QR.",
+    "target": "Admin sets centre, datum, plats och exam spraak, then sends centre access QR.",
     "notes": "Protected term(s): Admin. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2859,7 +2859,7 @@
     "key": "admin.place",
     "en": "Place",
     "cs": "Místo",
-    "target": "plats",
+    "target": "Plats",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2883,7 +2883,7 @@
     "key": "admin.centreAccess.scan",
     "en": "Scan centre QR",
     "cs": "Skenovat centre QR",
-    "target": "skanna centre QR",
+    "target": "Skanna centre QR",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2899,7 +2899,7 @@
     "key": "admin.multilingual.subtitle",
     "en": "UI translations are managed separately from exam content.",
     "cs": "Překlady UI jsou spravované odděleně od obsahu zkoušky.",
-    "target": "UI translations are managed separately from exam content.",
+    "target": "UI translations är managed separately från exam content.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2923,7 +2923,7 @@
     "key": "admin.multilingual.export",
     "en": "Export translation XLSX",
     "cs": "Exportovat translation XLSX",
-    "target": "exportera translation XLSX",
+    "target": "Exportera translation XLSX",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2931,7 +2931,7 @@
     "key": "status.openedForCentre",
     "en": "Opened for Centre",
     "cs": "Otevřeno pro Centrum",
-    "target": "Opened for Centre",
+    "target": "Öppnad för Centre",
     "notes": "Protected term(s): Centre. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2947,7 +2947,7 @@
     "key": "status.testImport.loadedStoredFull",
     "en": "Loaded stored test package with {variants} variant(s) and {questions} question(s).",
     "cs": "Načten uložený testový balíček: {variants} variant(y), {questions} otázka/otázek.",
-    "target": "inlaest stored test paket with {variants} variant(s) and {questions} question(s).",
+    "target": "Inlaest stored testpaket med {variants} variant(s) och {questions} question(s).",
     "notes": "Preserve placeholder(s) exactly: {variants}, {questions}.",
     "status": "needs_review"
   },
@@ -2955,7 +2955,7 @@
     "key": "status.testImport.loadedStored",
     "en": "Loaded stored test package.",
     "cs": "Načten uložený testový balíček.",
-    "target": "inlaest stored test paket.",
+    "target": "Inlaest stored testpaket.",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2963,7 +2963,7 @@
     "key": "status.centreAuditExport.unavailable",
     "en": "The Centre Audit Package requires a valid Centre session. Reopen the Centre QR and try again.",
     "cs": "Centre Audit Package vyžaduje platnou Centre session. Znovu otevřete Centre QR a zkuste to znovu.",
-    "target": "The Centre Audit Package requires a valid Centre session. Reopen the Centre QR and try again.",
+    "target": "Centre Audit Package requires en valid Centre session. Reopen Centre QR och try again.",
     "notes": "Protected term(s): Centre, Centre QR, Centre Audit Package. Do not translate unless explicitly approved during review.",
     "status": "needs_review"
   },
@@ -2971,7 +2971,7 @@
     "key": "app.mvpPrototype",
     "en": "MVP prototype",
     "cs": "MVP prototyp",
-    "target": "MVP prototype",
+    "target": "MVP prototyp",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -2995,7 +2995,7 @@
     "key": "sectionStatus.open",
     "en": "open",
     "cs": "otevřeno",
-    "target": "oeppna",
+    "target": "öppna",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   },
@@ -3003,7 +3003,7 @@
     "key": "sectionStatus.closed",
     "en": "closed",
     "cs": "uzavřeno",
-    "target": "closed",
+    "target": "stängd",
     "notes": "Target intentionally blank for reviewer translation.",
     "status": "needs_review"
   }

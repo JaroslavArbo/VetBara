@@ -2,7 +2,7 @@
 
 Report file: docs/i18n/generated/translation-review-progress.md
 
-Generated at: 2026-06-02T08:25:09.510Z
+Generated at: 2026-06-02T15:57:02.584Z
 
 ## Per-Language Progress
 
