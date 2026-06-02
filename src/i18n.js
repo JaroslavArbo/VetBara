@@ -1,15 +1,27 @@
+import { draftRuntimeDictionaries } from "./generated/draft-i18n-dictionaries.js";
+
 export const LANGUAGES = [
   { code: "cs", label: "Čeština" },
   { code: "en", label: "English" },
+  { code: "de", label: "Deutsch", draft: true },
+  { code: "it", label: "Italiano", draft: true },
+  { code: "sv", label: "Svenska", draft: true },
+  { code: "hr", label: "Hrvatski", draft: true },
+  { code: "nl", label: "Nederlands", draft: true },
+  { code: "no", label: "Norsk", draft: true },
+  { code: "fr", label: "Français", draft: true },
+  { code: "es", label: "Español", draft: true },
+  { code: "ro", label: "Română", draft: true },
 ];
 
-export const FUTURE_LANGUAGES = ["pl", "de", "nl"];
+export const FUTURE_LANGUAGES = ["pl"];
 
 export const translations = {
   en: {
     "app.title": "VetBara",
     "app.subtitle": "Pilot digital examination workspace",
     "language.label": "Language",
+    "language.draftPreviewWarning": "Draft machine translation preview — not approved for official VETcert exam use.",
     "role.centre": "Centre",
     "role.candidate": "Candidate",
     "role.examiner": "Examiner",
@@ -105,6 +117,7 @@ export const translations = {
     "app.title": "VetBara",
     "app.subtitle": "Pilotní digitální zkušební prostředí",
     "language.label": "Jazyk",
+    "language.draftPreviewWarning": "Náhled strojového překladu — není schváleno pro oficiální zkoušku VETcert.",
     "role.centre": "Centrum",
     "role.candidate": "Kandidát",
     "role.examiner": "Zkoušející",
@@ -948,6 +961,9 @@ Object.assign(translations.cs, {
   "sectionStatus.closed": "uzavřeno"
 });
 
+for (const [language, dictionary] of Object.entries(draftRuntimeDictionaries)) {
+  translations[language] = dictionary;
+}
 
 export function makeTranslator(language) {
   return function t(key) {
