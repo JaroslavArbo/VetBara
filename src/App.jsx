@@ -294,13 +294,18 @@ function storedAnswerValue(row) { const answer = row?.answer; return isObject(an
 function RealQr({ value, size = 112 }) {
   const encoded = encodeURIComponent(value);
   return (
-    <img
-      src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}`}
-      alt="VetBara QR"
-      width={size}
-      height={size}
-      className="rounded-xl bg-white p-2 shadow-inner"
-    />
+    <div
+      className="shrink-0 rounded-xl bg-white p-2 shadow-inner"
+      style={{ width: size, height: size }}
+    >
+      <img
+        src={`https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}`}
+        alt="VetBara QR"
+        width={size}
+        height={size}
+        className="block h-full w-full object-contain"
+      />
+    </div>
   );
 }
 function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token") }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
