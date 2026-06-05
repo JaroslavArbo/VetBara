@@ -1019,15 +1019,20 @@ export default function VetBaraPrototype() {
     });
   }
   
-   function addReportPhoto(tree) {
-    if (!loggedCandidate) return;
-    const capturedAt = new Date().toISOString();
+   function addReportPhoto(tree, filePhoto) {
+    if (!loggedCandidate || !filePhoto) return;
+    const capturedAt = filePhoto.createdAt ?? new Date().toISOString();
     const draft = reportDrafts[loggedCandidate.id] ?? createReportDraft();
     const photos = draft[tree]?.photos ?? [];
     const photo = {
       id: `P-${photos.length + 1}`,
-      caption: `${tree} candidate photo ${photos.length + 1}`,
+      name: filePhoto.name,
+      type: filePhoto.type,
+      size: filePhoto.size,
+      dataUrl: filePhoto.dataUrl,
+      caption: filePhoto.name || `${tree} candidate photo ${photos.length + 1}`,
       capturedAt,
+      createdAt: capturedAt,
     };
 
     setReportDrafts((prev) => {
@@ -1056,6 +1061,10 @@ export default function VetBaraPrototype() {
         sectionKey: "report",
         treeId: tree,
         photoId: photo.id,
+        name: photo.name,
+        type: photo.type,
+        size: photo.size,
+        hasDataUrl: Boolean(photo.dataUrl),
         caption: photo.caption,
         capturedAt,
       },
@@ -1265,8 +1274,40 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
 function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, submitReport, t }) {
   const draft = reportDrafts[candidate.id] ?? createReportDraft();
   const tree = draft[activeReportTree];
+  const [photoStatus, setPhotoStatus] = useState("");
 
-  return <div className="rounded-2xl border bg-white p-4"><h3 className="font-semibold">{t("report.titleFull")}</h3><p className="mt-1 text-sm text-slate-600">{t("report.helper")}</p><div className="mt-3 flex gap-2">{REPORT_TREES.map((treeName) => <Button key={treeName} variant={activeReportTree === treeName ? "default" : "outline"} onClick={() => setActiveReportTree(treeName)} className="rounded-2xl">{treeName}</Button>)}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("report.photos")}: <strong>{tree.photos.length}</strong><p className="mt-2 text-xs text-slate-500">{t("report.photoHelper")}</p><Button onClick={() => addReportPhoto(activeReportTree)} variant="outline" className="mt-3 w-full rounded-2xl">{t("report.addPhotoShort")}</Button></div><textarea value={tree.fieldNotes} onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")} placeholder={t("report.fieldPlaceholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-3 grid gap-3 md:grid-cols-2">{REPORT_SECTIONS.map((sec) => <label key={sec.key} className="text-sm font-medium">{sec.title}<textarea value={tree.finalSections[sec.key] ?? ""} onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)} placeholder={`${activeReportTree}: ${sec.title}`} className="mt-1 min-h-20 w-full rounded-xl border bg-white p-3 text-sm" /></label>)}</div><Button onClick={submitReport} className="mt-4 rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("report.submit")}</Button><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div>;
+  function handlePhotoChange(event) {
+    const input = event.target;
+    const file = input.files?.[0];
+
+    if (!file) {
+      input.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      addReportPhoto(activeReportTree, {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: reader.result,
+        createdAt: new Date().toISOString(),
+      });
+      setPhotoStatus(t("report.photoAdded"));
+      input.value = "";
+    };
+
+    reader.onerror = () => {
+      setPhotoStatus(t("report.photoError"));
+      input.value = "";
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  return <div className="rounded-2xl border bg-white p-4"><h3 className="font-semibold">{t("report.titleFull")}</h3><p className="mt-1 text-sm text-slate-600">{t("report.helper")}</p><div className="mt-3 flex gap-2">{REPORT_TREES.map((treeName) => <Button key={treeName} variant={activeReportTree === treeName ? "default" : "outline"} onClick={() => setActiveReportTree(treeName)} className="rounded-2xl">{treeName}</Button>)}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("report.photos")}: <strong>{tree.photos.length}</strong><p className="mt-2 text-xs text-slate-500">{t("report.photoHelper")}</p><label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">{t("report.addPhotoShort")}<input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" /></label>{photoStatus && <div className="mt-2 text-xs font-medium text-slate-600">{photoStatus}</div>}{tree.photos.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{tree.photos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border bg-white p-2"><div className="h-14 w-14 overflow-hidden rounded-lg bg-slate-200">{photo.dataUrl ? <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>}</div><div className="min-w-0 text-xs"><div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div><div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div></div></div>)}</div>}</div><textarea value={tree.fieldNotes} onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")} placeholder={t("report.fieldPlaceholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-3 grid gap-3 md:grid-cols-2">{REPORT_SECTIONS.map((sec) => <label key={sec.key} className="text-sm font-medium">{sec.title}<textarea value={tree.finalSections[sec.key] ?? ""} onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)} placeholder={`${activeReportTree}: ${sec.title}`} className="mt-1 min-h-20 w-full rounded-xl border bg-white p-3 text-sm" /></label>)}</div><Button onClick={submitReport} className="mt-4 rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("report.submit")}</Button><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div>;
 }
 
 function ExaminerView({ examiners, loggedExaminer, confirmed, loginExaminer, logoutExaminer, confirmExaminer, assignedCandidates, assignments, setPrimary, activePage, setActivePage, openOutdoor, selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, updateOutdoor, updateOutdoorNote, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, scoring, updateScore, generateEvaluation, lastEvaluation, loadEvaluationPreview, evaluationPreview, evaluationLoading, evaluationError, downloadDraftExport, exportLoading, exportError, qrFor, setScannerMode, examinerTimes, t }) { return <><Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={Tablet} title={t("examiner.view.title")} subtitle={t("examiner.view.subtitle")} /><ExaminerQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedExaminer && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("examiner.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Examiner")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("examiner.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedExaminer ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedExaminer ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("examiner.empty")}</div> : activePage === "landing" ? <ExaminerLanding examiner={loggedExaminer} confirmed={confirmed} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} openOutdoor={openOutdoor} t={t} /> : <OutdoorForm selectedCandidate={selectedCandidate} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} setActivePage={setActivePage} time={examinerTimes[selectedCandidate.id]?.outdoor} t={t} />}</div></div></CardContent></Card><ScoringCard selectedCandidate={selectedCandidate} scoring={scoring} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} t={t} /></>; }

@@ -345,8 +345,10 @@ Object.assign(translations.en, {
 
   "report.titleFull": "Consulting report - 2 trees",
   "report.photos": "Photos",
-  "report.photoHelper": "Photo entries are pilot/archive placeholders, not real uploads yet.",
+  "report.photoHelper": "Photos are captured locally on this device and saved into the report draft.",
   "report.addPhotoShort": "Add photo",
+  "report.photoAdded": "Photo added to the report draft.",
+  "report.photoError": "Photo could not be loaded. Try another image.",
   "report.fieldPlaceholder": "Field observations and rough notes..."
 });
 
@@ -384,8 +386,10 @@ Object.assign(translations.cs, {
 
   "report.titleFull": "Consulting report - 2 stromy",
   "report.photos": "Fotografie",
-  "report.photoHelper": "Foto položky jsou pilot/archive placeholders, nejde zatím o skutečný upload.",
+  "report.photoHelper": "Fotografie se načítají lokálně v tomto zařízení a ukládají se do návrhu reportu.",
   "report.addPhotoShort": "Přidat fotografii",
+  "report.photoAdded": "Fotografie byla přidána do návrhu reportu.",
+  "report.photoError": "Fotografii se nepodařilo načíst. Zkuste jiný obrázek.",
   "report.fieldPlaceholder": "Terénní pozorování a pracovní poznámky..."
 });
 
