@@ -811,6 +811,7 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "status.centreQrRequired": "Open the Centre portal with a valid Centre QR session, then try again.",
+  "status.backendPersistenceUnavailable": "Backend persistence is not configured. Set up Supabase persistence environment variables on the server, then restart the backend and try again.",
   "status.centreSetup.loadedEvent": "Loaded Centre Setup for exam event {event}.",
   "status.centreSetup.savedEvent": "Saved Centre Setup for exam event {event}.",
   "status.centreSetup.loadFailed": "Centre Setup could not be loaded. Check the session and try again.",
@@ -830,6 +831,7 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "status.centreQrRequired": "Otevřete portál Centra pomocí platné Centre QR session a zkuste to znovu.",
+  "status.backendPersistenceUnavailable": "Backend persistence není nakonfigurovaná. Nastavte na serveru Supabase persistence environment variables, restartujte backend a zkuste to znovu.",
   "status.centreSetup.loadedEvent": "Centre Setup načten pro zkušební událost {event}.",
   "status.centreSetup.savedEvent": "Centre Setup uložen pro zkušební událost {event}.",
   "status.centreSetup.loadFailed": "Centre Setup se nepodařilo načíst. Zkontrolujte session a zkuste to znovu.",

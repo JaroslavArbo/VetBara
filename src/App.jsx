@@ -396,6 +396,11 @@ function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, 
 function scoreCandidate(c) { const l = scoreLimits(c.level); const w = Number(c.written ?? 0); const o = Number(c.outdoor ?? 0); const r = c.level === "Consulting" ? Number(c.report ?? 0) : 0; const total = w + o + r; const max = l.writtenMax + l.outdoorMax + l.reportMax; const pass = w / l.writtenMax >= 0.5 && o / l.outdoorMax >= 0.5 && (c.level !== "Consulting" || r / l.reportMax >= 0.5) && total / max >= 0.75; return { ...l, total, max, percentage: Math.round((total / max) * 1000) / 10, pass }; }
 function isObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
 function storedAnswerValue(row) { const answer = row?.answer; return isObject(answer) ? answer.selectedAnswer ?? answer.answer ?? answer.value ?? "" : answer ?? ""; }
+function isBackendPersistenceUnavailable(error) {
+  const message = String(error?.message ?? error ?? "");
+  return error?.status === 503 || /503/.test(message) || /Backend persistence is not configured/i.test(message);
+}
+
 function RealQr({ value, size = 112 }) {
   const encoded = encodeURIComponent(value);
   return (
@@ -956,7 +961,7 @@ export default function VetBaraPrototype() {
       setCentreSetupStatus(tf("status.centreSetup.loadedEvent", { event: result.examEventId || "current" }));
     } catch (error) {
       console.error("Centre Setup load failed", error);
-      setCentreSetupError(t("status.centreSetup.loadFailed"));
+      setCentreSetupError(isBackendPersistenceUnavailable(error) ? t("status.backendPersistenceUnavailable") : t("status.centreSetup.loadFailed"));
     } finally {
       setCentreSetupLoading(false);
     }
@@ -1012,7 +1017,7 @@ export default function VetBaraPrototype() {
       setCentreSetupStatus(tf("status.centreSetup.savedEvent", { event: result.examEventId || "current" }));
     } catch (error) {
       console.error("Centre Setup save failed", error);
-      setCentreSetupError(t("status.centreSetup.saveFailed"));
+      setCentreSetupError(isBackendPersistenceUnavailable(error) ? t("status.backendPersistenceUnavailable") : t("status.centreSetup.saveFailed"));
     } finally {
       setCentreSetupSaving(false);
     }
@@ -1032,7 +1037,7 @@ export default function VetBaraPrototype() {
       downloadBase64File(result);
     } catch (error) {
       console.error("Centre audit export failed", error);
-      setCentreAuditExportError(t("status.centreAuditExport.unavailable"));
+      setCentreAuditExportError(isBackendPersistenceUnavailable(error) ? t("status.backendPersistenceUnavailable") : t("status.centreAuditExport.unavailable"));
     } finally {
       setCentreAuditExportLoading(false);
     }
