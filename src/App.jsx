@@ -116,22 +116,95 @@ const DEFAULT_TEST_BANK = {
 const REPORT_TREES = ["Tree A", "Tree B"];
 const REPORT_SECTIONS = ["Health and vitality", "Structural condition / biomechanics", "Wildlife, historical, cultural or social values", "Threats to the tree", "Management plan", "Management justification summary"].map((title, i) => ({ key: `s${i + 1}`, title }));
 const CANDIDATE_SECTIONS = { Practicing: [{ key: "test", title: "Written test", description: "Complete and submit the Practicing written test." }], Consulting: [{ key: "test", title: "Written test", description: "Complete and submit the Consulting written test." }, { key: "report", title: "Report for 2 trees", description: "Collect field data and finalize the report for Tree A and Tree B." }] };
-const OUTDOOR_SECTIONS = { Practicing: ["generic", "prework", "threats", "history", "risk"], Consulting: ["generic", "history", "risk"] };
-const OUTDOOR_TITLES = { generic: "Generic oral questions", prework: "Exercise 1 - Pre-work assessment", threats: "Exercise 2 - Threats", history: "Exercise 3 - History", risk: "Exercise 4 - Risk" };
+const OUTDOOR_SECTIONS = {
+  Practicing: ["generic", "prework", "threats", "history", "risk"],
+  Consulting: ["generic", "history", "risk"],
+};
+
+const OUTDOOR_TITLES = {
+  generic: "Část 1 - Pohovor / všeobecné otázky",
+  prework: "Část 2 - Strom A - Cvičení 1 - Zhodnocení situace před započetím prací",
+  threats: "Část 2 - Strom B - Cvičení 2 - Vyhodnocení hrozeb",
+  history: "Historie stromu a stanoviště",
+  risk: "Vyhodnocení rizik / provozní bezpečnost",
+};
+
 const OUTDOOR_ITEMS = {
   Practicing: {
-    generic: [{ id: "P-G-01", text: "Can you provide a list of 3 characteristics a veteran tree may have?", max: 1, notes: "Award 1 mark for 3 relevant characteristics; 0.5 for up to 2. Examples: great age, crown retrenchment, history of pollarding, large girth, complex structure, hollowing or decaying wood." }, { id: "P-G-02", text: "Can you describe the value of this tree?", max: 1, notes: "Accept historical, ecological, cultural, landscape, aesthetic and social values." }],
-    prework: [{ id: "P-PW-01", text: "Please tell me about the health / vitality of the tree. How have you determined this?", max: 10, notes: "Higher scores require evidence: leaf density, bud density, extension growth, woundwood, reaction growth, epicormic growth and functional units." }, { id: "P-PW-02", text: "Refer to the paper management plan. Assess positioning of access, parking, equipment and machinery routes.", max: 2, notes: "The candidate prepares this on paper. Examiner assesses verbally and photographs it for archive only." }],
-    threats: [{ id: "P-TH-01", text: "Identify the threat, likely impact and suitable management response.", max: 8, notes: "Look for realistic and proportionate management that protects veteran tree value." }],
-    history: [{ id: "P-HI-01", text: "Tell me about the history of this tree and landscape.", max: 16, notes: "Assess ability to read tree body language and landscape history." }],
-    risk: [{ id: "P-RI-01", text: "Identify targets, defects, risk level and management options.", max: 9, notes: "Balance risk with ecological, cultural and historical value." }],
+    generic: [
+      { id: "P-G-01", text: "Můžete popsat 3 základní charakteristiky senescentního stromu?", max: 1, notes: "1 bod za 3 charakteristiky, 0.5 bodu za dvě. Příklady: vysoký věk s ohledem na druh, ústup koruny, historie managementu, nadprůměrná dimenze kmene, komplexní struktura/funkční jednotky, dutiny či rozkládající se dřevo." },
+      { id: "P-G-02", text: "Můžete popsat, jaká je hodnota tohoto stromu?", max: 1, notes: "1 bod za 3 charakteristiky, 0.5 bodu za dvě. Historická hodnota, ekologická hodnota / doprovodné organizmy, kulturně historická hodnota, estetické kvality." },
+      { id: "P-G-03", text: "Popište 3 charakteristické znaky stromů, které jim umožňují dlouhověký růst.", max: 3, notes: "Neukončený přírůst, každoroční nové vrstvy dřeva, schopnost reiterace, hřížení/fénix/výmladky, vytváření dutin, ústup primární koruny a tvorba sekundární koruny." },
+      { id: "P-G-04", text: "Z jakého důvodu může být pro strom prospěšná hniloba kmene?", max: 1, notes: "Recyklace živin dříve uzamčených v centrální části kmene; stimulace vnitřních kořenů a vznik oddělených funkčních jednotek." },
+      { id: "P-G-05", text: "Jak může být přínosem pro strom ústup jeho koruny (retrenchment)?", max: 1, notes: "Menší koruna znamená menší zatížení větrem; kratší vzdálenost mezi kořeny a listy; ztráta apikální dominance umožňuje reiteraci." },
+      { id: "P-G-06", text: "Prosím identifikujte typ hniloby.", max: 1, notes: "Bílá, hnědá nebo měkká hniloba. Požadován jeden správný příklad." },
+      { id: "P-G-07", text: "Popište proces rozkladu dřeva pro příklad uvedený výše.", max: 1, notes: "Bílá hniloba: rozklad ligninu jako první nebo celulózy a ligninu ve stejném rozsahu. Hnědá hniloba: nejdříve celulóza. Měkká hniloba: celulóza rozkladem buněčných stěn." },
+      { id: "P-G-08", text: "Můžete identifikovat druh houby, která může vytvářet tento typ hniloby?", max: 1, notes: "1 bod za odpovídající druh houby." },
+      { id: "P-G-09", text: "Vyberte skupinu doprovodných organizmů a popište druh/skupinu, habitatové požadavky a dopad na plán péče.", max: 4, notes: "1 bod za správný druh/skupinu, 1 bod za stanoviště/habitat, 2 body za vhodnou úpravu či přizpůsobení pěstebních opatření." },
+      { id: "P-G-10", text: "Můžete uvést 4 příklady postupů pro zlepšení či udržení habitatů na tomto stanovišti?", max: 4, notes: "Příklady: pokračovat ve stávající péči, vytvořit nové stromy s podobnou funkcí, zachovat potenciální senescentní stromy, výsadby/přirozená regenerace, podpora nektarodárných rostlin a keřů, ponechání mrtvého dřeva, speciální opatření pro kontinuitu habitatů, management zastíněné borky, pastva, zmírnění zhutnění půdy, veteranizace s navazující otázkou." },
+      { id: "P-G-11", text: "Vyberte typ nářadí a popište výhody a nevýhody jeho použití ve vztahu k péči o senescentní stromy.", max: 2, notes: "Ruční pilka, elektrická řetězová pila nebo motorová řetězová pila. 0.5 bodu za výhodu či nevýhodu; pro více než 1 bod musí kandidát uvést výhody i nevýhody." },
+      { id: "P-G-12", text: "Pokud plán péče nespecifikuje, co provést s ořezanými větvemi apod., co byste udělali? Uveďte výhody a nevýhody.", max: 2, notes: "Možnosti: ponechat na místě, vytvořit hromadu a ponechat na místě, štěpkování. 0.5 bodu za výhodu či nevýhodu; pro více než 1 bod musí kandidát uvést výhody i nevýhody." },
+      { id: "P-G-13", text: "Můžete uvést, co byste měli zvážit v případě mulčování senescentního stromu?", max: 2, notes: "0.5 bodu za každou poznámku. Např. potřeba vylepšení půdy, zdroj organického materiálu, druh štěpky, částečné rozložení, aplikace, rozsah a hloubka, vyhnout se hromadění u báze, údržba, odstranění drnu, bylinná vrstva, sledování reakce stromu." },
+      { id: "P-G-14", text: "Můžete uvést preventivní opatření pro omezení šíření škůdců a chorob před, během a po ukončení prací?", max: 2, notes: "0.5 bodu za každou poznámku. Např. parkování mimo stanoviště, jen nutné vybavení, čištění a dezinfekce, ruční nářadí, ponechání materiálu na místě, omezení přesunu půdy a rostlinného materiálu, zakrytí transportovaného materiálu, vhodná doba řezu." },
+    ],
+
+    prework: [
+      { id: "P-PW-01", text: "Prosím řekněte, jaká je vitalita tohoto stromu. Jak jste to určil?", max: 10, notes: "2 body: správný stupeň bez ukazatelů. 4 body: stupeň + 2 ukazatele. 6 bodů: stupeň + 3 ukazatele. 8 bodů: stupeň + nejméně 4 ukazatele a zvážení odlišných podmínek/věku koruny/funkční jednotky. 10 bodů: stupeň + nejméně 5 ukazatelů a zvážení odlišných podmínek/věku koruny/funkční jednotky. Možné 0.5 body." },
+      { id: "P-PW-02", text: "Prosím řekněte, jaký je zdravotní stav a stabilita tohoto stromu. Jak jste to určil?", max: 10, notes: "2 body: správný stupeň bez ukazatelů. 4 body: stupeň + 1 ukazatel. 6 bodů: stupeň + 2 ukazatele. 8 bodů: 2 ukazatele a zvážení délky trvání stavu. 10 bodů: 2 ukazatele a zvážení reakce stromu/adaptivního růstu. Možné 0.5 body." },
+      { id: "P-PW-03", text: "Podle plánu kandidáta zhodnoťte vhodnou pozici pro vjezd/výjezd, vybavení, parkování, plnění, trasy vozidel a další stroje.", max: 2, notes: "0.5 bodu za každou odpovídající odpověď. Zahrnout ochranu půdy a citlivých habitatů." },
+      { id: "P-PW-04", text: "Jak budete vystupovat do koruny a jak minimalizujete poškození stromu a citlivých prvků?", max: 10, notes: "Směr 1 lezení: vybavení pro minimalizaci poškození, kotevní bod a výstupová cesta, vyhnutí se citlivým prvkům. Směr 2 plošina: typ plošiny, umístění, vyhnutí se poškození půdy a habitatů. Až 10 bodů." },
+      { id: "P-PW-05", text: "Můžete popsat, kde budete provádět konkrétní řezy a vysvětlit proč, typ finálního řezu, očekávaný dopad a pravděpodobnost dobré reakce stromu?", max: 10, notes: "Zohlednit velikost a typ rány, druh stromu a jádrové dřevo, pozici vzhledem k postranním větvím/výhonům, schopnost sekundárních výhonů, vitalitu/zdravotní stav, CODIT, nutnost pokračování ošetření a typ finálního řezu." },
+      { id: "P-PW-06", text: "Proč byste měl mít pod kontrolou pád ořezaných částí a jak toho dosáhnete?", max: 1, notes: "1 bod za vhodný návrh opatření." },
+    ],
+
+    threats: [
+      { id: "P-TH-01", text: "Strom B - vyhodnocení hrozeb: zastínění nebo zhoršené půdní prostředí.", max: 8, notes: "Varianta zastínění: až 2 body za identifikaci stínu/zastínění, až 2 body za uvolnění z porostu, až 4 body za popis provedení a úvahy. Varianta půda: až 2 body za zhoršené půdní podmínky, až 2 body za řešení, až 4 body za praktické kroky ke zlepšení půdy. Pokud kandidát správně neidentifikuje hrozbu, v navazujících otázkách nepokračovat." },
+    ],
+
+    history: [
+      { id: "P-HI-01", text: "Prosím řekněte nám informace o historii tohoto stromu.", max: 8, notes: "Forma/tvar stromu, evidence zásahů/managementu, různé typy či fáze péče, přerušená/pokračující péče, evidence poškození, změny v prostředí, změny stromu v čase, tree body language. Zkoušející může použít vlastní uvážení." },
+      { id: "P-HI-02", text: "Prosím řekněte mi informace o historii krajiny, ve které se nacházíme.", max: 8, notes: "Věk/stáří krajiny, věk/stáří stromů, věková struktura populace, druhová diverzita, formy stromů, chybějící úseky či změny managementu, využívání stromů/krajiny, integrita historie, vrstvy historie, fragmentace." },
+    ],
+
+    risk: [
+      { id: "P-RI-01", text: "Můžete identifikovat 2 biomechanické prvky na tomto stromě, které mohou způsobit zvýšení rizika jeho selhání?", max: 2, notes: "2 body za dva relevantní biomechanické defekty. Snížit hodnocení, pokud identifikované prvky nepředstavují opravdové riziko." },
+      { id: "P-RI-02", text: "Jaké jsou výhody a nevýhody ponechání těchto prvků na stromě?", max: 2, notes: "Kandidát prokáže znalost rovnováhy mezi rizikem a benefitem, například estetickou nebo ekologickou hodnotou." },
+      { id: "P-RI-03", text: "Co je to cíl pádu z pohledu provozní bezpečnosti a jaký rozdíl je dán stanovištěm stromu?", max: 2, notes: "Cíl pádu je předmět poranění či poškození v mezích potenciálního ohrožení. Pokud je cíl pádu rozdílný, mění se i riziko; bez cíle není riziko." },
+      { id: "P-RI-04", text: "Jak odpovíte laikovi, který je znepokojen bezpečností „umírajícího stromu“ a doporučuje pokácení?", max: 3, notes: "Až 3 body: strom neumírá, rozlišení rizika a havarijního stavu, vysoká hodnota stromu, proč je strom ponechaný/udržovaný na místě." },
+    ],
   },
+
   Consulting: {
-    generic: [{ id: "C-G-01", text: "Can you provide a list of 3 characteristics a veteran tree may have?", max: 1, notes: "Award 1 mark for 3 relevant characteristics; 0.5 for up to 2." }, { id: "C-G-02", text: "For the selected wildlife guild, describe habitat requirements, life cycle, survey / ID features and management implications.", max: 6, notes: "Award for species/group, habitat requirements, life cycle, survey or ID features and appropriate management implications." }],
-    history: [{ id: "C-HI-01", text: "Based on your observations, tell me as much as you can about the history of this tree.", max: 10, notes: "Look for form, evidence and phases of management, damage, environmental change and body language." }, { id: "C-HI-02", text: "Based on your observations, tell me as much as you can about the history of this landscape.", max: 10, notes: "Look for age structure, species diversity, management history, land use, historic integrity and fragmentation." }],
-    risk: [{ id: "C-RI-01", text: "Identify drop zone, targets, use frequency, biomechanical defects and management options.", max: 12, notes: "Balance risk against ecological, historical, cultural and social value; options should be proportionate." }],
+    generic: [
+      { id: "C-G-01", text: "Můžete říci 3 základní charakteristiky senescentního stromu?", max: 1, notes: "1 bod za 3 charakteristiky, 0.5 bodu za dvě. Příklady: vysoký věk, ústup koruny, historie managementu, nadprůměrná dimenze, komplexní struktura/funkční jednotky, dutiny či rozkládající se dřevo." },
+      { id: "C-G-02", text: "Popište 3 charakteristické znaky stromů, které jim umožňují dlouhověký růst.", max: 3, notes: "Neukončený přírůst, nové vrstvy dřeva, reiterace, hřížení/fénix/výmladky, vytváření dutin, ústup primární koruny a tvorba sekundární koruny." },
+      { id: "C-G-03", text: "V čem je ústup jeho koruny (retrenchment) přínosem pro strom?", max: 1, notes: "Menší zatížení větrem, kratší vzdálenost mezi kořeny a listy, ztráta apikální dominance umožňuje reiteraci." },
+      { id: "C-G-04", text: "Prosím identifikujte typ hniloby.", max: 1, notes: "Bílá, hnědá nebo měkká hniloba. Jeden příklad." },
+      { id: "C-G-05", text: "Popište, jak probíhá proces rozkladu dřeva dřevními houbami.", max: 1, notes: "Bílá hniloba rozkládá lignin a hemicelulózy jako první nebo celulózu, hemicelulózy a lignin ve stejném rozsahu; měkká hniloba rozkládá celulózu buněčných stěn; hnědá hniloba nejdříve celulózu." },
+      { id: "C-G-06", text: "Můžete vyjmenovat dva druhy hub, které mohou vytvářet tento typ hniloby?", max: 1, notes: "0.5 bodu za každý odpovídající druh houby, celkem 1 bod." },
+      { id: "C-G-07", text: "Můžete popsat vztah mezi těmito houbami a hostitelským senescentním stromem?", max: 4, notes: "Dva příklady, až 2 body za každý: místo růstu plodnice, rozsah a dopad na stabilitu, reakce/adaptace stromu, ekologická hodnota." },
+      { id: "C-G-08", text: "Vyberte skupinu doprovodných organizmů a popište druh/skupinu, habitat, životní cyklus, průzkum/ID a vliv na plán péče.", max: 6, notes: "1 bod za správný druh, 1 bod za habitat, 1 bod za životní cyklus, 1 bod za průzkum/ID, 2 body za vhodnou úpravu nebo přizpůsobení pěstebních opatření." },
+      { id: "C-G-09", text: "Můžete uvést 6 příkladů pro zlepšení či udržení hodnoty habitatu na tomto stanovišti?", max: 6, notes: "Max. 6 bodů. Příklady: pokračovat v péči, nové stromy s podobnou funkcí, zachovat potenciální senescentní stromy, výsadby/regenerace, nektarodárné rostliny, keře, mrtvé dřevo, habitatové hromady, stojící mrtvé stromy, kontinuita habitatů, zastíněná borka, pastva, zmírnění zhutnění, veteranizace s navazující otázkou." },
+      { id: "C-G-10", text: "Co vám může napovědět vegetace v blízkosti báze kmene senescentních stromů a jaký může mít vliv?", max: 2, notes: "Obohacení živinami; možné zvýšení růstu v krátkém období; potenciální dopad na symbiózu, absorpci a dostupnost vody a živin v dlouhodobém horizontu." },
+    ],
+
+    history: [
+      { id: "C-HI-01", text: "Prosím prezentujte informace o historii tohoto stromu.", max: 10, notes: "Forma/tvar stromu, známky předchozích zásahů/managementu, různé typy nebo fáze péče, přerušená/pokračující péče, známky poškození, změny prostředí, změny stromu v čase, tree body language. Zkoušející může použít vlastní uvážení." },
+      { id: "C-HI-02", text: "Prosím prezentujte informace o historii krajiny, ve které se nacházíme.", max: 10, notes: "Věk/stáří krajiny, věk/stáří stromů, věková struktura stromové populace, druhová diverzita, formy/tvary stromů, chybějící úseky v managementu, integrita historické krajiny, vrstvy historie, fragmentace." },
+    ],
+
+    risk: [
+      { id: "C-RI-01", text: "Můžete identifikovat 1 biomechanický prvek na tomto stromě, který může zvýšit riziko selhání, a tři klíčové aspekty pro vyhodnocení provozní bezpečnosti?", max: 2, notes: "0.5 bodu za správný biomechanický prvek a 0.5 bodu za každý klíčový aspekt: typ selhání, pravděpodobnost selhání v časové škále, závažnost, cíl pádu, kompenzační růst." },
+      { id: "C-RI-02", text: "Jaké jsou výhody a nevýhody ponechání takového prvku na stromě?", max: 1, notes: "Kandidát prokáže znalost rovnováhy mezi rizikem a benefitem, například estetickou nebo ekologickou hodnotou." },
+      { id: "C-RI-03", text: "Co je to cíl pádu z pohledu provozní bezpečnosti a jak toto může ovlivnit risk management?", max: 1, notes: "Cíl pádu je předmět poranění či poškození v mezích potenciálního ohrožení. Pokud je cíl pádu rozdílný, riziko se mění; bez cíle není riziko." },
+      { id: "C-RI-04", text: "Vysvětlete, jak byste vyhodnotil frekvenci pohybu či hodnotu majetku.", max: 1, notes: "Stálý cíl, vysoký pohyb osob, měnící se cíl, sezónní cíl, bez cíle pádu, metody jako QTRA, TRAQ, VALID, THREATS." },
+      { id: "C-RI-05", text: "Můžete uvést 3 návrhy opatření/ošetření zaměřená na zajištění provozní bezpečnosti stanoviště?", max: 3, notes: "Ideální odpověď: přesunout cíl pádu, nedělat nic, zvážit zásah na stromě. 1 bod za každou vhodnou možnost. Pokud kandidát navrhne pokácení jako jednu z možností, max. 2 body. Pokud chybí možnost „posunout cíl pádu“, za celou otázku 0 bodů." },
+      { id: "C-RI-06", text: "Pro preferovanou variantu poskytněte 2 výhody a 2 nevýhody.", max: 2, notes: "0.5 bodu za každou vhodnou možnost, max. 2 body. Pokud je preferovanou možností pokácení stromu, 0 bodů za celou otázku." },
+      { id: "C-RI-07", text: "Jak odpovíte laikovi, který je znepokojen bezpečností „umírajícího stromu“ a doporučuje pokácení?", max: 2, notes: "Max. 2 body: strom neumírá, rozlišení rizika a skutečného ohrožení, hodnota stromu, proč je strom ponechaný/udržovaný na místě." },
+    ],
   },
 };
+
 function parseCsvRows(text) {
   const rows = [];
   let current = [];
