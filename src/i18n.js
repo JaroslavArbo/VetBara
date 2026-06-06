@@ -368,6 +368,18 @@ Object.assign(translations.en, {
   "report.photoAdded": "Photo added to the report draft.",
   "report.photoError": "Photo could not be loaded. Try another image.",
   "report.fieldPlaceholder": "Field observations and rough notes..."
+  "report.handwritingSaved": "Rukopisné poznámky byly uloženy mezi fotografie.",
+  "report.saveHandwriting": "Uložit rukopis",
+  "report.clearHandwriting": "Vymazat",
+  "report.handwritingHelper": "Pište stylusem do plátna. Uloží se jako pracovní obrázek mezi fotografie, ve výchozím stavu nepoužitý v reportu.",
+  "report.openHandwriting": "Rukopisné poznámky",
+  "report.openFullscreen": "Otevřít na celou obrazovku",
+  "report.fieldNotesFullscreenHelper": "Velký editor. Výšku pole upravíte posuvníkem vlevo.",
+  "report.fieldNotesPrivateHelper": "Pracovní terénní poznámky. Nevstupují automaticky do finálního reportu.",
+  "report.fieldNotesPrivate": "Terénní poznámky (nevstupují do reportu)",
+  "report.photoUseInReport": "Použít v reportu",
+  "report.photoDescriptionPlaceholder": "Krátký popis, max. 100 znaků",
+  "report.photoDescription": "Popis fotografie",
 });
 
 Object.assign(translations.cs, {

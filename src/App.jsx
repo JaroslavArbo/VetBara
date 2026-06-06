@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp, PilotReleaseNotesPanel, PilotSmokeTestChecklist } from "./components/PilotInfoPanels";
@@ -1476,6 +1476,16 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const tree = draft[activeReportTree];
   const [photoStatus, setPhotoStatus] = useState("");
   const [fieldNotesFullscreen, setFieldNotesFullscreen] = useState(false);
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const [fullscreenNotesHeight, setFullscreenNotesHeight] = useState(55);
+  const [savedScrollY, setSavedScrollY] = useState(0);
+  const canvasRef = useRef(null);
+  const drawingRef = useRef(false);
+
+  const label = (key, fallback) => {
+    const translated = t(key);
+    return translated === key ? fallback : translated;
+  };
 
   function handlePhotoChange(event) {
     const input = event.target;
@@ -1510,19 +1520,116 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     reader.readAsDataURL(file);
   }
 
-  function fieldNotesTextarea(className) {
+  function openFieldNotesFullscreen() {
+    setSavedScrollY(window.scrollY || 0);
+    setFieldNotesFullscreen(true);
+  }
+
+  function closeFieldNotesFullscreen() {
+    setFieldNotesFullscreen(false);
+    window.setTimeout(() => window.scrollTo({ top: savedScrollY, behavior: "smooth" }), 0);
+  }
+
+  function fieldNotesTextarea(className, style = {}) {
     return (
       <textarea
         value={tree.fieldNotes}
         onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")}
-        placeholder={t("report.fieldPlaceholder")}
+        placeholder={label("report.fieldPlaceholder", "Terénní pozorování a pracovní poznámky...")}
         className={className}
+        style={{ resize: "vertical", ...style }}
         autoCapitalize="sentences"
         autoComplete="off"
         spellCheck="true"
         inputMode="text"
       />
     );
+  }
+
+  function canvasPoint(event) {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const source = event.touches?.[0] ?? event;
+    return {
+      x: source.clientX - rect.left,
+      y: source.clientY - rect.top,
+    };
+  }
+
+  function beginHandwriting(event) {
+    event.preventDefault();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const point = canvasPoint(event);
+    drawingRef.current = true;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  }
+
+  function drawHandwriting(event) {
+    if (!drawingRef.current) return;
+    event.preventDefault();
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const point = canvasPoint(event);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  }
+
+  function endHandwriting() {
+    drawingRef.current = false;
+  }
+
+  function clearHandwriting() {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function saveHandwritingAsPhoto() {
+    const canvas = canvasRef.current;
+    const dataUrl = canvas.toDataURL("image/png");
+    addReportPhoto(activeReportTree, {
+      name: `handwriting-${activeReportTree}-${Date.now()}.png`,
+      type: "image/png",
+      size: Math.round((dataUrl.length * 3) / 4),
+      dataUrl,
+      description: "Rukopisné terénní poznámky",
+      useInReport: false,
+      createdAt: new Date().toISOString(),
+    });
+    clearHandwriting();
+    setHandwritingOpen(false);
+    setPhotoStatus(label("report.handwritingSaved", "Rukopisné poznámky byly uloženy mezi fotografie."));
+  }
+
+  function reportTreeCompleteness(treeName) {
+    const reportTree = draft[treeName] ?? { finalSections: {}, photos: [] };
+    const filled = REPORT_SECTIONS.filter((section) => String(reportTree.finalSections?.[section.key] ?? "").trim()).length;
+    const photosForReport = (reportTree.photos ?? []).filter((photo) => photo.useInReport ?? true);
+    const annotatedPhotos = photosForReport.filter((photo) => String(photo.description ?? "").trim()).length;
+
+    return {
+      filled,
+      total: REPORT_SECTIONS.length,
+      photosForReport: photosForReport.length,
+      annotatedPhotos,
+    };
+  }
+
+  function handleSubmitReport() {
+    const treeA = reportTreeCompleteness("Tree A");
+    const treeB = reportTreeCompleteness("Tree B");
+
+    const confirmed = window.confirm(
+      `Kontrola před odesláním reportu\n\nJe vyplněný report pro oba dva stromy (A+B)?\n\nStrom A: ${treeA.filled}/${treeA.total} sekcí\nStrom B: ${treeB.filled}/${treeB.total} sekcí\n\nJsou anotované fotografie k použití v reportu?\n\nStrom A: ${treeA.annotatedPhotos}/${treeA.photosForReport} anotovaných fotografií označených pro report\nStrom B: ${treeB.annotatedPhotos}/${treeB.photosForReport} anotovaných fotografií označených pro report\n\nPo potvrzení bude report odeslán a uzavřen.`
+    );
+
+    if (!confirmed) return;
+    submitReport();
   }
 
   return (
@@ -1577,12 +1684,12 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                   </div>
 
                   <label className="mt-3 block text-xs font-medium text-slate-600">
-                    {t("report.photoDescription")}
+                    {label("report.photoDescription", "Popis fotografie")}
                     <input
                       value={description}
                       maxLength={100}
                       onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { description: e.target.value.slice(0, 100) })}
-                      placeholder={t("report.photoDescriptionPlaceholder")}
+                      placeholder={label("report.photoDescriptionPlaceholder", "Krátký popis, max. 100 znaků")}
                       className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
                     />
                     <span className="mt-1 block text-right text-[11px] text-slate-500">{description.length}/100</span>
@@ -1594,7 +1701,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                       checked={useInReport}
                       onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { useInReport: e.target.checked })}
                     />
-                    {t("report.photoUseInReport")}
+                    {label("report.photoUseInReport", "Použít v reportu")}
                   </label>
                 </div>
               );
@@ -1603,15 +1710,24 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         )}
       </div>
 
-      <div className="mt-3 rounded-xl border bg-white p-3">
+      <div className="sticky top-3 z-10 mt-3 rounded-xl border bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <label className="text-sm font-semibold">{t("report.fieldNotesPrivate")}</label>
-          <Button onClick={() => setFieldNotesFullscreen(true)} variant="outline" className="rounded-2xl">
-            {t("report.openFullscreen")}
-          </Button>
+          <label className="text-sm font-semibold">
+            {label("report.fieldNotesPrivate", "Terénní poznámky (nevstupují do reportu)")}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={openFieldNotesFullscreen} variant="outline" className="rounded-2xl">
+              {label("report.openFullscreen", "Otevřít na celou obrazovku")}
+            </Button>
+            <Button onClick={() => setHandwritingOpen(true)} variant="outline" className="rounded-2xl">
+              {label("report.openHandwriting", "Rukopisné poznámky")}
+            </Button>
+          </div>
         </div>
-        <p className="mt-1 text-xs text-slate-500">{t("report.fieldNotesPrivateHelper")}</p>
-        {fieldNotesTextarea("mt-2 min-h-28 w-full rounded-xl border bg-white p-3 text-sm")}
+        <p className="mt-1 text-xs text-slate-500">
+          {label("report.fieldNotesPrivateHelper", "Pracovní terénní poznámky. Nevstupují automaticky do finálního reportu.")}
+        </p>
+        {fieldNotesTextarea("mt-2 min-h-32 w-full rounded-xl border bg-white p-3 text-sm", { minHeight: "180px", maxHeight: "70vh" })}
       </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1628,23 +1744,68 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         ))}
       </div>
 
-      <Button onClick={submitReport} className="mt-4 rounded-2xl">
+      <Button onClick={handleSubmitReport} className="mt-4 rounded-2xl">
         <Lock className="mr-2 h-4 w-4" /> {t("report.submit")}
       </Button>
       <p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p>
 
       {fieldNotesFullscreen && (
+        <div className="fixed inset-0 z-50 flex bg-white">
+          <div className="flex w-12 items-center justify-center border-r bg-slate-50 p-2">
+            <input
+              type="range"
+              min="35"
+              max="85"
+              value={fullscreenNotesHeight}
+              onChange={(e) => setFullscreenNotesHeight(Number(e.target.value))}
+              className="h-64 rotate-[-90deg]"
+            />
+          </div>
+          <div className="flex flex-1 flex-col p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">{label("report.fieldNotesPrivate", "Terénní poznámky (nevstupují do reportu)")}</h3>
+                <p className="text-sm text-slate-600">
+                  {label("report.fieldNotesFullscreenHelper", "Velký editor. Výšku pole upravíte posuvníkem vlevo.")}
+                </p>
+              </div>
+              <Button onClick={closeFieldNotesFullscreen} variant="outline" className="rounded-2xl">
+                {t("common.close")}
+              </Button>
+            </div>
+            {fieldNotesTextarea("w-full rounded-2xl border bg-white p-4 text-lg leading-8", { height: `${fullscreenNotesHeight}vh` })}
+          </div>
+        </div>
+      )}
+
+      {handwritingOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-semibold">{t("report.fieldNotesPrivate")}</h3>
-              <p className="text-sm text-slate-600">{t("report.fieldNotesFullscreenHelper")}</p>
+              <h3 className="text-lg font-semibold">{label("report.openHandwriting", "Rukopisné poznámky")}</h3>
+              <p className="text-sm text-slate-600">
+                {label("report.handwritingHelper", "Pište stylusem do plátna. Uloží se jako pracovní obrázek mezi fotografie, ve výchozím stavu nepoužitý v reportu.")}
+              </p>
             </div>
-            <Button onClick={() => setFieldNotesFullscreen(false)} variant="outline" className="rounded-2xl">
-              {t("common.close")}
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={clearHandwriting} variant="outline" className="rounded-2xl">{label("report.clearHandwriting", "Vymazat")}</Button>
+              <Button onClick={saveHandwritingAsPhoto} className="rounded-2xl">{label("report.saveHandwriting", "Uložit rukopis")}</Button>
+              <Button onClick={() => setHandwritingOpen(false)} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+            </div>
           </div>
-          {fieldNotesTextarea("min-h-0 flex-1 w-full rounded-2xl border bg-white p-4 text-lg leading-8")}
+          <canvas
+            ref={canvasRef}
+            width={1400}
+            height={900}
+            onPointerDown={beginHandwriting}
+            onPointerMove={drawHandwriting}
+            onPointerUp={endHandwriting}
+            onPointerCancel={endHandwriting}
+            onTouchStart={beginHandwriting}
+            onTouchMove={drawHandwriting}
+            onTouchEnd={endHandwriting}
+            className="min-h-0 flex-1 touch-none rounded-2xl border bg-white"
+          />
         </div>
       )}
     </div>
