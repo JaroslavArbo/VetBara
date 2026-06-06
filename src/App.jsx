@@ -1164,6 +1164,8 @@ export default function VetBaraPrototype() {
       type: filePhoto.type,
       size: filePhoto.size,
       dataUrl: filePhoto.dataUrl,
+      description: filePhoto.description ?? "",
+      useInReport: filePhoto.useInReport ?? true,
       caption: filePhoto.name || `${tree} candidate photo ${photos.length + 1}`,
       capturedAt,
       createdAt: capturedAt,
@@ -1199,12 +1201,37 @@ export default function VetBaraPrototype() {
         type: photo.type,
         size: photo.size,
         hasDataUrl: Boolean(photo.dataUrl),
+        description: photo.description ?? "",
+        useInReport: photo.useInReport ?? true,
         caption: photo.caption,
         capturedAt,
       },
       createdAt: capturedAt,
     });
   }
+  function updateReportPhoto(tree, photoId, updates) {
+    if (!loggedCandidate) return;
+    setReportDrafts((prev) => {
+      const draft = prev[loggedCandidate.id] ?? createReportDraft();
+      const currentTree = draft[tree] ?? createReportDraft()[tree];
+      const photos = (currentTree.photos ?? []).map((photo) =>
+        photo.id === photoId ? { ...photo, ...updates } : photo
+      );
+
+      return {
+        ...prev,
+        [loggedCandidate.id]: {
+          ...draft,
+          [tree]: {
+            ...currentTree,
+            photos,
+          },
+        },
+      };
+    });
+    queue("Report photo updated", `${loggedCandidate.id} ${tree} ${photoId}`);
+  }
+
   function submitReport() { if (!loggedCandidate) return; setCandidates((prev) => prev.map((c) => c.id === loggedCandidate.id ? { ...c, status: "Report submitted" } : c)); closeCandidateSection("report"); }
   function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", EXAMINERS.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
   function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
@@ -1334,7 +1361,7 @@ export default function VetBaraPrototype() {
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", centre, CENTRE_ACCESS_TOKEN)} t={t} />}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} t={t} />}
-      {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
+      {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={EXAMINERS} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} selectedCandidate={selectedCandidate} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} scoring={scoring} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
       {(role === "Admin" || role === "Centre") && <AuditSyncView sync={sync} setSync={setSync} audit={audit} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
@@ -1413,10 +1440,10 @@ function PilotWorkflowDashboard({ candidates, assignments, examiners, centreVali
 
 function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, t }) {  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0]; const [copiedQr, setCopiedQr] = useState(""); const candidateQrUrl = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url; const examinerQrUrl = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url; async function copyQrLink(label, value) { try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); setCopiedQr(t("centre.copy.copied").replace("{label}", label)); return; } setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } catch { setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } } return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5">{!centreUnlocked && <div className="mb-4 rounded-2xl border bg-white p-4"><SectionTitle icon={QrCodeIcon} title={t("centre.access.title")} subtitle={t("centre.access.subtitle")} /><div className="flex flex-col gap-3 md:flex-row"><input value={centreCode} onChange={(e) => setCentreCode(e.target.value)} placeholder={t("centre.access.placeholder")} className="w-full rounded-xl border bg-white p-2 font-mono text-sm" /><Button onClick={unlockCentre} className="rounded-2xl">{t("centre.access.open")}</Button></div><div className="mt-2 text-xs text-slate-500">{t("centre.access.prototypeToken")}: {CENTRE_ACCESS_TOKEN}</div></div>}<div className={centreUnlocked ? "" : "pointer-events-none opacity-40"}><SectionTitle icon={Users} title={t("centre.config.title")} subtitle={t("centre.config.subtitle")} /><div className="mb-4 rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h3 className="font-semibold">{t("centre.setupPersistence.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.setupPersistence.helper")}</p></div><div className="flex flex-wrap gap-2"><Button onClick={handleLoadCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreSetupLoading ? t("centre.setupPersistence.loading") : t("centre.setupPersistence.load")}</Button><Button onClick={handleSaveCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} className="rounded-2xl">{centreSetupSaving ? t("centre.setupPersistence.saving") : t("centre.setupPersistence.save")}</Button><Button onClick={handleDownloadCentreAuditPackage} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreAuditExportLoading ? t("centre.setupPersistence.exporting") : t("centre.setupPersistence.auditExport")}</Button></div></div><div className="mt-3 flex flex-wrap items-center gap-2"><StatusPill tone={centreSetupDirty ? "warn" : "good"}>{centreSetupDirty ? t("centre.setupPersistence.unsaved") : t("centre.setupPersistence.saved")}</StatusPill><span className="text-xs text-slate-500">{t("centre.setupPersistence.saveHelper")}</span></div>{centreSetupStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{centreSetupStatus}</div>}{centreSetupError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreSetupError}</div>}{centreAuditExportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreAuditExportError}</div>}<CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} /></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("centre.dataMode.title")}</h3><p className="mt-1 text-sm text-slate-600">{dataMode === "backend" ? t("centre.dataMode.backendHelper") : t("centre.dataMode.demoHelper")}</p><p className="mt-1 text-xs text-slate-500">{t("centre.dataMode.saveAfterChanges")}</p></div><StatusPill tone={dataMode === "backend" ? "good" : "warn"}>{dataMode === "backend" ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill></div></div><PilotReadinessGuardrails centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><PilotRunSummary centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><CentreNetworkReadinessChecklist StatusPill={StatusPill} t={t} /><PilotWorkflowDashboard candidates={candidates} assignments={assignments} examiners={examiners} centreValidationIssues={centreValidationIssues} testImportSummary={testImportSummary} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} centreSetupStatus={centreSetupStatus} dataMode={dataMode} t={t} /><PilotSmokeTestChecklist StatusPill={StatusPill} t={t} /><PilotReleaseNotesPanel StatusPill={StatusPill} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>{EXAM_LEVELS.map((level) => <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm"><input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} /><span>{level}</span></label>)}</div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("centre.variants.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.variants.helper")}</p></div><label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">{t("centre.variants.import")}<input type="file" accept=".csv,.json,application/json,text/csv" onChange={importTestPackage} className="hidden" /></label></div><div className="mt-3 grid gap-3 md:grid-cols-2">{EXAM_LEVELS.map((level) => { const vars = availableVariants.filter((v) => v.level === level && v.language === language); return <label key={level} className="text-sm font-medium">{level}<select value={variants[level] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setVariants((prev) => ({ ...prev, [level]: e.target.value })); }} className="mt-1 w-full rounded-xl border bg-white p-2">{vars.length ? vars.map((v) => <option key={v.code} value={v.code}>{v.code}</option>) : <option value="">{t("centre.variants.noImported")}</option>}</select></label>; })}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-xs text-slate-600">{t("centre.variants.csvHelper")}</div>{testImportStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{testImportStatus}</div>}{testImportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{testImportError}</div>}{testImportSummary && <div className="mt-2 text-xs text-slate-500">{t("centre.variants.importedSummary").replace("{variants}", testImportSummary.variants).replace("{questions}", testImportSummary.questions)}</div>}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{t("centre.candidates.title")}</h3><Button onClick={addCandidate} variant="outline" className="rounded-2xl">{t("centre.candidates.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">{candidates.map((c) => <button key={c.id} onClick={() => setSelectedCandidateId(c.id)} className={`rounded-2xl border p-3 text-left ${selectedCandidateId === c.id ? "border-slate-950 bg-slate-50" : "bg-white"}`}><div className="text-xs text-slate-500">{c.id}</div><div className="font-medium">{c.name}</div><StatusPill>{c.level}</StatusPill></button>)}</div></div>{selectedCandidate && <div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.candidateDetails.title")}</h3><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.id")}<input value={selectedCandidate.id ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.name")}<input value={selectedCandidate.name ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.level")}<select value={selectedCandidate.level ?? "Practicing"} onChange={(e) => updateCandidate(selectedCandidate.id, { level: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"><option value="Practicing">Practicing</option><option value="Consulting">Consulting</option></select></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.birthDate")}<input value={selectedCandidate.birthDate ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { birthDate: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.documentId")}<input value={selectedCandidate.documentId ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { documentId: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.email")}<input value={selectedCandidate.email ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div></div>}<div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.examiners.title")}</h3><Button onClick={addExaminer} variant="outline" className="rounded-2xl">{t("centre.examiners.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{examiners.map((ex) => <div key={ex.id} className="rounded-2xl border bg-white p-3 text-sm"><label className="text-xs font-medium text-slate-500">{t("centre.examinerDetails.id")}<input value={ex.id ?? ""} onChange={(e) => updateExaminer(ex.id, { id: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.name")}<input value={ex.name ?? ""} onChange={(e) => updateExaminer(ex.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.registrationId")}<input value={ex.registrationId ?? ""} onChange={(e) => updateExaminer(ex.id, { registrationId: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.email")}<input value={ex.email ?? ""} onChange={(e) => updateExaminer(ex.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div>)}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.assignments.title")}</h3><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.workflow.candidate")}</th><th className="py-2 pr-3">{t("centre.workflow.level")}</th><th className="py-2 pr-3">{t("centre.workflow.primaryExaminer")}</th><th className="py-2 pr-3">{t("centre.workflow.secondaryExaminer")}</th></tr></thead><tbody>{candidates.map((c) => <tr key={c.id} className="border-b"><td className="py-2 pr-3 font-medium">{c.name}</td><td className="py-2 pr-3">{c.level}</td>{["primary", "secondary"].map((slot) => <td key={slot} className="py-2 pr-3"><select value={assignments[c.id]?.[slot] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setAssignments((prev) => ({ ...prev, [c.id]: { ...(prev[c.id] ?? {}), [slot]: e.target.value } })); }} className="w-full rounded-xl border bg-white p-2">{examiners.map((ex) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}</select></td>)}</tr>)}</tbody></table></div></div><CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrFor} examinerQrFor={examinerQrFor} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} /></div></CardContent></Card>;
 }
-function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, submitReport, variants, testBank, qrFor, setScannerMode, t }) {
+function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, variants, testBank, qrFor, setScannerMode, t }) {
   const selectedVariantCode = loggedCandidate ? variants[loggedCandidate.level] : "";
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, status, times, tone, openSection, t }) {
   const hasWrittenTest = sections.some((section) => section.key === "test");
@@ -1444,10 +1471,11 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
   return <div className="rounded-2xl border bg-white p-4"><div className="flex justify-between gap-3"><div><h3 className="font-semibold">{t("test.title")}</h3><p className="text-sm text-slate-600">{helper}</p></div><Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button></div>{questions.length === 0 ? <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><div className="font-semibold">{t("test.noQuestions")}</div><p className="mt-1">{t("test.askCentre")}</p></div> : <div className="mt-3 space-y-4">{questions.map((q, i) => <div key={q.id} className="rounded-xl border p-3"><div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div><div className="mt-1 font-medium">{q.text}</div>{q.type === "single_choice" ? <div className="mt-2 space-y-2">{q.options.map((option) => <label key={option} className="flex gap-2 rounded-xl bg-slate-50 p-2 text-sm"><input type="radio" checked={responses[q.id] === option} onChange={() => updateTest(q.id, option)} /><span>{option}</span></label>)}</div> : <textarea value={responses[q.id] ?? ""} onChange={(e) => updateTest(q.id, e.target.value)} className="mt-2 min-h-24 w-full rounded-xl border bg-white p-3 text-sm" placeholder={t("test.writeAnswer")} />}</div>)}</div>}<Button onClick={submitTest} disabled={questions.length === 0} className="mt-4 rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("test.submit")}</Button><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div>;
 }
 
-function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, submitReport, t }) {
+function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, t }) {
   const draft = reportDrafts[candidate.id] ?? createReportDraft();
   const tree = draft[activeReportTree];
   const [photoStatus, setPhotoStatus] = useState("");
+  const [fieldNotesFullscreen, setFieldNotesFullscreen] = useState(false);
 
   function handlePhotoChange(event) {
     const input = event.target;
@@ -1466,6 +1494,8 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         type: file.type,
         size: file.size,
         dataUrl: reader.result,
+        description: "",
+        useInReport: true,
         createdAt: new Date().toISOString(),
       });
       setPhotoStatus(t("report.photoAdded"));
@@ -1480,7 +1510,145 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     reader.readAsDataURL(file);
   }
 
-  return <div className="rounded-2xl border bg-white p-4"><h3 className="font-semibold">{t("report.titleFull")}</h3><p className="mt-1 text-sm text-slate-600">{t("report.helper")}</p><div className="mt-3 flex gap-2">{REPORT_TREES.map((treeName) => <Button key={treeName} variant={activeReportTree === treeName ? "default" : "outline"} onClick={() => setActiveReportTree(treeName)} className="rounded-2xl">{treeName}</Button>)}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("report.photos")}: <strong>{tree.photos.length}</strong><p className="mt-2 text-xs text-slate-500">{t("report.photoHelper")}</p><label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">{t("report.addPhotoShort")}<input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" /></label>{photoStatus && <div className="mt-2 text-xs font-medium text-slate-600">{photoStatus}</div>}{tree.photos.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{tree.photos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border bg-white p-2"><div className="h-14 w-14 overflow-hidden rounded-lg bg-slate-200">{photo.dataUrl ? <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>}</div><div className="min-w-0 text-xs"><div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div><div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div></div></div>)}</div>}</div><textarea value={tree.fieldNotes} onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")} placeholder={t("report.fieldPlaceholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-3 grid gap-3 md:grid-cols-2">{REPORT_SECTIONS.map((sec) => <label key={sec.key} className="text-sm font-medium">{sec.title}<textarea value={tree.finalSections[sec.key] ?? ""} onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)} placeholder={`${activeReportTree}: ${sec.title}`} className="mt-1 min-h-20 w-full rounded-xl border bg-white p-3 text-sm" /></label>)}</div><Button onClick={submitReport} className="mt-4 rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("report.submit")}</Button><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div>;
+  function fieldNotesTextarea(className) {
+    return (
+      <textarea
+        value={tree.fieldNotes}
+        onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")}
+        placeholder={t("report.fieldPlaceholder")}
+        className={className}
+        autoCapitalize="sentences"
+        autoComplete="off"
+        spellCheck="true"
+        inputMode="text"
+      />
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <h3 className="font-semibold">{t("report.titleFull")}</h3>
+      <p className="mt-1 text-sm text-slate-600">{t("report.helper")}</p>
+
+      <div className="mt-3 flex gap-2">
+        {REPORT_TREES.map((treeName) => (
+          <Button
+            key={treeName}
+            variant={activeReportTree === treeName ? "default" : "outline"}
+            onClick={() => setActiveReportTree(treeName)}
+            className="rounded-2xl"
+          >
+            {treeName}
+          </Button>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
+        {t("report.photos")}: <strong>{tree.photos.length}</strong>
+        <p className="mt-2 text-xs text-slate-500">{t("report.photoHelper")}</p>
+
+        <label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
+          {t("report.addPhotoShort")}
+          <input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+        </label>
+
+        {photoStatus && <div className="mt-2 text-xs font-medium text-slate-600">{photoStatus}</div>}
+
+        {tree.photos.length > 0 && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {tree.photos.map((photo) => {
+              const description = photo.description ?? "";
+              const useInReport = photo.useInReport ?? true;
+
+              return (
+                <div key={photo.id} className="rounded-xl border bg-white p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-16 w-16 overflow-hidden rounded-lg bg-slate-200">
+                      {photo.dataUrl ? (
+                        <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>
+                      )}
+                    </div>
+                    <div className="min-w-0 text-xs">
+                      <div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div>
+                      <div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div>
+                    </div>
+                  </div>
+
+                  <label className="mt-3 block text-xs font-medium text-slate-600">
+                    {t("report.photoDescription")}
+                    <input
+                      value={description}
+                      maxLength={100}
+                      onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { description: e.target.value.slice(0, 100) })}
+                      placeholder={t("report.photoDescriptionPlaceholder")}
+                      className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
+                    />
+                    <span className="mt-1 block text-right text-[11px] text-slate-500">{description.length}/100</span>
+                  </label>
+
+                  <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={useInReport}
+                      onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { useInReport: e.target.checked })}
+                    />
+                    {t("report.photoUseInReport")}
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 rounded-xl border bg-white p-3">
+        <div className="flex items-center justify-between gap-3">
+          <label className="text-sm font-semibold">{t("report.fieldNotesPrivate")}</label>
+          <Button onClick={() => setFieldNotesFullscreen(true)} variant="outline" className="rounded-2xl">
+            {t("report.openFullscreen")}
+          </Button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t("report.fieldNotesPrivateHelper")}</p>
+        {fieldNotesTextarea("mt-2 min-h-28 w-full rounded-xl border bg-white p-3 text-sm")}
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {REPORT_SECTIONS.map((sec) => (
+          <label key={sec.key} className="text-sm font-medium">
+            {sec.title}
+            <textarea
+              value={tree.finalSections[sec.key] ?? ""}
+              onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)}
+              placeholder={`${activeReportTree}: ${sec.title}`}
+              className="mt-1 min-h-20 w-full rounded-xl border bg-white p-3 text-sm"
+            />
+          </label>
+        ))}
+      </div>
+
+      <Button onClick={submitReport} className="mt-4 rounded-2xl">
+        <Lock className="mr-2 h-4 w-4" /> {t("report.submit")}
+      </Button>
+      <p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p>
+
+      {fieldNotesFullscreen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold">{t("report.fieldNotesPrivate")}</h3>
+              <p className="text-sm text-slate-600">{t("report.fieldNotesFullscreenHelper")}</p>
+            </div>
+            <Button onClick={() => setFieldNotesFullscreen(false)} variant="outline" className="rounded-2xl">
+              {t("common.close")}
+            </Button>
+          </div>
+          {fieldNotesTextarea("min-h-0 flex-1 w-full rounded-2xl border bg-white p-4 text-lg leading-8")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ExaminerView({
