@@ -418,7 +418,7 @@ function RealQr({ value, size = 112 }) {
     </div>
   );
 }
-function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token") }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
+function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token"), name: url.searchParams.get("name"), level: url.searchParams.get("level"), birthDate: url.searchParams.get("birthDate"), documentId: url.searchParams.get("documentId"), email: url.searchParams.get("email") }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
 function QrScannerPanel({ title, onScan, onClose, t }) { const id = useMemo(() => `qr-reader-${Math.random().toString(36).slice(2)}`, []); useEffect(() => { const scanner = new Html5QrcodeScanner(id, { fps: 10, qrbox: { width: 250, height: 250 } }, false); scanner.render((text) => { onScan(text); scanner.clear().catch(() => {}); }, () => {}); return () => { scanner.clear().catch(() => {}); }; }, [id, onScan]); return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"><div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-lg font-semibold">{title}</h3><p className="text-sm text-slate-600">{t("qrScanner.helper")}</p></div><Button onClick={onClose} variant="outline" className="rounded-2xl">{t("common.close")}</Button></div><div id={id} className="overflow-hidden rounded-2xl border" /></div></div>; }
 
 export default function VetBaraPrototype() {
@@ -501,7 +501,25 @@ export default function VetBaraPrototype() {
   const summary = useMemo(() => ({ total: candidates.length, practicing: candidates.filter((c) => c.level === "Practicing").length, consulting: candidates.filter((c) => c.level === "Consulting").length }), [candidates]);
   const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp() }, ...prev]);
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
-  const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => `${window.location.origin}${window.location.pathname}?role=${encodeURIComponent(roleName)}&id=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`;
+  const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => {
+    const url = new URL(window.location.pathname || "/", window.location.origin);
+    url.searchParams.set("role", roleName);
+    url.searchParams.set("id", id);
+    url.searchParams.set("token", token);
+
+    if (roleName === "Candidate") {
+      const candidate = candidates.find((item) => item.id === id);
+      if (candidate) {
+        url.searchParams.set("name", candidate.name ?? "");
+        url.searchParams.set("level", candidate.level ?? "");
+        url.searchParams.set("birthDate", candidate.birthDate ?? "");
+        url.searchParams.set("documentId", candidate.documentId ?? "");
+        url.searchParams.set("email", candidate.email ?? "");
+      }
+    }
+
+    return url.toString();
+  };
   const sectionTone = (v) => v === "closed" ? "good" : v === "open" ? "warn" : "default";
   const lockedPortalRole = portalRole ?? authenticatedPortalRole;
   const localEventId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -581,7 +599,7 @@ export default function VetBaraPrototype() {
 
   function demoAccess(parsed) {
     if (parsed.role === "Centre" && parsed.token === DEMO_QR_TOKENS.Centre) return { role: "Centre", subjectId: centre, mode: "demo" };
-    if (parsed.role === "Candidate" && parsed.token === DEMO_QR_TOKENS.Candidate && parsed.id === "C-001" && knownCandidate(parsed.id)) return { role: "Candidate", subjectId: parsed.id, mode: "demo" };
+    if (parsed.role === "Candidate" && parsed.token === DEMO_QR_TOKENS.Candidate && parsed.id === "C-001") return { role: "Candidate", subjectId: parsed.id, mode: "demo", profile: { name: parsed.name, level: parsed.level, birthDate: parsed.birthDate, documentId: parsed.documentId, email: parsed.email } };
     if (parsed.role === "Examiner" && parsed.token === DEMO_QR_TOKENS.Examiner && parsed.id === "E-001" && knownExaminer(parsed.id)) return { role: "Examiner", subjectId: parsed.id, mode: "demo" };
     return null;
   }
@@ -597,11 +615,17 @@ export default function VetBaraPrototype() {
       return;
     }
 
-    if (access.role === "Candidate" && knownCandidate(access.subjectId)) {
-      setRole("Candidate");
-      loginCandidate(access.subjectId);
-      hydrateCandidateProgress(access.sessionToken, access.subjectId);
-      return;
+    if (access.role === "Candidate") {
+      if (access.profile && Object.values(access.profile).some((value) => String(value ?? "").trim())) {
+        setCandidates((previous) => previous.map((candidate) => candidate.id === access.subjectId ? { ...candidate, ...Object.fromEntries(Object.entries(access.profile).filter(([, value]) => String(value ?? "").trim())) } : candidate));
+      }
+
+      if (knownCandidate(access.subjectId)) {
+        setRole("Candidate");
+        loginCandidate(access.subjectId);
+        hydrateCandidateProgress(access.sessionToken, access.subjectId);
+        return;
+      }
     }
 
     if (access.role === "Examiner" && knownExaminer(access.subjectId)) {
