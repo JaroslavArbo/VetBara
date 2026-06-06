@@ -656,35 +656,8 @@ export default function VetBaraPrototype() {
     const offlinePackage = parseOfflineCandidatePackage(text);
 
     if (offlinePackage) {
-      const candidateId = offlinePackage.candidateId;
-      const responses = offlinePackage.responses ?? {};
-      const answerCount = Object.keys(responses).length;
-      const reportDraft = offlinePackage.reportDraft ?? null;
-      const reportPhotoCount = reportDraft ? countReportPhotos(reportDraft) : 0;
-
-      if (Object.keys(responses).length) {
-        setTestResponses((prev) => ({
-          ...prev,
-          [candidateId]: {
-            ...(prev[candidateId] ?? {}),
-            ...responses,
-          },
-        }));
-      }
-
-      if (reportDraft) {
-        setReportDrafts((prev) => ({
-          ...prev,
-          [candidateId]: reportDraft,
-        }));
-      }
-
-      setSelectedCandidateId(candidateId);
-      setActiveExaminerPage(reportDraft ? "reportReview" : "writtenReview");
-      setStatus(`Offline candidate package imported: ${answerCount} answer(s), ${reportPhotoCount} report photo(s)`);
-      addAudit("Offline candidate package imported", offlinePackage.candidateName || candidateId, `${answerCount} answer(s), ${reportPhotoCount} report photo(s) / ${offlinePackage.variantCode || "-"}`);
+      importOfflineCandidatePackage(offlinePackage);
       setScannerMode(null);
-      window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
       return;
     }
 
@@ -693,6 +666,68 @@ export default function VetBaraPrototype() {
     if (access) applyResolvedAccess(access, "QR accepted");
     setScannerMode(null);
   }
+
+  function importOfflineCandidatePackage(offlinePackage) {
+    if (!offlinePackage?.candidateId) return false;
+
+    const candidateId = offlinePackage.candidateId;
+    const responses = offlinePackage.responses ?? {};
+    const answerCount = Object.keys(responses).length;
+    const reportDraft = offlinePackage.reportDraft ?? null;
+    const reportPhotoCount = reportDraft ? countReportPhotos(reportDraft) : 0;
+
+    if (Object.keys(responses).length) {
+      setTestResponses((prev) => ({
+        ...prev,
+        [candidateId]: {
+          ...(prev[candidateId] ?? {}),
+          ...responses,
+        },
+      }));
+    }
+
+    if (reportDraft) {
+      setReportDrafts((prev) => ({
+        ...prev,
+        [candidateId]: reportDraft,
+      }));
+    }
+
+    setSelectedCandidateId(candidateId);
+    setActiveExaminerPage(reportDraft ? "reportReview" : "writtenReview");
+    setStatus(`Offline candidate package imported: ${answerCount} answer(s), ${reportPhotoCount} report photo(s)`);
+    addAudit("Offline candidate package imported", offlinePackage.candidateName || candidateId, `${answerCount} answer(s), ${reportPhotoCount} report photo(s) / ${offlinePackage.variantCode || "-"}`);
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+    return true;
+  }
+
+  function importOfflineCandidatePackageFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result ?? ""));
+        if (!parseOfflineCandidatePackage(JSON.stringify(data))) throw new Error("Invalid offline package");
+        importOfflineCandidatePackage(data);
+        event.target.value = "";
+      } catch (error) {
+        console.error("Offline package import failed", error);
+        setStatus("Offline package import failed");
+        event.target.value = "";
+      }
+    };
+
+    reader.onerror = () => {
+      setStatus("Offline package file could not be read");
+      event.target.value = "";
+    };
+
+    reader.readAsText(file);
+  }
+
   async function sendSyncEvent(event) {
     if (!activeSessionToken) return;
     const syncId = event.clientEventId;
@@ -1434,7 +1469,7 @@ export default function VetBaraPrototype() {
       {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", centre, CENTRE_ACCESS_TOKEN)} t={t} />}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={EXAMINERS} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} scoring={scoring} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={EXAMINERS} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} scoring={scoring} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
       {(role === "Admin" || role === "Centre") && <AuditSyncView sync={sync} setSync={setSync} audit={audit} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
@@ -1512,7 +1547,7 @@ function PilotWorkflowDashboard({ candidates, assignments, examiners, centreVali
 
 function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, t }) {  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0]; const [copiedQr, setCopiedQr] = useState(""); const candidateQrUrl = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url; const examinerQrUrl = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url; async function copyQrLink(label, value) { try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); setCopiedQr(t("centre.copy.copied").replace("{label}", label)); return; } setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } catch { setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } } return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5">{!centreUnlocked && <div className="mb-4 rounded-2xl border bg-white p-4"><SectionTitle icon={QrCodeIcon} title={t("centre.access.title")} subtitle={t("centre.access.subtitle")} /><div className="flex flex-col gap-3 md:flex-row"><input value={centreCode} onChange={(e) => setCentreCode(e.target.value)} placeholder={t("centre.access.placeholder")} className="w-full rounded-xl border bg-white p-2 font-mono text-sm" /><Button onClick={unlockCentre} className="rounded-2xl">{t("centre.access.open")}</Button></div><div className="mt-2 text-xs text-slate-500">{t("centre.access.prototypeToken")}: {CENTRE_ACCESS_TOKEN}</div></div>}<div className={centreUnlocked ? "" : "pointer-events-none opacity-40"}><SectionTitle icon={Users} title={t("centre.config.title")} subtitle={t("centre.config.subtitle")} /><div className="mb-4 rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h3 className="font-semibold">{t("centre.setupPersistence.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.setupPersistence.helper")}</p></div><div className="flex flex-wrap gap-2"><Button onClick={handleLoadCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreSetupLoading ? t("centre.setupPersistence.loading") : t("centre.setupPersistence.load")}</Button><Button onClick={handleSaveCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} className="rounded-2xl">{centreSetupSaving ? t("centre.setupPersistence.saving") : t("centre.setupPersistence.save")}</Button><Button onClick={handleDownloadCentreAuditPackage} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreAuditExportLoading ? t("centre.setupPersistence.exporting") : t("centre.setupPersistence.auditExport")}</Button></div></div><div className="mt-3 flex flex-wrap items-center gap-2"><StatusPill tone={centreSetupDirty ? "warn" : "good"}>{centreSetupDirty ? t("centre.setupPersistence.unsaved") : t("centre.setupPersistence.saved")}</StatusPill><span className="text-xs text-slate-500">{t("centre.setupPersistence.saveHelper")}</span></div>{centreSetupStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{centreSetupStatus}</div>}{centreSetupError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreSetupError}</div>}{centreAuditExportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreAuditExportError}</div>}<CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} /></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("centre.dataMode.title")}</h3><p className="mt-1 text-sm text-slate-600">{dataMode === "backend" ? t("centre.dataMode.backendHelper") : t("centre.dataMode.demoHelper")}</p><p className="mt-1 text-xs text-slate-500">{t("centre.dataMode.saveAfterChanges")}</p></div><StatusPill tone={dataMode === "backend" ? "good" : "warn"}>{dataMode === "backend" ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill></div></div><PilotReadinessGuardrails centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><PilotRunSummary centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><CentreNetworkReadinessChecklist StatusPill={StatusPill} t={t} /><PilotWorkflowDashboard candidates={candidates} assignments={assignments} examiners={examiners} centreValidationIssues={centreValidationIssues} testImportSummary={testImportSummary} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} centreSetupStatus={centreSetupStatus} dataMode={dataMode} t={t} /><PilotSmokeTestChecklist StatusPill={StatusPill} t={t} /><PilotReleaseNotesPanel StatusPill={StatusPill} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>{EXAM_LEVELS.map((level) => <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm"><input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} /><span>{level}</span></label>)}</div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("centre.variants.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.variants.helper")}</p></div><label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">{t("centre.variants.import")}<input type="file" accept=".csv,.json,application/json,text/csv" onChange={importTestPackage} className="hidden" /></label></div><div className="mt-3 grid gap-3 md:grid-cols-2">{EXAM_LEVELS.map((level) => { const vars = availableVariants.filter((v) => v.level === level && v.language === language); return <label key={level} className="text-sm font-medium">{level}<select value={variants[level] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setVariants((prev) => ({ ...prev, [level]: e.target.value })); }} className="mt-1 w-full rounded-xl border bg-white p-2">{vars.length ? vars.map((v) => <option key={v.code} value={v.code}>{v.code}</option>) : <option value="">{t("centre.variants.noImported")}</option>}</select></label>; })}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-xs text-slate-600">{t("centre.variants.csvHelper")}</div>{testImportStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{testImportStatus}</div>}{testImportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{testImportError}</div>}{testImportSummary && <div className="mt-2 text-xs text-slate-500">{t("centre.variants.importedSummary").replace("{variants}", testImportSummary.variants).replace("{questions}", testImportSummary.questions)}</div>}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{t("centre.candidates.title")}</h3><Button onClick={addCandidate} variant="outline" className="rounded-2xl">{t("centre.candidates.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">{candidates.map((c) => <button key={c.id} onClick={() => setSelectedCandidateId(c.id)} className={`rounded-2xl border p-3 text-left ${selectedCandidateId === c.id ? "border-slate-950 bg-slate-50" : "bg-white"}`}><div className="text-xs text-slate-500">{c.id}</div><div className="font-medium">{c.name}</div><StatusPill>{c.level}</StatusPill></button>)}</div></div>{selectedCandidate && <div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.candidateDetails.title")}</h3><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.id")}<input value={selectedCandidate.id ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.name")}<input value={selectedCandidate.name ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.level")}<select value={selectedCandidate.level ?? "Practicing"} onChange={(e) => updateCandidate(selectedCandidate.id, { level: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"><option value="Practicing">Practicing</option><option value="Consulting">Consulting</option></select></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.birthDate")}<input value={selectedCandidate.birthDate ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { birthDate: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.documentId")}<input value={selectedCandidate.documentId ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { documentId: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.email")}<input value={selectedCandidate.email ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div></div>}<div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.examiners.title")}</h3><Button onClick={addExaminer} variant="outline" className="rounded-2xl">{t("centre.examiners.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{examiners.map((ex) => <div key={ex.id} className="rounded-2xl border bg-white p-3 text-sm"><label className="text-xs font-medium text-slate-500">{t("centre.examinerDetails.id")}<input value={ex.id ?? ""} onChange={(e) => updateExaminer(ex.id, { id: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.name")}<input value={ex.name ?? ""} onChange={(e) => updateExaminer(ex.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.registrationId")}<input value={ex.registrationId ?? ""} onChange={(e) => updateExaminer(ex.id, { registrationId: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.email")}<input value={ex.email ?? ""} onChange={(e) => updateExaminer(ex.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div>)}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.assignments.title")}</h3><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.workflow.candidate")}</th><th className="py-2 pr-3">{t("centre.workflow.level")}</th><th className="py-2 pr-3">{t("centre.workflow.primaryExaminer")}</th><th className="py-2 pr-3">{t("centre.workflow.secondaryExaminer")}</th></tr></thead><tbody>{candidates.map((c) => <tr key={c.id} className="border-b"><td className="py-2 pr-3 font-medium">{c.name}</td><td className="py-2 pr-3">{c.level}</td>{["primary", "secondary"].map((slot) => <td key={slot} className="py-2 pr-3"><select value={assignments[c.id]?.[slot] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setAssignments((prev) => ({ ...prev, [c.id]: { ...(prev[c.id] ?? {}), [slot]: e.target.value } })); }} className="w-full rounded-xl border bg-white p-2">{examiners.map((ex) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}</select></td>)}</tr>)}</tbody></table></div></div><CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrFor} examinerQrFor={examinerQrFor} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} /></div></CardContent></Card>;
 }
-function createOfflineCandidatePackage({ candidate, variantCode, responses, reportDraft }) {
+function createOfflineCandidatePackage({ candidate, variantCode, responses, reportDraft, includePhotoData = false }) {
   const filteredReportDraft = candidate.level === "Consulting"
     ? REPORT_TREES.reduce((acc, treeName) => {
         const sourceTree = reportDraft?.[treeName] ?? createReportDraft()[treeName];
@@ -1527,7 +1562,7 @@ function createOfflineCandidatePackage({ candidate, variantCode, responses, repo
                 name: photo.name,
                 type: photo.type,
                 size: photo.size,
-                dataUrl: photo.dataUrl,
+                ...(includePhotoData ? { dataUrl: photo.dataUrl } : {}),
                 description: photo.description ?? "",
                 useInReport: true,
                 createdAt: photo.createdAt ?? photo.capturedAt ?? null,
@@ -1563,11 +1598,31 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
         variantCode: selectedVariantCode,
         responses: testResponses[loggedCandidate.id] ?? {},
         reportDraft: reportDrafts[loggedCandidate.id] ?? createReportDraft(),
+        includePhotoData: false,
       }))
     : "";
-  const offlinePackageSizeWarning = offlinePackagePayload.length > 2500;
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><div className="flex flex-col gap-4 md:flex-row md:items-center"><RealQr value={offlinePackagePayload} size={156} /><div><h4 className="font-semibold">Předat uzavřený test a report zkoušejícímu</h4><p className="mt-1 text-sm text-slate-600">Offline fallback: QR se zobrazí až po uzavření požadovaných částí. Obsahuje uložené odpovědi testu a u Consulting také report bez terénních poznámek, včetně fotografií označených „Použít v reportu“.</p>{offlinePackageSizeWarning && <p className="mt-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">Pozor: QR je velmi velký kvůli fotografiím a nemusí jít spolehlivě naskenovat. Pokud selže, bude potřeba fotografie komprimovat nebo použít export souboru.</p>}<p className="mt-2 text-xs text-slate-500">Examiner tento QR naskenuje v Examiner portálu.</p></div></div></div>}</div>}</div></div></CardContent></Card>;
+  function downloadOfflineCandidatePackage() {
+    if (!loggedCandidate) return;
+
+    const fullPackage = createOfflineCandidatePackage({
+      candidate: loggedCandidate,
+      variantCode: selectedVariantCode,
+      responses: testResponses[loggedCandidate.id] ?? {},
+      reportDraft: reportDrafts[loggedCandidate.id] ?? createReportDraft(),
+      includePhotoData: true,
+    });
+
+    const blob = new Blob([JSON.stringify(fullPackage, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `vetbara-offline-package-${loggedCandidate.id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><div className="flex flex-col gap-4 md:flex-row md:items-center"><RealQr value={offlinePackagePayload} size={156} /><div><h4 className="font-semibold">Předat uzavřený test a report zkoušejícímu</h4><p className="mt-1 text-sm text-slate-600">Offline fallback: QR obsahuje pouze lehký manifest bez fotografií. Obsahuje uložené odpovědi testu a u Consulting také report bez terénních poznámek a metadata fotografií označených „Použít v reportu“.</p><p className="mt-2 text-sm text-slate-600">Pro předání fotografií stáhněte kompletní offline JSON balíček a předejte jej zkoušejícímu přes AirDrop, USB nebo lokální sdílení.</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">Stáhnout offline balíček včetně fotografií</Button></div><p className="mt-2 text-xs text-slate-500">Examiner může naskenovat QR manifest nebo importovat kompletní JSON balíček v Examiner portálu.</p></div></div></div>}</div>}</div></div></CardContent></Card>;
 }
 function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, status, times, tone, openSection, t }) {
   const hasWrittenTest = sections.some((section) => section.key === "test");
@@ -2127,6 +2182,7 @@ function ExaminerView({
   reportDrafts,
   qrFor,
   setScannerMode,
+  importOfflineCandidatePackageFile,
   examinerTimes,
   t,
 }) {
@@ -2140,6 +2196,20 @@ function ExaminerView({
             subtitle={t("examiner.view.subtitle")}
           />
           <ExaminerQuickHelp t={t} />
+          {loggedExaminer && (
+            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="font-semibold">Offline balíček kandidáta</h3>
+                  <p className="mt-1 text-sm text-slate-600">Pokud nefunguje backend nebo internet, nahrajte zde JSON balíček exportovaný z Candidate portálu.</p>
+                </div>
+                <label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
+                  Importovat offline balíček
+                  <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" />
+                </label>
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 lg:grid-cols-3">
             {!loggedExaminer && (
               <div className="rounded-2xl border bg-white p-4">
