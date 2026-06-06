@@ -1090,7 +1090,7 @@ export default function VetBaraPrototype() {
     const current = candidateStatus[loggedCandidate.id]?.[key];
     if (current === "closed") {
       const password = window.prompt("Pro znovuotevření uzavřené části zadejte schvalovací heslo:");
-      if (password !== "arbovet") {
+      if (password !== "Vetarbo") {
         window.alert("Neplatné heslo. Znovuotevření nebylo povoleno.");
         return;
       }
@@ -1721,9 +1721,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                     <button
                       type="button"
                       onDoubleClick={() => setFullscreenPhoto(photo)}
-                      onClick={() => {
-                        if (photo.type === "image/png" && String(photo.name || "").startsWith("handwriting-")) setFullscreenPhoto(photo);
-                      }}
+                      onClick={() => setFullscreenPhoto(photo)}
                       className="h-16 w-16 overflow-hidden rounded-lg bg-slate-200"
                       title={label("report.photoOpenFullscreen", "Dvojklikem otevřít na celou obrazovku")}
                     >
@@ -1845,12 +1843,21 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               {t("common.close")}
             </Button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded-2xl bg-white p-2">
+          <div
+            className="min-h-0 flex-1 overflow-auto rounded-2xl bg-white p-2"
+            style={{ touchAction: "pinch-zoom pan-x pan-y" }}
+          >
             <img
               src={fullscreenPhoto.dataUrl}
               alt={fullscreenPhoto.description || fullscreenPhoto.name || fullscreenPhoto.caption || fullscreenPhoto.id}
               className="mx-auto h-auto max-h-none max-w-none rounded-xl"
-              style={{ width: "100%", touchAction: "pinch-zoom" }}
+              style={{
+                width: "100%",
+                maxWidth: "none",
+                touchAction: "pinch-zoom pan-x pan-y",
+                WebkitUserSelect: "none",
+                userSelect: "none",
+              }}
             />
           </div>
         </div>
