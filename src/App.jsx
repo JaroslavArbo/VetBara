@@ -419,6 +419,17 @@ function RealQr({ value, size = 112 }) {
   );
 }
 function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token"), name: url.searchParams.get("name"), level: url.searchParams.get("level"), birthDate: url.searchParams.get("birthDate"), documentId: url.searchParams.get("documentId"), email: url.searchParams.get("email") }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
+function parseOfflineTestTransfer(payload) {
+  try {
+    const data = JSON.parse(String(payload));
+    if (data?.kind === "vetbara.offlineTestResponses.v1" && data.candidateId && data.responses && typeof data.responses === "object") return data;
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function QrScannerPanel({ title, onScan, onClose, t }) { const id = useMemo(() => `qr-reader-${Math.random().toString(36).slice(2)}`, []); useEffect(() => { const scanner = new Html5QrcodeScanner(id, { fps: 10, qrbox: { width: 250, height: 250 } }, false); scanner.render((text) => { onScan(text); scanner.clear().catch(() => {}); }, () => {}); return () => { scanner.clear().catch(() => {}); }; }, [id, onScan]); return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl"><div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-lg font-semibold">{title}</h3><p className="text-sm text-slate-600">{t("qrScanner.helper")}</p></div><Button onClick={onClose} variant="outline" className="rounded-2xl">{t("common.close")}</Button></div><div id={id} className="overflow-hidden rounded-2xl border" /></div></div>; }
 
 export default function VetBaraPrototype() {
@@ -638,7 +649,35 @@ export default function VetBaraPrototype() {
     addAudit("QR role blocked", access.role ?? "Unknown role", "Resolved role or subject does not match this portal package");
   }
 
-  async function handleQrScan(text) { const p = { ...parseQrPayload(text), raw: text }; const access = await resolveAccessWithFallback(p, "QR accepted"); if (access) applyResolvedAccess(access, "QR accepted"); setScannerMode(null); }
+  async function handleQrScan(text) {
+    const offlineTestTransfer = parseOfflineTestTransfer(text);
+
+    if (offlineTestTransfer) {
+      const candidateId = offlineTestTransfer.candidateId;
+      const answerCount = Object.keys(offlineTestTransfer.responses ?? {}).length;
+
+      setTestResponses((prev) => ({
+        ...prev,
+        [candidateId]: {
+          ...(prev[candidateId] ?? {}),
+          ...offlineTestTransfer.responses,
+        },
+      }));
+
+      setSelectedCandidateId(candidateId);
+      setActiveExaminerPage("writtenReview");
+      setStatus(`Offline test responses imported: ${answerCount} answer(s)`);
+      addAudit("Offline test responses imported", offlineTestTransfer.candidateName || candidateId, `${answerCount} answer(s) / ${offlineTestTransfer.variantCode || "-"}`);
+      setScannerMode(null);
+      window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+      return;
+    }
+
+    const p = { ...parseQrPayload(text), raw: text };
+    const access = await resolveAccessWithFallback(p, "QR accepted");
+    if (access) applyResolvedAccess(access, "QR accepted");
+    setScannerMode(null);
+  }
   async function sendSyncEvent(event) {
     if (!activeSessionToken) return;
     const syncId = event.clientEventId;
@@ -1485,8 +1524,85 @@ function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, st
 function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, t }) {
   const questions = testBank[selectedVariantCode] ?? [];
   const helper = t("test.variantAutosave").replace("{variant}", selectedVariantCode);
+  const answerCount = Object.values(responses ?? {}).filter((value) => String(value ?? "").trim()).length;
+  const offlineTransferPayload = JSON.stringify({
+    kind: "vetbara.offlineTestResponses.v1",
+    candidateId: candidate.id,
+    candidateName: candidate.name,
+    level: candidate.level,
+    variantCode: selectedVariantCode,
+    responses,
+    createdAt: new Date().toISOString(),
+  });
 
-  return <div className="rounded-2xl border bg-white p-4"><div className="flex justify-between gap-3"><div><h3 className="font-semibold">{t("test.title")}</h3><p className="text-sm text-slate-600">{helper}</p></div><Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button></div>{questions.length === 0 ? <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950"><div className="font-semibold">{t("test.noQuestions")}</div><p className="mt-1">{t("test.askCentre")}</p></div> : <div className="mt-3 space-y-4">{questions.map((q, i) => <div key={q.id} className="rounded-xl border p-3"><div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div><div className="mt-1 font-medium">{q.text}</div>{q.type === "single_choice" ? <div className="mt-2 space-y-2">{q.options.map((option) => <label key={option} className="flex gap-2 rounded-xl bg-slate-50 p-2 text-sm"><input type="radio" checked={responses[q.id] === option} onChange={() => updateTest(q.id, option)} /><span>{option}</span></label>)}</div> : <textarea value={responses[q.id] ?? ""} onChange={(e) => updateTest(q.id, e.target.value)} className="mt-2 min-h-24 w-full rounded-xl border bg-white p-3 text-sm" placeholder={t("test.writeAnswer")} />}</div>)}</div>}<Button onClick={submitTest} disabled={questions.length === 0} className="mt-4 rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("test.submit")}</Button><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div>;
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("test.title")}</h3>
+          <p className="text-sm text-slate-600">{helper}</p>
+        </div>
+        <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">
+          {t("common.back")}
+        </Button>
+      </div>
+
+      {questions.length === 0 ? (
+        <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
+          <div className="font-semibold">{t("test.noQuestions")}</div>
+          <p className="mt-1">{t("test.askCentre")}</p>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-4">
+          {questions.map((q, i) => (
+            <div key={q.id} className="rounded-xl border p-3">
+              <div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div>
+              <div className="mt-1 font-medium">{q.text}</div>
+              {q.type === "single_choice" ? (
+                <div className="mt-2 space-y-2">
+                  {q.options.map((option) => (
+                    <label key={option} className="flex gap-2 rounded-xl bg-slate-50 p-2 text-sm">
+                      <input type="radio" checked={responses[q.id] === option} onChange={() => updateTest(q.id, option)} />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <textarea
+                  value={responses[q.id] ?? ""}
+                  onChange={(e) => updateTest(q.id, e.target.value)}
+                  className="mt-2 min-h-24 w-full rounded-xl border bg-white p-3 text-sm"
+                  placeholder={t("test.writeAnswer")}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Button onClick={submitTest} disabled={questions.length === 0} className="mt-4 rounded-2xl">
+        <Lock className="mr-2 h-4 w-4" /> {t("test.submit")}
+      </Button>
+      <p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p>
+
+      {questions.length > 0 && (
+        <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center">
+            <RealQr value={offlineTransferPayload} size={148} />
+            <div>
+              <h4 className="font-semibold">Předat odpovědi zkoušejícímu</h4>
+              <p className="mt-1 text-sm text-slate-600">
+                Offline fallback: pokud nefunguje backend nebo internet, zkoušející naskenuje tento QR ve svém Examiner portálu. Přenese se {answerCount} uložených odpovědí pro kandidáta {candidate.name}.
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                QR obnovte po úpravě odpovědí. Po odevzdání testu ukažte tento QR zkoušejícímu.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, t }) {
