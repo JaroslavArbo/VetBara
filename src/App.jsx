@@ -64,6 +64,7 @@ const EXAM_LEVELS = ["Practicing", "Consulting"];
 const ROLES = ["Admin", "Centre", "Candidate", "Examiner"];
 const CENTRES = ["Arboricultural Academy", "VETcert Centre Poland", "VETcert Centre Germany", "VETcert Centre Netherlands"];
 const CENTRE_ACCESS_TOKEN = "VETBARA-CENTRE-ARBOR-2026";
+const CENTRE_QR_ID = "ARBOR-2026";
 const DEMO_QR_TOKENS = {
   Centre: CENTRE_ACCESS_TOKEN,
   Candidate: "VETBARA-CANDIDATE-C-001-2026",
@@ -472,6 +473,17 @@ function RealQr({ value, size = 112 }) {
     </div>
   );
 }
+function centreUrlTokenAccepted() {
+  try {
+    const query = new URLSearchParams(window.location.search);
+    const urlRole = query.get("role");
+    const urlToken = query.get("token");
+    return urlRole === "Centre" && (urlToken === CENTRE_ACCESS_TOKEN || urlToken === "VETBARA-CENTRE-ARBOR-2026");
+  } catch {
+    return false;
+  }
+}
+
 function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token"), name: url.searchParams.get("name"), level: url.searchParams.get("level"),  }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
 function parseOfflineCandidatePackage(payload) {
   try {
@@ -663,7 +675,14 @@ export default function VetBaraPrototype() {
   }
 
   function demoAccess(parsed) {
-    if (parsed.role === "Centre" && parsed.token === DEMO_QR_TOKENS.Centre) return { role: "Centre", subjectId: centre, mode: "demo" };
+    if (
+      parsed.role === "Centre" &&
+      (
+        parsed.token === DEMO_QR_TOKENS.Centre ||
+        parsed.token === CENTRE_ACCESS_TOKEN ||
+        parsed.token === "VETBARA-CENTRE-ARBOR-2026"
+      )
+    ) return { role: "Centre", subjectId: centre, mode: "demo" };
     if (
       parsed.role === "Candidate" &&
       (
@@ -708,6 +727,14 @@ export default function VetBaraPrototype() {
 
     addAudit("QR role blocked", access.role ?? "Unknown role", "Resolved role or subject does not match this portal package");
   }
+
+  useEffect(() => {
+    if (!centreUrlTokenAccepted()) return;
+
+    setCentreCode(CENTRE_ACCESS_TOKEN);
+    setCentreUnlocked(true);
+    setRole("Centre");
+  }, []);
 
   async function handleQrScan(text) {
     const offlinePackage = parseOfflineCandidatePackage(text);
@@ -1228,7 +1255,47 @@ export default function VetBaraPrototype() {
     addAudit("Centre workspace opened", centre, "Delegated token accepted");
   }
   function toggleLevel(level) { setCentreSetupDirty(true); setEnabledLevels((prev) => prev.includes(level) && prev.length > 1 ? prev.filter((x) => x !== level) : prev.includes(level) ? prev : [...prev, level]); }
-  function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, birthDate: "", documentId: "", email: "", level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
+  function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
+  function removeCandidate(candidateId) {
+    if (candidates.length <= 2) {
+      window.alert("Nejmenší povolený počet jsou 2 kandidáti.");
+      return;
+    }
+
+    const candidate = candidates.find((item) => item.id === candidateId);
+    if (!window.confirm(`Opravdu odstranit kandidáta ${candidate?.name ?? candidateId}?`)) return;
+
+    setCandidates((prev) => prev.filter((item) => item.id !== candidateId));
+    setAssignments((prev) => {
+      const next = { ...prev };
+      delete next[candidateId];
+      return next;
+    });
+    setSelectedCandidateId((prev) => prev === candidateId ? candidates.find((item) => item.id !== candidateId)?.id ?? prev : prev);
+    setCentreSetupDirty(true);
+  }
+
+  function removeExaminer(examinerId) {
+    if (examiners.length <= 2) {
+      window.alert("Nejmenší povolený počet jsou 2 examineři.");
+      return;
+    }
+
+    const examiner = examiners.find((item) => item.id === examinerId);
+    if (!window.confirm(`Opravdu odstranit examinera ${examiner?.name ?? examinerId}?`)) return;
+
+    const fallback = examiners.find((item) => item.id !== examinerId)?.id ?? "";
+    setExaminers((prev) => prev.filter((item) => item.id !== examinerId));
+    setAssignments((prev) => Object.fromEntries(Object.entries(prev).map(([candidateId, slots]) => [
+      candidateId,
+      {
+        primary: slots.primary === examinerId ? fallback : slots.primary,
+        secondary: slots.secondary === examinerId ? fallback : slots.secondary,
+      },
+    ])));
+    setCentreSetupDirty(true);
+  }
+
   function loginCandidate(id) { setLoggedCandidateId(id); setSelectedCandidateId(id); setActiveCandidateSection("landing"); addAudit("Candidate logged in", candidates.find((c) => c.id === id)?.name ?? id, "QR accepted"); }
   function confirmCandidate() { if (!loggedCandidate) return; setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true })); addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`); }
   function openCandidateSection(key) {
@@ -1523,7 +1590,7 @@ export default function VetBaraPrototype() {
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     {!["Candidate", "Examiner"].includes(role) && <Card className="mb-4 rounded-2xl shadow-sm"><CardContent className="p-5"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="text-sm font-medium text-slate-500">{t("workspace.current")}</div><div className="text-2xl font-bold tracking-tight">{role}</div></div><div className="flex flex-wrap gap-2"><StatusPill>{status}</StatusPill><StatusPill>{summary.total} {t("workspace.candidates")}</StatusPill><StatusPill>{summary.practicing} Practicing</StatusPill><StatusPill>{summary.consulting} Consulting</StatusPill></div></div></CardContent></Card>}
     <div className="grid gap-4 lg:grid-cols-3">
-      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", centre, CENTRE_ACCESS_TOKEN)} t={t} />}
+      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} t={t} />}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={EXAMINERS} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} scoring={scoring} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
@@ -1602,7 +1669,7 @@ function PilotWorkflowDashboard({ candidates, assignments, examiners, centreVali
 }
 
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0]; const [copiedQr, setCopiedQr] = useState(""); const candidateQrUrl = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url; const examinerQrUrl = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url; async function copyQrLink(label, value) { try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); setCopiedQr(t("centre.copy.copied").replace("{label}", label)); return; } setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } catch { setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } } return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5">{!centreUnlocked && <div className="mb-4 rounded-2xl border bg-white p-4"><SectionTitle icon={QrCodeIcon} title={t("centre.access.title")} subtitle={t("centre.access.subtitle")} /><div className="flex flex-col gap-3 md:flex-row"><input value={centreCode} onChange={(e) => setCentreCode(e.target.value)} placeholder={t("centre.access.placeholder")} className="w-full rounded-xl border bg-white p-2 font-mono text-sm" /><Button onClick={unlockCentre} className="rounded-2xl">{t("centre.access.open")}</Button></div><div className="mt-2 text-xs text-slate-500">{t("centre.access.prototypeToken")}: {CENTRE_ACCESS_TOKEN}</div></div>}<div className={centreUnlocked ? "" : "pointer-events-none opacity-40"}><SectionTitle icon={Users} title={t("centre.config.title")} subtitle={t("centre.config.subtitle")} /><VetCertRulesReference /><VetCertRulesReference /><div className="mb-4 rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h3 className="font-semibold">{t("centre.setupPersistence.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.setupPersistence.helper")}</p></div><div className="flex flex-wrap gap-2"><Button onClick={handleLoadCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreSetupLoading ? t("centre.setupPersistence.loading") : t("centre.setupPersistence.load")}</Button><Button onClick={handleSaveCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} className="rounded-2xl">{centreSetupSaving ? t("centre.setupPersistence.saving") : t("centre.setupPersistence.save")}</Button><Button onClick={handleDownloadCentreAuditPackage} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreAuditExportLoading ? t("centre.setupPersistence.exporting") : t("centre.setupPersistence.auditExport")}</Button></div></div><div className="mt-3 flex flex-wrap items-center gap-2"><StatusPill tone={centreSetupDirty ? "warn" : "good"}>{centreSetupDirty ? t("centre.setupPersistence.unsaved") : t("centre.setupPersistence.saved")}</StatusPill><span className="text-xs text-slate-500">{t("centre.setupPersistence.saveHelper")}</span></div>{centreSetupStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{centreSetupStatus}</div>}{centreSetupError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreSetupError}</div>}{centreAuditExportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreAuditExportError}</div>}<CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} /></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("centre.dataMode.title")}</h3><p className="mt-1 text-sm text-slate-600">{dataMode === "backend" ? t("centre.dataMode.backendHelper") : t("centre.dataMode.demoHelper")}</p><p className="mt-1 text-xs text-slate-500">{t("centre.dataMode.saveAfterChanges")}</p></div><StatusPill tone={dataMode === "backend" ? "good" : "warn"}>{dataMode === "backend" ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill></div></div><PilotReadinessGuardrails centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><PilotRunSummary centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><CentreNetworkReadinessChecklist StatusPill={StatusPill} t={t} /><PilotWorkflowDashboard candidates={candidates} assignments={assignments} examiners={examiners} centreValidationIssues={centreValidationIssues} testImportSummary={testImportSummary} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} centreSetupStatus={centreSetupStatus} dataMode={dataMode} t={t} /><PilotSmokeTestChecklist StatusPill={StatusPill} t={t} /><PilotReleaseNotesPanel StatusPill={StatusPill} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>{EXAM_LEVELS.map((level) => <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm"><input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} /><span>{level}</span></label>)}</div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("centre.variants.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.variants.helper")}</p></div><label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">{t("centre.variants.import")}<input type="file" accept=".csv,.json,application/json,text/csv" onChange={importTestPackage} className="hidden" /></label></div><div className="mt-3 grid gap-3 md:grid-cols-2">{EXAM_LEVELS.map((level) => { const vars = availableVariants.filter((v) => v.level === level && v.language === language); return <label key={level} className="text-sm font-medium">{level}<select value={variants[level] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setVariants((prev) => ({ ...prev, [level]: e.target.value })); }} className="mt-1 w-full rounded-xl border bg-white p-2">{vars.length ? vars.map((v) => <option key={v.code} value={v.code}>{v.code}</option>) : <option value="">{t("centre.variants.noImported")}</option>}</select></label>; })}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-xs text-slate-600">{t("centre.variants.csvHelper")}</div>{testImportStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{testImportStatus}</div>}{testImportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{testImportError}</div>}{testImportSummary && <div className="mt-2 text-xs text-slate-500">{t("centre.variants.importedSummary").replace("{variants}", testImportSummary.variants).replace("{questions}", testImportSummary.questions)}</div>}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{t("centre.candidates.title")}</h3><Button onClick={addCandidate} variant="outline" className="rounded-2xl">{t("centre.candidates.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">{candidates.map((c) => <button key={c.id} onClick={() => setSelectedCandidateId(c.id)} className={`rounded-2xl border p-3 text-left ${selectedCandidateId === c.id ? "border-slate-950 bg-slate-50" : "bg-white"}`}><div className="text-xs text-slate-500">{c.id}</div><div className="font-medium">{c.name}</div><StatusPill>{c.level}</StatusPill></button>)}</div></div>{selectedCandidate && <div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.candidateDetails.title")}</h3><Button onClick={() => removeCandidate(selectedCandidate.id)} disabled={candidates.length <= 2} variant="outline" className="rounded-2xl">Odstranit kandidáta</Button></div><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.id")}<input value={selectedCandidate.id ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.name")}<input value={selectedCandidate.name ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.level")}<select value={selectedCandidate.level ?? "Practicing"} onChange={(e) => updateCandidate(selectedCandidate.id, { level: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"><option value="Practicing">Practicing</option><option value="Consulting">Consulting</option></select></label></div></div>}<div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.examiners.title")}</h3><Button onClick={addExaminer} variant="outline" className="rounded-2xl">{t("centre.examiners.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{examiners.map((ex) => <div key={ex.id} className="rounded-2xl border bg-white p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><div className="text-xs font-semibold text-slate-500">{ex.id}</div><Button onClick={() => removeExaminer(ex.id)} disabled={examiners.length <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">Odstranit</Button></div><label className="text-xs font-medium text-slate-500">{t("centre.examinerDetails.id")}<input value={ex.id ?? ""} onChange={(e) => updateExaminer(ex.id, { id: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.name")}<input value={ex.name ?? ""} onChange={(e) => updateExaminer(ex.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.email")}<input value={ex.email ?? ""} onChange={(e) => updateExaminer(ex.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div>)}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.assignments.title")}</h3><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.workflow.candidate")}</th><th className="py-2 pr-3">{t("centre.workflow.level")}</th><th className="py-2 pr-3">{t("centre.workflow.primaryExaminer")}</th><th className="py-2 pr-3">{t("centre.workflow.secondaryExaminer")}</th></tr></thead><tbody>{candidates.map((c) => <tr key={c.id} className="border-b"><td className="py-2 pr-3 font-medium">{c.name}</td><td className="py-2 pr-3">{c.level}</td>{["primary", "secondary"].map((slot) => <td key={slot} className="py-2 pr-3"><select value={assignments[c.id]?.[slot] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setAssignments((prev) => ({ ...prev, [c.id]: { ...(prev[c.id] ?? {}), [slot]: e.target.value } })); }} className="w-full rounded-xl border bg-white p-2">{examiners.map((ex) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}</select></td>)}</tr>)}</tbody></table></div></div><CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrFor} examinerQrFor={examinerQrFor} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} /></div></CardContent></Card>;
+function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {  const selectedCandidate = candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0]; const [copiedQr, setCopiedQr] = useState(""); const candidateQrUrl = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url; const examinerQrUrl = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url; async function copyQrLink(label, value) { try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); setCopiedQr(t("centre.copy.copied").replace("{label}", label)); return; } setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } catch { setCopiedQr(t("centre.copy.unavailable").replace("{label}", label)); } } return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5">{!centreUnlocked && <div className="mb-4 rounded-2xl border bg-white p-4"><SectionTitle icon={QrCodeIcon} title={t("centre.access.title")} subtitle={t("centre.access.subtitle")} /><div className="flex flex-col gap-3 md:flex-row"><input value={centreCode} onChange={(e) => setCentreCode(e.target.value)} placeholder={t("centre.access.placeholder")} className="w-full rounded-xl border bg-white p-2 font-mono text-sm" /><Button onClick={unlockCentre} className="rounded-2xl">{t("centre.access.open")}</Button></div><div className="mt-2 text-xs text-slate-500">{t("centre.access.prototypeToken")}: {CENTRE_ACCESS_TOKEN}</div></div>}<div className={centreUnlocked ? "" : "pointer-events-none opacity-40"}><SectionTitle icon={Users} title={t("centre.config.title")} subtitle={t("centre.config.subtitle")} /><VetCertRulesReference /><div className="mb-4 rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h3 className="font-semibold">{t("centre.setupPersistence.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.setupPersistence.helper")}</p></div><div className="flex flex-wrap gap-2"><Button onClick={handleLoadCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreSetupLoading ? t("centre.setupPersistence.loading") : t("centre.setupPersistence.load")}</Button><Button onClick={handleSaveCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} className="rounded-2xl">{centreSetupSaving ? t("centre.setupPersistence.saving") : t("centre.setupPersistence.save")}</Button><Button onClick={handleDownloadCentreAuditPackage} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreAuditExportLoading ? t("centre.setupPersistence.exporting") : t("centre.setupPersistence.auditExport")}</Button></div></div><div className="mt-3 flex flex-wrap items-center gap-2"><StatusPill tone={centreSetupDirty ? "warn" : "good"}>{centreSetupDirty ? t("centre.setupPersistence.unsaved") : t("centre.setupPersistence.saved")}</StatusPill><span className="text-xs text-slate-500">{t("centre.setupPersistence.saveHelper")}</span></div>{centreSetupStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{centreSetupStatus}</div>}{centreSetupError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreSetupError}</div>}{centreAuditExportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreAuditExportError}</div>}<CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} /></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("centre.dataMode.title")}</h3><p className="mt-1 text-sm text-slate-600">{dataMode === "backend" ? t("centre.dataMode.backendHelper") : t("centre.dataMode.demoHelper")}</p><p className="mt-1 text-xs text-slate-500">{t("centre.dataMode.saveAfterChanges")}</p></div><StatusPill tone={dataMode === "backend" ? "good" : "warn"}>{dataMode === "backend" ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill></div></div><PilotReadinessGuardrails centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><PilotRunSummary centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} /><CentreNetworkReadinessChecklist StatusPill={StatusPill} t={t} /><PilotWorkflowDashboard candidates={candidates} assignments={assignments} examiners={examiners} centreValidationIssues={centreValidationIssues} testImportSummary={testImportSummary} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} centreSetupStatus={centreSetupStatus} dataMode={dataMode} t={t} /><PilotSmokeTestChecklist StatusPill={StatusPill} t={t} /><PilotReleaseNotesPanel StatusPill={StatusPill} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>{EXAM_LEVELS.map((level) => <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm"><input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} /><span>{level}</span></label>)}</div><div className="rounded-2xl border bg-white p-4 lg:col-span-2"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("centre.variants.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.variants.helper")}</p></div><label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">{t("centre.variants.import")}<input type="file" accept=".csv,.json,application/json,text/csv" onChange={importTestPackage} className="hidden" /></label></div><div className="mt-3 grid gap-3 md:grid-cols-2">{EXAM_LEVELS.map((level) => { const vars = availableVariants.filter((v) => v.level === level && v.language === language); return <label key={level} className="text-sm font-medium">{level}<select value={variants[level] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setVariants((prev) => ({ ...prev, [level]: e.target.value })); }} className="mt-1 w-full rounded-xl border bg-white p-2">{vars.length ? vars.map((v) => <option key={v.code} value={v.code}>{v.code}</option>) : <option value="">{t("centre.variants.noImported")}</option>}</select></label>; })}</div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-xs text-slate-600">{t("centre.variants.csvHelper")}</div>{testImportStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{testImportStatus}</div>}{testImportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{testImportError}</div>}{testImportSummary && <div className="mt-2 text-xs text-slate-500">{t("centre.variants.importedSummary").replace("{variants}", testImportSummary.variants).replace("{questions}", testImportSummary.questions)}</div>}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{t("centre.candidates.title")}</h3><Button onClick={addCandidate} variant="outline" className="rounded-2xl">{t("centre.candidates.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">{candidates.map((c) => <button key={c.id} onClick={() => setSelectedCandidateId(c.id)} className={`rounded-2xl border p-3 text-left ${selectedCandidateId === c.id ? "border-slate-950 bg-slate-50" : "bg-white"}`}><div className="text-xs text-slate-500">{c.id}</div><div className="font-medium">{c.name}</div><StatusPill>{c.level}</StatusPill></button>)}</div></div>{selectedCandidate && <div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.candidateDetails.title")}</h3><Button onClick={() => removeCandidate(selectedCandidate.id)} disabled={candidates.length <= 2} variant="outline" className="rounded-2xl">Odstranit kandidáta</Button></div><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.id")}<input value={selectedCandidate.id ?? ""} readOnly className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.name")}<input value={selectedCandidate.name ?? ""} onChange={(e) => updateCandidate(selectedCandidate.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="text-xs font-medium text-slate-500">{t("centre.candidateDetails.level")}<select value={selectedCandidate.level ?? "Practicing"} onChange={(e) => updateCandidate(selectedCandidate.id, { level: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"><option value="Practicing">Practicing</option><option value="Consulting">Consulting</option></select></label></div></div>}<div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-semibold">{t("centre.examiners.title")}</h3><Button onClick={addExaminer} variant="outline" className="rounded-2xl">{t("centre.examiners.add")}</Button></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">{examiners.map((ex) => <div key={ex.id} className="rounded-2xl border bg-white p-3 text-sm"><div className="mb-2 flex items-center justify-between gap-2"><div className="text-xs font-semibold text-slate-500">{ex.id}</div><Button onClick={() => removeExaminer(ex.id)} disabled={examiners.length <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">Odstranit</Button></div><label className="text-xs font-medium text-slate-500">{t("centre.examinerDetails.id")}<input value={ex.id ?? ""} onChange={(e) => updateExaminer(ex.id, { id: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.name")}<input value={ex.name ?? ""} onChange={(e) => updateExaminer(ex.id, { name: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label><label className="mt-2 block text-xs font-medium text-slate-500">{t("centre.examinerDetails.email")}<input value={ex.email ?? ""} onChange={(e) => updateExaminer(ex.id, { email: e.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" /></label></div>)}</div></div><div className="mt-4 rounded-2xl border bg-white p-4"><h3 className="mb-3 font-semibold">{t("centre.assignments.title")}</h3><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.workflow.candidate")}</th><th className="py-2 pr-3">{t("centre.workflow.level")}</th><th className="py-2 pr-3">{t("centre.workflow.primaryExaminer")}</th><th className="py-2 pr-3">{t("centre.workflow.secondaryExaminer")}</th></tr></thead><tbody>{candidates.map((c) => <tr key={c.id} className="border-b"><td className="py-2 pr-3 font-medium">{c.name}</td><td className="py-2 pr-3">{c.level}</td>{["primary", "secondary"].map((slot) => <td key={slot} className="py-2 pr-3"><select value={assignments[c.id]?.[slot] ?? ""} onChange={(e) => { setCentreSetupDirty(true); setAssignments((prev) => ({ ...prev, [c.id]: { ...(prev[c.id] ?? {}), [slot]: e.target.value } })); }} className="w-full rounded-xl border bg-white p-2">{examiners.map((ex) => <option key={ex.id} value={ex.id}>{ex.name}</option>)}</select></td>)}</tr>)}</tbody></table></div></div><CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrFor} examinerQrFor={examinerQrFor} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} /></div></CardContent></Card>;
 }
 function createOfflineCandidatePackage({ candidate, variantCode, responses, reportDraft, includePhotoData = false }) {
   const filteredReportDraft = candidate.level === "Consulting"
@@ -1762,6 +1829,13 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [photoStatus, setPhotoStatus] = useState("");
   const [reportStep, setReportStep] = useState("field");
   const [photoViewer, setPhotoViewer] = useState(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
+  const [fieldNotesDraft, setFieldNotesDraft] = useState(tree.fieldNotes ?? "");
+  const [photoDescriptionDrafts, setPhotoDescriptionDrafts] = useState({});
+  const handwritingCanvasRef = useRef(null);
+  const handwritingDrawingRef = useRef(false);
+  const [handwritingOpen, setHandwritingOpen] = useState(false);
 
   const label = (key, fallback) => {
     const translated = t(key);
@@ -1771,59 +1845,95 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const localKey = `vetbara-report-field-backup-${candidate.id}-${activeReportTree}`;
 
   useEffect(() => {
+    setFieldNotesDraft(tree.fieldNotes ?? "");
+    setPhotoDescriptionDrafts(Object.fromEntries((tree.photos ?? []).map((photo) => [photo.id, photo.description ?? ""])));
+  }, [candidate.id, activeReportTree]);
+
+  useEffect(() => {
     const backup = {
       candidateId: candidate.id,
       tree: activeReportTree,
       fieldNotes: tree.fieldNotes ?? "",
-      photos: tree.photos ?? [],
+      photos: (tree.photos ?? []).map(({ dataUrl, ...photo }) => ({
+        ...photo,
+        hasImageData: Boolean(dataUrl),
+      })),
       savedAt: new Date().toISOString(),
     };
-    localStorage.setItem(localKey, JSON.stringify(backup));
+
+    try {
+      localStorage.setItem(localKey, JSON.stringify(backup));
+    } catch (error) {
+      console.warn("Report field autosave skipped", error);
+    }
   }, [candidate.id, activeReportTree, tree.fieldNotes, tree.photos, localKey]);
 
   function saveFieldDataLocally() {
+    updateReport(activeReportTree, "fieldNotes", fieldNotesDraft, "fieldNotes");
+
     const backup = {
       candidateId: candidate.id,
       tree: activeReportTree,
       fieldNotes: tree.fieldNotes ?? "",
-      photos: tree.photos ?? [],
+      photos: (tree.photos ?? []).map(({ dataUrl, ...photo }) => ({
+        ...photo,
+        hasImageData: Boolean(dataUrl),
+      })),
       savedAt: new Date().toISOString(),
     };
-    localStorage.setItem(localKey, JSON.stringify(backup));
-    setPhotoStatus(`Lokálně uloženo: ${new Date().toLocaleTimeString()}`);
+
+    try {
+      localStorage.setItem(localKey, JSON.stringify(backup));
+      setPhotoStatus(`Lokálně uloženo: ${new Date().toLocaleTimeString()}`);
+    } catch (error) {
+      console.warn("Report field manual save skipped", error);
+      setPhotoStatus("Lokální uložení poznámek proběhlo bez obrazových dat fotografií.");
+    }
   }
 
-  function handlePhotoChange(event) {
+  function handlePhotoInputChange(event) {
     const input = event.target;
-    const file = input.files?.[0];
+    const files = Array.from(input.files ?? []);
 
-    if (!file) {
+    if (!files.length) {
       input.value = "";
       return;
     }
 
-    const reader = new FileReader();
+    let loaded = 0;
+    let failed = 0;
 
-    reader.onload = () => {
-      addReportPhoto(activeReportTree, {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        dataUrl: reader.result,
-        description: "",
-        useInReport: true,
-        createdAt: new Date().toISOString(),
-      });
-      setPhotoStatus(t("report.photoAdded"));
-      input.value = "";
-    };
+    files.forEach((file) => {
+      const reader = new FileReader();
 
-    reader.onerror = () => {
-      setPhotoStatus(t("report.photoError"));
-      input.value = "";
-    };
+      reader.onload = () => {
+        addReportPhoto(activeReportTree, {
+          name: file.name || `photo-${Date.now()}`,
+          type: file.type || "image/*",
+          size: file.size,
+          dataUrl: reader.result,
+          description: "",
+          useInReport: true,
+          createdAt: new Date().toISOString(),
+        });
 
-    reader.readAsDataURL(file);
+        loaded += 1;
+        if (loaded + failed === files.length) {
+          setPhotoStatus(loaded === 1 ? t("report.photoAdded") : `Přidáno fotografií: ${loaded}`);
+          input.value = "";
+        }
+      };
+
+      reader.onerror = () => {
+        failed += 1;
+        if (loaded + failed === files.length) {
+          setPhotoStatus(failed ? t("report.photoError") : t("report.photoAdded"));
+          input.value = "";
+        }
+      };
+
+      reader.readAsDataURL(file);
+    });
   }
 
   function handleSubmitReport() {
@@ -1832,6 +1942,115 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     );
     if (!confirmed) return;
     submitReport();
+  }
+
+  function canvasPoint(event) {
+    const canvas = handwritingCanvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+
+  function startHandwriting(event) {
+    if (event.pointerType && event.pointerType !== "pen") return;
+    const canvas = handwritingCanvasRef.current;
+    if (!canvas) return;
+
+    event.preventDefault();
+    handwritingDrawingRef.current = true;
+    canvas.setPointerCapture?.(event.pointerId);
+
+    const ctx = canvas.getContext("2d");
+    const point = canvasPoint(event);
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y);
+  }
+
+  function drawHandwriting(event) {
+    if (!handwritingDrawingRef.current) return;
+    if (event.pointerType && event.pointerType !== "pen") return;
+
+    event.preventDefault();
+    const canvas = handwritingCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const point = canvasPoint(event);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+  }
+
+  function stopHandwriting(event) {
+    handwritingDrawingRef.current = false;
+    handwritingCanvasRef.current?.releasePointerCapture?.(event.pointerId);
+  }
+
+  function clearHandwriting() {
+    const canvas = handwritingCanvasRef.current;
+    if (!canvas) return;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function saveHandwritingAsPhoto() {
+    const canvas = handwritingCanvasRef.current;
+    if (!canvas) return;
+
+    addReportPhoto(activeReportTree, {
+      name: `handwriting-${activeReportTree}-${Date.now()}.png`,
+      type: "image/png",
+      size: 0,
+      dataUrl: canvas.toDataURL("image/png"),
+      description: "Rukopisná terénní poznámka",
+      useInReport: false,
+      createdAt: new Date().toISOString(),
+    });
+
+    setPhotoStatus("Rukopisná poznámka byla uložena mezi fotografie.");
+    setHandwritingOpen(false);
+  }
+
+  function HandwritingPad() {
+    return (
+      <div className={`${handwritingOpen ? "fixed inset-0 z-50 overflow-auto bg-white p-4" : "rounded-2xl border bg-white p-4"}`}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-lg font-semibold">Rukopisné poznámky</h4>
+            <p className="mt-1 text-sm text-slate-600">
+              Pište stylusem. Po uložení se rukopis uloží jako pracovní fotografie, standardně nezařazená do reportu.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => setHandwritingOpen((value) => !value)} variant="outline" className="rounded-2xl">
+              {handwritingOpen ? "Zavřít celou obrazovku" : "Otevřít na celou obrazovku"}
+            </Button>
+            <Button type="button" onClick={clearHandwriting} variant="outline" className="rounded-2xl">
+              Smazat rukopis
+            </Button>
+            <Button type="button" onClick={saveHandwritingAsPhoto} className="rounded-2xl">
+              Uložit rukopis mezi fotografie
+            </Button>
+          </div>
+        </div>
+        <canvas
+          ref={handwritingCanvasRef}
+          width={1600}
+          height={900}
+          onPointerDown={startHandwriting}
+          onPointerMove={drawHandwriting}
+          onPointerUp={stopHandwriting}
+          onPointerCancel={stopHandwriting}
+          className="h-[420px] w-full rounded-2xl border bg-white"
+          style={{ touchAction: "none" }}
+        />
+      </div>
+    );
   }
 
   function TreeTabs() {
@@ -1862,7 +2081,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     return (
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {(tree.photos ?? []).map((photo) => {
-          const description = photo.description ?? "";
+          const description = photoDescriptionDrafts[photo.id] ?? photo.description ?? "";
           const useInReport = photo.useInReport ?? true;
 
           return (
@@ -1886,7 +2105,8 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                 <input
                   value={description}
                   maxLength={100}
-                  onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { description: e.target.value.slice(0, 100) })}
+                  onChange={(e) => setPhotoDescriptionDrafts((prev) => ({ ...prev, [photo.id]: e.target.value.slice(0, 100) }))}
+                  onBlur={() => updateReportPhoto(activeReportTree, photo.id, { description })}
                   placeholder="Krátký popis, max. 100 znaků"
                   className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
                 />
@@ -1916,7 +2136,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
           Sbírejte pouze fotografie a terénní poznámky. Data se průběžně ukládají lokálně do tohoto zařízení.
         </p>
 
-        <TreeTabs />
+        {TreeTabs()}
 
         <div className="mt-4 rounded-2xl bg-slate-100 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1925,27 +2145,28 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               <p className="mt-1 text-sm text-slate-600">Fotografie se ukládají lokálně do návrhu reportu.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-2xl border bg-white px-5 py-3 text-sm font-semibold hover:bg-slate-50">
+              <Button type="button" onClick={() => cameraInputRef.current?.click()} variant="outline" className="rounded-2xl">
                 Vyfotit fotografii
-                <input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
-              </label>
-              <label className="cursor-pointer rounded-2xl border bg-white px-5 py-3 text-sm font-semibold hover:bg-slate-50">
+              </Button>
+              <Button type="button" onClick={() => galleryInputRef.current?.click()} variant="outline" className="rounded-2xl">
                 Vybrat z galerie
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-              </label>
+              </Button>
+              <input ref={cameraInputRef} type="file" accept="image/*,.heic,.heif" capture="environment" onChange={handlePhotoInputChange} className="hidden" />
+              <input ref={galleryInputRef} type="file" accept="image/*,.heic,.heif" multiple onChange={handlePhotoInputChange} className="hidden" />
             </div>
           </div>
 
           {photoStatus && <div className="mt-2 text-xs font-medium text-slate-600">{photoStatus}</div>}
-          {(tree.photos ?? []).length > 0 && <PhotoGrid />}
+          {(tree.photos ?? []).length > 0 && PhotoGrid()}
         </div>
 
         <div className="mt-4 rounded-2xl border bg-white p-4">
           <h4 className="text-lg font-semibold">Terénní poznámky (nevstupují do reportu)</h4>
           <p className="mt-1 text-sm text-slate-600">Tyto poznámky slouží jako pracovní podklad pro druhý krok.</p>
           <textarea
-            value={tree.fieldNotes}
-            onChange={(e) => updateReport(activeReportTree, "fieldNotes", e.target.value, "fieldNotes")}
+            value={fieldNotesDraft}
+            onChange={(e) => setFieldNotesDraft(e.target.value)}
+            onBlur={() => updateReport(activeReportTree, "fieldNotes", fieldNotesDraft, "fieldNotes")}
             placeholder="Terénní pozorování a pracovní poznámky..."
             className="mt-3 min-h-72 w-full rounded-xl border bg-white p-4 text-base"
             style={{ resize: "vertical" }}
@@ -1953,6 +2174,10 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             autoComplete="off"
             spellCheck="true"
           />
+        </div>
+
+        <div className="mt-4">
+          {HandwritingPad()}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-3">
@@ -1988,28 +2213,57 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             </div>
           </div>
 
-          <TreeTabs />
+          {TreeTabs()}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border bg-slate-50 p-4">
               <h4 className="font-semibold">Terénní poznámky</h4>
               <div className="mt-2 max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-sm">
-                {String(tree.fieldNotes ?? "").trim() || "-"}
+                {String(fieldNotesDraft ?? tree.fieldNotes ?? "").trim() || "-"}
               </div>
 
               <h4 className="mt-4 font-semibold">Fotografie pro report</h4>
-              <div className="mt-2 space-y-2">
-                {(tree.photos ?? []).filter((photo) => photo.useInReport ?? true).map((photo) => (
-                  <button key={photo.id} type="button" onClick={() => setPhotoViewer(photo)} className="flex w-full items-center gap-3 rounded-xl border bg-white p-2 text-left">
-                    <div className="h-14 w-14 overflow-hidden rounded-lg bg-slate-200">
-                      {photo.dataUrl && <img src={photo.dataUrl} alt={photo.name || photo.id} className="h-full w-full object-cover" />}
+              <div className="mt-2 space-y-3">
+                {(tree.photos ?? []).map((photo) => {
+                  const description = photoDescriptionDrafts[photo.id] ?? photo.description ?? "";
+                  const useInReport = photo.useInReport ?? true;
+
+                  return (
+                    <div key={photo.id} className={`rounded-xl border bg-white p-3 ${useInReport ? "" : "opacity-60"}`}>
+                      <button type="button" onClick={() => setPhotoViewer(photo)} className="flex w-full items-center gap-3 text-left">
+                        <div className="h-14 w-14 overflow-hidden rounded-lg bg-slate-200">
+                          {photo.dataUrl && <img src={photo.dataUrl} alt={photo.name || photo.id} className="h-full w-full object-cover" />}
+                        </div>
+                        <div className="min-w-0 text-xs">
+                          <div className="truncate font-medium">{description || photo.name || photo.id}</div>
+                          <div className="text-slate-500">{photo.name}</div>
+                        </div>
+                      </button>
+
+                      <label className="mt-3 block text-xs font-medium text-slate-600">
+                        Popis fotografie
+                        <input
+                          value={description}
+                          maxLength={100}
+                          onChange={(e) => setPhotoDescriptionDrafts((prev) => ({ ...prev, [photo.id]: e.target.value.slice(0, 100) }))}
+                          onBlur={() => updateReportPhoto(activeReportTree, photo.id, { description })}
+                          placeholder="Krátký popis, max. 100 znaků"
+                          className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
+                        />
+                        <span className="mt-1 block text-right text-[11px] text-slate-500">{description.length}/100</span>
+                      </label>
+
+                      <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={useInReport}
+                          onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { useInReport: e.target.checked })}
+                        />
+                        Použít v reportu
+                      </label>
                     </div>
-                    <div className="min-w-0 text-xs">
-                      <div className="truncate font-medium">{photo.description || photo.name || photo.id}</div>
-                      <div className="text-slate-500">{photo.name}</div>
-                    </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -2036,7 +2290,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
   return (
     <>
-      {reportStep === "field" ? <FieldCollectionStep /> : <ReportWritingStep />}
+      {reportStep === "field" ? FieldCollectionStep() : ReportWritingStep()}
 
       {photoViewer && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950 p-4 text-white">
