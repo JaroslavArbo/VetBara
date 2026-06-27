@@ -1,0 +1,1559 @@
+{
+  "kind": "vetbara.certificationPackage.v1",
+  "packageId": "vetbara-cert-package-1780854559516-f4281b3c-authoring-authoring-authoring",
+  "createdAt": "2026-06-13T07:20:21.753Z",
+  "sourceFiles": {
+    "source": "Admin structured authoring interface",
+    "version": "2026-06-07"
+  },
+  "contentSource": "admin-structured-authoring",
+  "uiLanguageIndependent": true,
+  "rulesDocuments": [
+    {
+      "id": "vetcert-system-exam-rules-cz-2020",
+      "sourceId": "vetcert-system-exam-rules-cz-2020",
+      "title": "VETcert: Informace o systému, Pravidla zkoušky",
+      "language": "cs",
+      "fileName": "VETcert_Rules_020620_CZ_clear.docx",
+      "publicPath": "/vetcert-rules/VETcert_Rules_020620_CZ_clear.docx",
+      "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "audience": "Centre / Admin",
+      "content": "Hlavní pravidla zkoušky VETcert. Celková známka úspěšnosti všech částí zkoušky je 75 %. Pro každou část zkoušky je požadována minimální úspěšnost 50 %. Kandidát úspěšně složí kompletní zkoušku pouze při dosažení těchto výsledků. Zkouška je členěna na úroveň Praktik a Konzultant; úroveň Konzultant zahrnuje písemnou zkoušku, venkovní demonstraci a zpracování posudku."
+    },
+    {
+      "id": "vetcert-consulting-indoor-rules-cz-2020",
+      "sourceId": "vetcert-consulting-indoor-rules-cz-2020",
+      "title": "VETCERT Pravidla zkoušky - úroveň konzultant - písemná zkouška",
+      "language": "cs",
+      "fileName": "VETcert_C_Exam_rules_inside_exam_paper_CZ_april2020.pdf",
+      "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_inside_exam_paper_CZ_april2020.pdf",
+      "mimeType": "application/pdf",
+      "audience": "Candidate",
+      "content": "Instrukce pro kandidáty pro písemnou zkoušku v učebně na úrovni Konzultant. Kandidát má 120 minut na splnění písemného testu. Test obsahuje otevřené otázky vyžadující rozepsané odpovědi. Kandidát se má pokusit odpovědět na všechny otázky, nesmí konzultovat s ostatními kandidáty a nesmí používat technologické pomůcky."
+    },
+    {
+      "id": "vetcert-consulting-outdoor-rules-en-2023",
+      "sourceId": "vetcert-consulting-outdoor-rules-en-2023",
+      "title": "VETCERT Exam rules - Consulting Level - Outdoor exercises",
+      "language": "en",
+      "fileName": "VETcert_C_Exam_rules_outside_March_2023.pdf",
+      "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_outside_March_2023.pdf",
+      "mimeType": "application/pdf",
+      "audience": "Candidate",
+      "content": "Outdoor exercises, Consulting level. The outdoor session lasts 120 minutes. Exercise 1 is a survey of two veteran trees and later management-plan preparation; the management plan is worth 117 marks. Exercises 2, 3 and generic oral questions are worth 58 marks. Candidates may use a camera for management-plan photos, but no other electronic technology may be used."
+    },
+    {
+      "id": "vetcert-consulting-indoor-rules-en-2020",
+      "sourceId": "vetcert-consulting-indoor-rules-en-2020",
+      "title": "VETCERT Exam rules - Consulting Level - Indoor exam paper",
+      "language": "en",
+      "fileName": "VETcert_C_Exam_rules_inside_exam_paper_Apr_2020.pdf",
+      "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_inside_exam_paper_Apr_2020.pdf",
+      "mimeType": "application/pdf",
+      "audience": "Candidate",
+      "content": "Instructions to candidates for the Consulting level indoor exam paper. Candidates have 120 minutes to complete the exam paper. The paper contains questions requiring short written answers. Candidates should attempt all questions, must not confer with other candidates and may not use technology."
+    }
+  ],
+  "authoring": {
+    "title": "VETCERT examination package",
+    "version": "2026-06-07",
+    "language": "English",
+    "updatedAt": "2026-06-13T07:20:21.753Z",
+    "rulesDocuments": [
+      {
+        "id": "vetcert-system-exam-rules-cz-2020",
+        "sourceId": "vetcert-system-exam-rules-cz-2020",
+        "title": "VETcert: Informace o systému, Pravidla zkoušky",
+        "language": "cs",
+        "fileName": "VETcert_Rules_020620_CZ_clear.docx",
+        "publicPath": "/vetcert-rules/VETcert_Rules_020620_CZ_clear.docx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "audience": "Centre / Admin",
+        "content": "Hlavní pravidla zkoušky VETcert. Celková známka úspěšnosti všech částí zkoušky je 75 %. Pro každou část zkoušky je požadována minimální úspěšnost 50 %. Kandidát úspěšně složí kompletní zkoušku pouze při dosažení těchto výsledků. Zkouška je členěna na úroveň Praktik a Konzultant; úroveň Konzultant zahrnuje písemnou zkoušku, venkovní demonstraci a zpracování posudku."
+      },
+      {
+        "id": "vetcert-consulting-indoor-rules-cz-2020",
+        "sourceId": "vetcert-consulting-indoor-rules-cz-2020",
+        "title": "VETCERT Pravidla zkoušky - úroveň konzultant - písemná zkouška",
+        "language": "cs",
+        "fileName": "VETcert_C_Exam_rules_inside_exam_paper_CZ_april2020.pdf",
+        "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_inside_exam_paper_CZ_april2020.pdf",
+        "mimeType": "application/pdf",
+        "audience": "Candidate",
+        "content": "Instrukce pro kandidáty pro písemnou zkoušku v učebně na úrovni Konzultant. Kandidát má 120 minut na splnění písemného testu. Test obsahuje otevřené otázky vyžadující rozepsané odpovědi. Kandidát se má pokusit odpovědět na všechny otázky, nesmí konzultovat s ostatními kandidáty a nesmí používat technologické pomůcky."
+      },
+      {
+        "id": "vetcert-consulting-outdoor-rules-en-2023",
+        "sourceId": "vetcert-consulting-outdoor-rules-en-2023",
+        "title": "VETCERT Exam rules - Consulting Level - Outdoor exercises",
+        "language": "en",
+        "fileName": "VETcert_C_Exam_rules_outside_March_2023.pdf",
+        "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_outside_March_2023.pdf",
+        "mimeType": "application/pdf",
+        "audience": "Candidate",
+        "content": "Outdoor exercises, Consulting level. The outdoor session lasts 120 minutes. Exercise 1 is a survey of two veteran trees and later management-plan preparation; the management plan is worth 117 marks. Exercises 2, 3 and generic oral questions are worth 58 marks. Candidates may use a camera for management-plan photos, but no other electronic technology may be used."
+      },
+      {
+        "id": "vetcert-consulting-indoor-rules-en-2020",
+        "sourceId": "vetcert-consulting-indoor-rules-en-2020",
+        "title": "VETCERT Exam rules - Consulting Level - Indoor exam paper",
+        "language": "en",
+        "fileName": "VETcert_C_Exam_rules_inside_exam_paper_Apr_2020.pdf",
+        "publicPath": "/vetcert-rules/VETcert_C_Exam_rules_inside_exam_paper_Apr_2020.pdf",
+        "mimeType": "application/pdf",
+        "audience": "Candidate",
+        "content": "Instructions to candidates for the Consulting level indoor exam paper. Candidates have 120 minutes to complete the exam paper. The paper contains questions requiring short written answers. Candidates should attempt all questions, must not confer with other candidates and may not use technology."
+      }
+    ],
+    "documents": {
+      "writtenPracticing": {
+        "title": "Practicing written answers",
+        "preface": "Section A contains multiple choice questions. Section B contains written-answer questions grouped into themes. Each question carries the stated number of marks.",
+        "candidateIntro": "Choose the best answer for multiple-choice questions and answer all written questions as fully as possible."
+      },
+      "writtenConsulting": {
+        "title": "Consulting written answers",
+        "preface": "This written exam paper contains questions requiring written answers. Questions are grouped into themes and each question carries the stated number of marks.",
+        "candidateIntro": "Answer all questions. Provide concise technical answers and include examples where the question asks for them."
+      },
+      "outdoorPracticing": {
+        "title": "Practicing outdoor exercises",
+        "preface": "Practising level outdoor exercises. Examiner copy. The paper includes generic oral questions and tree-based exercises; the section and mark structure is edited here as the source of truth.",
+        "candidateIntro": "The outdoor session lasts approximately 120 minutes. Candidates should attempt all questions and follow examiner instructions at each tree. A total of 102 marks are available for this paper – 26 marks for Section 1 and 76 marks for Section 2.\nThese exercises are worth 69% of the overall marks, the written paper is worth the remaining 31% of the marks.\n\n“The outdoor session will last approximately 120 minutes. It will involve some generic questions and some questions relating to specific tasks. I will explain\nthe first specific task now; the others will be explained when you are taken to the next tree.\nYou should attempt to answer all questions. No written answers are required. There are 102 marks available for the outdoor exercises. These exercises are\nworth 69% of the overall marks, the written paper is worth the remaining 31% of the marks.\nPlease ensure that you wear your hi-vis vest at all times. Please do not confer with other candidate(s); when I am examining another candidate please\nprovide us some space. The use of technology (phone, camera, etc) is not permitted.\nThe first exercise involves a pre-work assessment of a veteran tree. Here is a management plan for this tree (hand candidate management plan). Please\nassess the tree, I will then ask you about your findings and how you plan to undertake the work. When assessing the tree, I would like you to consider the\nfollowing:\n● Health/vitality of the tree.\n● Structural condition (biomechanics) of the tree.\n● The potential impacts of the work on the tree.\n● How the work will be planned. I will provide you with a blank plan to mark-up to illustrate how you intend to get onto and off the site, where vehicles\nwill be parked, where plant will be positioned, what equipment is being brought onto site, where this equipment will be stored and measures you will\ntake to avoid damage on sensitive habitats and prevent the spread of disease.\n● How you would access the tree and undertake work in a way that minimises damage on sensitive features.\nPractising level - Outside exercises – Questions (examiner copy) – March 2023 5\n● Where you will place your final cuts.\nI will leave you to conduct your survey. I will collect each of you in turn to ask you some oral questions Do you have any questions?”"
+      },
+      "outdoorConsulting": {
+        "title": "Consulting outdoor exercises",
+        "preface": "Consulting level outdoor exercises including oral questions. Examiner copy. Generic questions and tree/site exercises are edited here as the source of truth.",
+        "candidateIntro": "Candidates have 120 minutes to complete the exercises and answer oral questions. Most oral questions are mandatory; some follow-up questions are asked only when triggered by the candidate's answer."
+      }
+    }
+  },
+  "variants": {
+    "Practicing": {
+      "code": "PRACTICING_ADMIN_PACKAGE",
+      "level": "Practicing",
+      "writtenQuestionCount": 34,
+      "writtenMax": 46,
+      "outdoorItemCount": 32,
+      "outdoorMax": 100
+    },
+    "Consulting": {
+      "code": "CONSULTING_ADMIN_PACKAGE",
+      "level": "Consulting",
+      "writtenQuestionCount": 42,
+      "writtenMax": 96,
+      "outdoorItemCount": 19,
+      "outdoorMax": 58
+    }
+  },
+  "written": {
+    "Practicing": {
+      "level": "Practicing",
+      "title": "Practicing written answers",
+      "preface": "Section A contains multiple choice questions. Section B contains written-answer questions grouped into themes. Each question carries the stated number of marks.",
+      "candidateIntro": "Choose the best answer for multiple-choice questions and answer all written questions as fully as possible.",
+      "questions": [
+        {
+          "id": "P-W-A01",
+          "number": 1,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "In relation to the physiological and structural function of a tree, what is a ‘functional unit’?",
+          "options": [
+            "A. A semi-autonomous unit comprising roots, trunk and shoo ts.",
+            "B. A collection of tissues operating in an orderly fashion to produce a predetermined product.",
+            "C. The cells that form when a wound is created.",
+            "D. The section of trunk below the pollard knuckle. about:blank 1 Question Notes / answer guidance Marks"
+          ],
+          "correctAnswer": "A",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A02",
+          "number": 2,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "Why are functional units relevant to veteran tree management?",
+          "options": [
+            "A. They are not visible from the outside of a tree.",
+            "B. It is where a pollard will re-grow from.",
+            "C. These cells will form after pruning a tree.",
+            "D. Functional units need to be considered individually whe n prescribing management."
+          ],
+          "correctAnswer": "D",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A03",
+          "number": 3,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "Different tree species have different characteristics that influence the effects of damage and decay. How might knowing whether a tree species contains durable heartwood influence management?",
+          "options": [
+            "A. Trees without durable heartwood should not be cut during the winter.",
+            "B. Trees without durable heartwood should not be cut during the summer.",
+            "C. Durable heartwood has passive defences that help reduce the spread of decay following pruning.",
+            "D. Durable heartwood has active defences that help reduce the spread of decay following pruning."
+          ],
+          "correctAnswer": "C",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A04",
+          "number": 4,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "Broadly speaking, how do roots of a veteran tree grow?",
+          "options": [
+            "A. Like a mirror image of the above ground parts of the tree.",
+            "B. Like the base of a wine glass, wider than deep.",
+            "C. Evenly within a given volume of soil.",
+            "D. Tree roots grow deep in the soil, in search of water."
+          ],
+          "correctAnswer": "B",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A05",
+          "number": 5,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "How will pruning the above-ground parts of a veteran tree affect roots?",
+          "options": [
+            "A. It will encourage more root growth.",
+            "B. It will cause some roots to die.",
+            "C. It will not have an effect on tree roots.",
+            "D. It will cause structural roots to decay. "
+          ],
+          "correctAnswer": "B",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A06",
+          "number": 6,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "What role do mycorrhizal fungi play in the ecosystem?",
+          "options": [
+            "A. They decay wood.",
+            "B. They compete with tree roots for resources.",
+            "C. They live parasitically on tree roots.",
+            "D. They help tree roots take up water and nutrients."
+          ],
+          "correctAnswer": "D",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A07",
+          "number": 7,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "From an ecological perspective, why is it important to have flowering plants near to veteran trees?",
+          "options": [
+            "A. They make the landscape look more attractive.",
+            "B. Larval stages of invertebrates often require a nectar source.",
+            "C. Adult stages of invertebrates often require a nectar source.",
+            "D. They attract species, helping them find the veteran trees."
+          ],
+          "correctAnswer": "C",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A08",
+          "number": 8,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "According to the Ancient Tree Forum’s guidance, how big should the root protection area for a veteran tree be?",
+          "options": [
+            "A. 10 times the diameter at 1.5m.",
+            "B. 12 times the diameter at 1.5m",
+            "C. 15 times the diameter at 1.5m",
+            "D. 17 times the diameter at 1.5m"
+          ],
+          "correctAnswer": "C",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A09",
+          "number": 9,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "What should you not do within a root protection area of a veteran tree?",
+          "options": [
+            "A. Change the soil level.",
+            "B. Undertake tree management.",
+            "C. Lay mulch.",
+            "D. Undertake root investigations."
+          ],
+          "correctAnswer": "A",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-A10",
+          "number": 10,
+          "section": "Section A",
+          "theme": "The development and aging of trees",
+          "type": "multipleChoice",
+          "text": "What will be the implications of a high mortality rate of veteran trees at a site?",
+          "options": [
+            "A. Pressure on budgets.",
+            "B. A requirement for tree safety work.",
+            "C. Impacts on the sustainability of veteran tree populations.",
+            "D. A detrimental impact on soil health. "
+          ],
+          "correctAnswer": "C",
+          "scoringHelp": "",
+          "max": 1
+        },
+        {
+          "id": "P-W-B01",
+          "number": 11,
+          "section": "Section B",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "A wide range of factors influence how trees grow. List 2 environmental factors (external to the tree), 2 biological factors (internal) and 2 factors relating to management that can affect the growth of veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Environmental\nSoil, climate, exposure, sunlight/shade (including shade from ivy and taking account of the\nshade-tolerance of the tree species concerned), pollution, wind and other external stimuli.\n\nBiological\nVariations between, and within, tree species, including the health of the individual tree.\n\nManagement\nVariations in growth form linked to history of management, lapses in management,\nmanagement in cycle, type of management.",
+          "max": 2
+        },
+        {
+          "id": "P-W-B02",
+          "number": 12,
+          "section": "Section B",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Pruning has a negative impact on the physiological function of a tree. Once a branch on a\nveteran tree has been cut, what is the primary agent that enters functional wood and\ncauses it to become dysfunctional?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Oxygen",
+          "max": 1
+        },
+        {
+          "id": "P-W-B03",
+          "number": 13,
+          "section": "Section B",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Veteran trees have passive and active defences mechanisms for responding to stress or\ndamage. Provide 2 examples of passive defences.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Passive defence\nHigh moisture content and very low oxygen content of wood. Bark. Natural preservatives in\nheartwood of some species limit the rate of decay. Existing anatomical boundaries in wood\n(annual rings, latewood and earlywood, rays, etc) act as barriers. Tylosis/bordered pits.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B04",
+          "number": 14,
+          "section": "Section B",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "A healthy soil environment is essential for the health of veteran trees. Why?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "A healthy soil environment is essential for tree roots to function properly.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B05",
+          "number": 15,
+          "section": "Section B",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Please describe the characteristics of a sandy soil, with specific mention of air and water.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Free draining ● Oxygen abundant ● Compaction resistant",
+          "max": 2
+        },
+        {
+          "id": "P-W-B06",
+          "number": 16,
+          "section": "Section B",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Excessive urine and dung of livestock deposited in the rooting area of a veteran tree will negatively impact upon a veteran tree. How?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Excessive nutrients can adversely affect the symbiotic relationship with mycorrhizas. 4 Notes / answer guidance Marks",
+          "max": 1
+        },
+        {
+          "id": "P-W-B07",
+          "number": 17,
+          "section": "Section B",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Trees are sensitive to changes in the soil environment. Describe how the following changes can impact upon tree roots. 1. Soil compaction 2. Change of soil level",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Soil compaction Reduction or removal of air spaces within soil leading to unfavourable, anaerobic conditions. Change of soil level Alters aerobic/anaerobic conditions. Potential to expose and damage roots.",
+          "max": 2
+        },
+        {
+          "id": "P-W-B08",
+          "number": 18,
+          "section": "Section B",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Root protection areas are used to protect the roots and soil around a veteran tree in\nabsence of knowledge of actual root location. List 2 factors that might affect actual root\nlocation.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Oxygen availability\n● Water availability (lack of water/too much water)\n● Availability of minerals and nutrients\n● Presence of other organisms e.g. symbiotic relationships with bacteria or mycorrhizas\n● pH\n● Adverse changes to soil environment\n● Previous damage\n● Physical barriers",
+          "max": 2
+        },
+        {
+          "id": "P-W-B09",
+          "number": 19,
+          "section": "Section B",
+          "theme": "Veteran trees and their values",
+          "type": "written",
+          "text": "The presence of veteran trees today demonstrates that they have survived in the\nlandscape for a long period of time. Provide 2 cultural factors that may have played a\npart in ensuring veteran trees remained within the landscape. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Cultural heritage: linked to local traditions, management of land (wood products/fodder for livestock), link to historical event or person, sacred trees, ...\n● Aesthetic: their appearance and context as individuals and in groups of veteran trees, air of stability.\n● Continuity of land ownership, boundary trees, recognition of values veteran trees provide, too expensive to remove, ...",
+          "max": 2
+        },
+        {
+          "id": "P-W-B10",
+          "number": 20,
+          "section": "Section B",
+          "theme": "Veteran trees and their values",
+          "type": "written",
+          "text": "Generally, the longer a veteran tree has been present in a landscape the greater its\necological value. Provide 1 reason why.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Some habitats take a long time to form, the wildlife species dependent on them require\nstable habitats for a long period of time.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B11",
+          "number": 21,
+          "section": "Section B",
+          "theme": "Veteran trees and their values",
+          "type": "written",
+          "text": "Give 3 examples of how habitats may vary between veteran trees at the same site. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Tree species (different characteristics of parent material i.e. wood)\n● Species of fungi involved with decay\n● Presence of different types and stages of decay (white rot, brown rot, soft rot, wood mould)\n● Differences between how quickly the wood became dysfunctional (i.e. quick or slow)\n● Age of tree\n● History of management\n● History of damage\n● Length of time microhabitats have been present\n● Interactions between species (e.g. woodpecker holes and bats)\n● Size and location of decaying wood",
+          "max": 3
+        },
+        {
+          "id": "P-W-B12",
+          "number": 22,
+          "section": "Section B",
+          "theme": "Veteran trees and their values",
+          "type": "written",
+          "text": "Why might the distances between veteran trees affect their ecological value?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "The dispersal range of some wildlife (notably insects and other invertebrates) is limited.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B13",
+          "number": 23,
+          "section": "Section B",
+          "theme": "Legislation affecting veteran tree management",
+          "type": "written",
+          "text": "There are various pieces of legislation that need to be considered during veteran tree\nmanagement. Describe what you, as a practitioner, would need to do to comply with the\nfollowing types of legislation.\n● Wildlife legislation\n● Heritage legislation",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Wildlife legislation\n● Conduct a survey\n● Adjust work plan to take account of species present e.g. retain habitat rather than remove, time works to avoid sensitive periods (e.g. bird nesting), retain or resurrect decaying wood.\n\nHeritage legislation\n● Check whether the site, buildings or structure are protected\n● Those managing sites with such features must preserve them. Damage may be caused by excavation or trees uprooting.",
+          "max": 2
+        },
+        {
+          "id": "P-W-B14",
+          "number": 24,
+          "section": "Section B",
+          "theme": "Legislation affecting veteran tree management",
+          "type": "written",
+          "text": "Before working on a veteran tree in another country/region what should you consider?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Different pieces of legislation, different things prohibited/protected/permitted.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B15",
+          "number": 25,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "What is the overall aim of veteran tree management?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "No avoidable loss of veteran tree (or similar statement).",
+          "max": 1
+        },
+        {
+          "id": "P-W-B16",
+          "number": 26,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "What is the first thing you should consider before undertaking management on a veteran tree?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Does anything need to be done? Is management required?",
+          "max": 1
+        },
+        {
+          "id": "P-W-B17",
+          "number": 27,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "Give 2 examples of how the management of veteran trees differs from the management of younger trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Size of root protection areas, retention of stubs instead of target pruning (using\nknowledge of species-dependent epicormic shoot formation), allowing natural crown\nretrenchment/retaining epicormic low down in tree, natural fracture cuts, more\nemphasis on selecting particular branches for tree work, functional units, …",
+          "max": 1
+        },
+        {
+          "id": "P-W-B18",
+          "number": 28,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "For the examples given above, explain why there is a difference.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Size of root protection areas – precautionary principle to protect a greater area of soil.\n● Retention of stubs instead of target pruning (using knowledge of species-dependent epicormic shoot formation) – to encourage fresh shoot production.\n● Allowing natural crown retrenchment/retaining epicormic low down in tree – working with the tree’s natural strategies for longevity.\n● Natural fracture cuts – more natural look, greater wood decay resource?\n● More emphasis on selecting particular branches for tree work/functional units – working with the changing dynamics of the trees vascular system.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B19",
+          "number": 29,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "Give 2 reasons why is it important to undertake monitoring in veteran tree management.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Is the management having the desired effect?\n● If no, does management need to be changed or ceased?",
+          "max": 1
+        },
+        {
+          "id": "P-W-B20",
+          "number": 30,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "You are asked to install cabling or bracing in a veteran tree that has an existing, old cabling or bracing system. List 2 things you would need to consider before installing the new cabling or bracing.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● What effect the old bracing is having on the tree.\n● Where should new bracing be installed relative to the old bracing?\n● Should the old bracing be removed, or should it be retained?\n● ….",
+          "max": 1
+        },
+        {
+          "id": "P-W-B21",
+          "number": 31,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "A management plan requires the installation of a prop to support a limb on a veteran tree. List 2 actions can you take to avoid/minimise damage to the tree when installing the prop.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● How are the prop materials transported to the tree?\n● The positioning of the prop considers sensitive features (in tree or on surrounding land).\n● How does the prop contact the ground? Are foundations needed? If so, sensitive design of foundations.\n● Does/how does the prop contact the tree? Design of prop head e.g. surface area, contact material, pressure.\n● Prop constructed in sections or extendable, to allow adjustment on site.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B22",
+          "number": 32,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "Give 2 reasons why it is important to have public support for protecting and managing veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Funding (easier access to money/funding).\n● Avoids complaints after management has been undertaken.\n● Protection is easier if people value veteran trees.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B23",
+          "number": 33,
+          "section": "Section B",
+          "theme": "Veteran tree management",
+          "type": "written",
+          "text": "A client requires a written report on the structural condition of a veteran tree. As a practitioner, what would you recommend?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Tell them to contact a VETcert consultant. Do not produce a written report themselves.",
+          "max": 1
+        },
+        {
+          "id": "P-W-B24",
+          "number": 34,
+          "section": "Section B",
+          "theme": "Country specific question(s)",
+          "type": "written",
+          "text": "Historically, in an attempt to restart the pollarding cycle, lapsed pollards were cut back to the original bolling. Describe at least 2 problems can this has caused.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Tree decline \n● Big wounding \n● …… ",
+          "max": 5
+        }
+      ]
+    },
+    "Consulting": {
+      "level": "Consulting",
+      "title": "Consulting written answers",
+      "preface": "This written exam paper contains questions requiring written answers. Questions are grouped into themes and each question carries the stated number of marks.",
+      "candidateIntro": "Answer all questions. Provide concise technical answers and include examples where the question asks for them.",
+      "questions": [
+        {
+          "id": "C-W-B01",
+          "number": 1,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "A wide range of factors influence how trees grow. List s 2 abiotic factors (external to the tree) and 2 factors M relating to management that can affect the growth of V veteran trees. m",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Abiotic\nSoil, climate, exposure, sunlight/shade (including shade from ivy and taking account of the\nshade-tolerance of the tree species concerned), pollution, wind and other external stimuli.\nManagement\nVariations in growth form linked to history of management, lapses in management,\nmanagement in cycle, type of management.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B02",
+          "number": 2,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Describe how veteran trees naturally hollow over time.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Loss of tap root as tree ages.\n● Hollowing extends from inside to outside, within dysfunctional wood (heartwood/ripewood).",
+          "max": 2
+        },
+        {
+          "id": "C-W-B03",
+          "number": 3,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "How is stem hollowing beneficial for the veteran tree.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Recycling of minerals and nutrients previously ‘locked-up’ in dysfunctional wood (heartwood/ripewood).\n● Tree can produce aerial/internal roots to ‘feed’ on organic matter released as part of the wood decay process.\n● May be more flexible when subjected to wind.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B04",
+          "number": 4,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Identify 2 factors that may be the cause of stress in veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Limited resources required for growth and normal function e.g. water (drought), oxygen (water logging), sunlight (shading), minerals and nutrients (depleted or compromised soil environment).\n● Browsing or natural disasters removing foliage or causing damage to functional wood.\n● Damage to functional wood (aeration caused by wounding) e.g. pruning or ploughing).\n● Pests or diseases that disrupt normal function.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B05",
+          "number": 5,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Pruning has a negative impact on the physiological function of a tree. Once a branch on a veteran tree has been cut, what is the primary agent that enters functional wood and causes it to become dysfunctional?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Oxygen",
+          "max": 1
+        },
+        {
+          "id": "C-W-B06",
+          "number": 6,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "What does the presence of the above agent encourage the development of?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Decay (following dysfunction)",
+          "max": 1
+        },
+        {
+          "id": "C-W-B07",
+          "number": 7,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Veteran trees have passive and active defences mechanisms for responding to stress or damage. Provide 2 examples of a passive defence.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Passive defence\nHigh moisture content and very low oxygen content of wood. Bark. Natural preservatives in\nheartwood of some species limit the rate of decay. Existing anatomical boundaries in wood\n(annual rings, latewood and earlywood, rays, etc) act as barriers. Tylosis/bordered pits.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B08",
+          "number": 8,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "In relation to dysfunction and decay that can occur after injury, explain the differences between Quercus (oak) and Betula (birch).",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Candidates must compare and contrast to receive marks e.g. ‘Quercus has durable\nheartwood and Betula has non-durable heartwood’ would score 1 mark. To score 2 marks\ncandidates must provide 2 correct couples of information.\n● Quercus (oak) – ring porous, high decay resistance of sapwood, presence of durable\nheartwood (passively restricts decay) and high (but variable) ability to produce\nepicormic shoots.\n● Betula (birch) – diffuse porous, low decay resistance of sapwood, presence of non-\ndurable heartwood (limited resistance to decay) low ability to produce epicormic\nshoots (unless coppiced).",
+          "max": 2
+        },
+        {
+          "id": "C-W-B09",
+          "number": 9,
+          "section": "",
+          "theme": "The development and aging of trees",
+          "type": "written",
+          "text": "Describe latency as a fungal strategy.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Fungal spores present in wood.\n● Proliferate (cause decay) when conditions become favourable (increase in oxygen).",
+          "max": 2
+        },
+        {
+          "id": "C-W-B10",
+          "number": 10,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Explain the relationship between mycorrhizal fungi and tree roots and why this is essential for veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Mycorrhizal fungi provide the tree with hard-to-get nutrients (particularly phosphorus) and perhaps some protection from drought, fungal diseases and soil toxins such as heavy metal pollution.\n● Trees provide mycorrhizal fungi with carbohydrates and other products from the tree.\n● This relation is essential to ensure the tree can obtain the nutrients it requires. The fungus can also offer protection from drought and pests/pathogens.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B11",
+          "number": 11,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Describe how the following organisms contribute to the function of a healthy soil: \n• Wood decay fungi \n• Bacteria \n• Detritivores",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Wood decay fungi\n● Recycles minerals and nutrients back into soil supporting carbon and nitrogen cycles as well as a diverse soil flora and fauna.\n\nBacteria\n● Nitrogen fixing bacteria convert atmospheric nitrogen into a form which is accessible to tree roots/mycorrhizae.\n● Some bacteria are involved in establishment of mycorrhizal associations with roots.\n\nDetritivores\n● Aid nutrient cycling through consuming and digesting organic matter.\n",
+          "max": 3
+        },
+        {
+          "id": "C-W-B12",
+          "number": 12,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Please describe the characteristics of a sandy soil, with specific mention of air and water.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Free draining\n● Oxygen abundant\n● Compaction resistant",
+          "max": 2
+        },
+        {
+          "id": "C-W-B13",
+          "number": 13,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "When recommending management for a veteran tree site with a sandy soil, how might the soil type affect your recommendations?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Consideration of potential drought stress during periods of hot weather.\n● Likelihood that roots will travel deeper than on less well-drained soils.\n● Soil has some natural resistance to compaction, compared to a clay soil for example.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B14",
+          "number": 14,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Provide 3 different types of soil damage.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Compaction: Reduction or removal of air spaces within soil leading to unfavourable, anaerobic conditions.\n● Erosion: displacement of soil.\n● Changes in soil level: alters aerobic/anaerobic conditions.\n● Changes in hydrology: change in water table or in ground water conditions alter aerobic/anaerobic conditions.\n● Cultivation/ploughing: direct damage to roots in upper soil area.\n● Chemical damage: De-icing salt damage, herbicide, fungicide, veterinary medicines, chemicals used in tree management.\n\n½ mark for up to 2 correct sources of damage. 1 mark for 3 correct sources of damage.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B15",
+          "number": 15,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "For the examples given above, describe the effects they have on veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Compaction: Restricts root growth, in too dense for roots to penetrate. Can cause roots to die due to lack of oxygen.\n● Erosion: Removes soil exposing roots to the air, damaging fine roots and restricting water/nutrient uptake.\n● Changes in soil level: Soil level lowered - exposes roots (see erosion) or damages roots in the process. Soil level raised - alters aerobic/anaerobic conditions and can cause roots to die due to lack of oxygen.\n● Changes in hydrology: Can cause roots to die due to lack of oxygen.\n● Cultivation/ploughing: Creates wounds and causes dysfunction affecting water and nutrient uptake.\n● Chemical damage: Can be toxic to roots. Prevents normal function. Reverse osmosis, causing drought stress.",
+          "max": 3
+        },
+        {
+          "id": "C-W-B16",
+          "number": 16,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "For the examples given above, provide an option for avoiding or reducing damage to\nveteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Compaction:\no Avoid - Set up a root protection area.\no Reduce – Use ground protection to spread load. Mulch soil around tree to encourage beneficial soil fauna, which will naturally recompact soil. Use physical decompaction tools e.g. hollow tine aeration, compressed air.\n\n● Erosion:\no Avoid – Maintain vegetation cover to hold soil together. Avoid large discharges of water. Prevent access to rooting area – i.e. set up a root protection area.\no Reduce – Replace eroded soil if certain that this won’t cause an adverse effect (i.e. raising soil levels – only suitable if erosion is recent and a small amount of soil is lost). Cover affected area with mulch.\n\n● Changes in soil level:\no Avoid - Set up a root protection area.\no Reduce –Remove soil if only recently deposited and fine roots haven’t grown into the raised area (raised soil level). Replace removed soil if certain that this won’t cause an adverse effect (i.e. raising soil levels). Only suitable if erosion\nis recent and a small amount of soil has been removed. Cover affected area with mulch.\n\n● Changes in hydrology:\no Avoid - Set up a root protection area.\no Reduce – Investigate options to reinstate normal hydrology.\n\n● Cultivation/ploughing:\no Avoid - Set up a root protection area.\no Reduce – If regular ploughing is undertake and needs to be continued, ensure that this is undertaken on a regular basis rather than there being a lapse before recommencing.\n\n● Chemical damage:\no Avoid - Set up a root protection area. Treat livestock off site and allow chemicals to pass through system before turning them out.\no Reduce – Wash pollutant(s) through soil with water.",
+          "max": 3
+        },
+        {
+          "id": "C-W-B17",
+          "number": 17,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Root protection areas are used to protect the roots and soil around a veteran tree in\nabsence of knowledge of actual root location. List 3 factors that might affect root\nlocation.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Oxygen availability\n● Water availability (lack of water/too much water)\n● Availability of minerals and nutrients\n● Presence of other organisms e.g. symbiotic relationships with bacteria or mycorrhizas\n● pH\n● Adverse changes to soil environment\n● Previous damage\n● Physical barriers",
+          "max": 3
+        },
+        {
+          "id": "C-W-B18",
+          "number": 18,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Identify 2 methods of root detection.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Dig hole.\n● Ground penetrating radar.\n● Root tomography.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B19",
+          "number": 19,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "Provide 2 advantages and 2 disadvantages for the methods identified above. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Dig hole – advantages\n● Quick and easy if small areas excavated, only basic tools required.\n● Cheaper than other options.\n● Definitive proof provided i.e. you can see roots.\n● Can detect all sizes of roots.\n● Can be undertaken on sloping ground (up to a point).\n\nDig hole – disadvantages\n● Only suitable for small-scale investigations.\n● Potential to damage roots – wounding or desiccation.\n● Difficult in urban areas or areas where soil is covered.\n● Any pictorial representation must be produced manually (i.e. drawn).\n● Cannot progress past first roots uncovered (without damaging them).\n\nCompressed air excavation - advantages\n● Quicker than a normal spade.\n● Less damage than a conventional spade.\n● Definitive proof provided i.e. you can see roots.\n● Can detect all sizes of roots.\n● Can be undertaken on sloping ground (up to a point).\n\nCompressed air excavation - advantages\n● More expensive than a conventional spade.\n● Very messy.\n● Potentially dangerous (to operator and bystanders).\n● Potential adverse effects of using a compressor (soil compaction, fuel spillage, emissions).\n● Damages fine roots.\n● Difficult in urban areas or areas where soil is covered.\n● Any pictorial representation must be produced manually (i.e. drawn).\n● Cannot progress past first roots uncovered (without damaging them).\n\nGround penetrating radar – advantages\n● Can cover a large area in a short time.\n● Results can be presented pictorially.\n● Non-invasive.\n● Can survey down to a reasonable depth and this can be mapped.\n\nGround penetrating radar – disadvantages\n● Can only detect roots over a certain size (no fine roots or mycorrhizae).\n● Less suitable in urban environments or where soil is covered.\n● Can give false positives where water pipes are present.\n● Expensive.\n● Difficult on sloping ground.\n\nRoot tomography – advantages\n● Can only detect roots over a certain size.\n● Results can be presented pictorially.\n● Can be undertaken on sloping ground (up to a point).\n● Can survey down to a reasonable depth, although roots at different depths cannot be mapped.\n● Gives indication of whether roots are intact or decayed.\n\nRoot tomography – disadvantages\n● Time consuming.\n● Expensive.\n● Difficult in urban areas or areas where soil is covered.\n● Can only detect roots over a certain size (no fine roots or mycorrhizae).\n● Semi-invasive.\n● Cannot determine whether one or many roots are present.\n● Limited case studies to validate efficacy.",
+          "max": 4
+        },
+        {
+          "id": "C-W-B20",
+          "number": 20,
+          "section": "",
+          "theme": "Roots of veteran trees and the soil environment",
+          "type": "written",
+          "text": "What are the most significant changes in the root architecture of a tree as it ages?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Young trees rely more on vertical spread and includes a tap-root.\n● Older trees have lost taproot and rely on lateral spread.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B21",
+          "number": 21,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "Describe 2 ecosystem services (values provided to people) veteran trees offer and how\nthese may affect their management.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Aesthetic\n● Health and wellbeing\n● Air quality\n● Cooling effect\n● Consultation\n● Funding\n\n½ mark for value, ½ mark for an appropriate answer to how it may affect\nmanagement.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B22",
+          "number": 22,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "The persistence of veteran trees today demonstrates that they have survived in the landscape for a long period of time. Provide 2 cultural factors that may have played a part in ensuring veteran trees remained within the landscape.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Worked trees/Rights of local people to work trees\n● Continuity of land ownership/Continuity of management\n● Boundary trees\n● Recognition of values veteran trees provide\n● Too expensive to remove",
+          "max": 2
+        },
+        {
+          "id": "C-W-B23",
+          "number": 23,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "Give 2 reasons why it is important to have public support for protecting and managing\nveteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Communication and consultation\n● Public can act as advocates on your behalf\n● Funding opportunities",
+          "max": 1
+        },
+        {
+          "id": "C-W-B24",
+          "number": 24,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "Identify 2 opportunities and 2 challenges faced by managers of ‘famous trees’ or sites\nwith high visitor pressure.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Opportunities:\n● Potential funding\n● Education/Interpretation\n\nChallenges:\n● Soil compaction/erosion\n● Physical damage (e.g. climbing)\n● Vandalism (trophy hunters,\nfire)",
+          "max": 4
+        },
+        {
+          "id": "C-W-B25",
+          "number": 25,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "Give 2 specific factors that influence the management of veteran trees in the settings described below:\n● Formal/designed landscapes (including vistas).\n● Agricultural/animal husbandry/grazing areas.\n● Churchyards\n",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Formal/designed landscapes (including vistas).\n• Visual appearance key. Does the retention of deadwood, standing dead trees, scrub, etc pose a problem?\n• In designed landscapes, do we manage based on designer’s ideology or does the approach reflect other ideas?\n• Native or non-native species? Are non-native species capable of reproducing by natural regeneration or is planting required?\n• Are there several layers of design present?\n• Is there an age gap in the population?\n\n● Agricultural/animal husbandry/grazing areas.\n• Agricultural subsidies.\n• Soil compaction due to stock density.\n• Browsing damage.\n• Veterinary treatments.\n• Is stock density sufficient to prevent shading of veteran trees?\n• Does the stock density allow for the growth of scrub and natural regeneration?\n• Is there an age gap in the population?\n• Risk of removal due to intensification of agriculture (e.g. larger field sizes)\n\n● Churchyards\n• Cultural importance.\n• Issues around poisonous trees.\n• Issues around trees on boundaries.\n• The need/desire to excavation new graves.\n• Often limited diversity in tree species and age structure.\n• Potential damage to old buildings/structures/graves.\n• There may be a procedure to follow/need to obtain permission to manage trees.",
+          "max": 6
+        },
+        {
+          "id": "C-W-B26",
+          "number": 26,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "Explain 2 factors that can negatively affect the sustainability of veteran tree populations.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "• High tree mortality rate.\n• Age gap in population.\n• Specific tree pests in areas with limited tree species diversity.\n• Climate change.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B27",
+          "number": 27,
+          "section": "",
+          "theme": "The values of veteran trees",
+          "type": "written",
+          "text": "In relation to ecological values, provide 2 reasons why it is important to have abundant, good quality veteran tree habitat, continuously present for centuries.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "• Species cannot survive in a single tree indefinitely. Lots of old trees required.\n• Species are able to survive in habitats where habitat provision remains stable.\n• The rate of change is minimal, avoiding the need for organisms to adapt to new conditions.\n• A range of interactions between different species (e.g. woodpeckers and bats), if you lose one you may lose many others too.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B28",
+          "number": 28,
+          "section": "",
+          "theme": "Legislation affecting veteran tree management",
+          "type": "written",
+          "text": "Describe what the following pieces of legislation cover and how these may affect veteran\ntree management.\n• Conservation of Habitats and Species Regulations 2017\n• Town and Country Planning (Tree Preservation) (England) Regulations 2012\n• Ancient Monuments and Archaeological Areas Act 1979\n• Occupiers Liability Act 1957 and 1984",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Conservation of Habitats and Species Regulations 2017\n● Protection of a range of wildlife species (plants, fungi, invertebrates, vertebrates).\nThose managing veteran trees need to ensure they don’t commit an offence (e.g. damage/destruction of a protected species’ habitat) or gain a licence before works commence.\n● Those managing veteran trees or protected sites with potential to support protected species are required to undertake a survey. If species are present work needs to be adapted to take account of these. Consent may be required to undertake work.\n● Protection of European designated/protected sites. Sets out provision for protection of European designated sites, including management.\n● Those managing veteran trees on protected sites must ensure that their work doesn’t damage the site. Consent may be required to undertake work.\n\nTown and Country Planning (Tree Preservation) (England) Regulations 2012\n● Consolidates various pieces of tree preservation legislation making it illegal to cut down; top; lop; uproot; wilfully damage; or wilfully destroy trees without consent in advance.\n● Those managing veteran trees need to apply for consent to undertake any of the above.\n\nAncient Monuments and Archaeological Areas Act 1979\n● Protects buildings and sites that are nationally important, this may include subterranean features.\n● Those managing sites with such features must preserve them. Damage may be caused by excavation or trees uprooting.\n\nOccupiers Liability Act 1957 and 1984\n● Places a duty of care on land owners to take reasonable steps to prevent foreseeable harm occurring (due to acts or omissions) to anyone who could be foreseen to be present on their land. This duty can relate to harm caused by\nfalling trees.\n● Those managing veteran trees need to ensure that they take reasonable measures to reduce risk from falling trees.",
+          "max": 8
+        },
+        {
+          "id": "C-W-B29",
+          "number": 29,
+          "section": "",
+          "theme": "Legislation affecting veteran tree management",
+          "type": "written",
+          "text": "When proposing management work on a veteran tree in another country/region what factors should you consider?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Different pieces of legislation, different things prohibited/protected/permitted.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B30",
+          "number": 30,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Describe the overall aim of veteran tree management.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "No avoidable loss of veteran tree (or similar statement).",
+          "max": 1
+        },
+        {
+          "id": "C-W-B31",
+          "number": 31,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "When deciding on management of a veteran tree what should be your first consideration?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Does anything need to be done? Is management required?",
+          "max": 1
+        },
+        {
+          "id": "C-W-B32",
+          "number": 32,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Describe 1 conventional theory for establishing the stability of trees with hollow stems\nand give 2 limitations in relation to assessing veteran trees. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Method – t/R ratio\n\nLimitations\n● Only accurate for full-crowned trees, i.e. does not apply to trees with retrenched crowns or crowns kept small by management (e.g. pollards).\n● Cannot be used for trees with open cavities.\n● Cannot be used for trees with more than one stem.\n● Limited evidence that this applies to trees with diameters greater than 0.8m.",
+          "max": 3
+        },
+        {
+          "id": "C-W-B33",
+          "number": 33,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Describe 2 diagnostic tools for assessing the structural integrity of a tree. Provide 2\nadvantages and disadvantages for each option. Give an example of when each tool could\nbe used to inform veteran tree management. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "1 mark for 2 correct advantages, 1 mark for 2 correct disadvantages and 1 mark for an appropriate answer to when it could be used.\n\nTool – Sonic tomography\nAdvantage\n● Can map areas of dysfunction in the stem of large branches.\n● Results can be displayed pictorially.\n● Less invasive than resistance drills.\n\nDisadvantages\n● Only maps dysfunction, additional calculations to determine likelihood of failure are required. \n● These calculations may not work on veteran trees.\n● Can mistake cracks for dysfunction.\n● Cannot detect certain types of decay.\n● Provides across-sectional view of dysfunction only. There may be a need for multiple cross-sectional readings to be undertaken.\n● Requires training to use and relies on competent use to gain accurate extent of decay in a single stemmed tree or large branch.\n\nWhen could it be used?\n● When there is a need to assess readings.\n\nTool – Resistance drill\nAdvantage\n● Can determine areas of sound wood, dysfunctional wood and whether the tree has effectively compartmentalised dysfunction.\n● Can detect dysfunction and decay in included unions.\n● More accurate than sonic tomography at detecting cracks.\n● Less training required to use than sonic tomography.\n● Error in readings minimal.\n● Less expensive than sonic tomography\n\nDisadvantages\n● Invasive. Can aid the spread of dysfunction and decay.\n● Cannot detect certain types of decay.\n● The area that can be assessed with a single drilling is minimal.\n● Multiple drillings are normally required to provide sufficient information. This increases the\ndamage caused and increases the risk of decay spreading.\n● Only maps dysfunction/decay, additional calculations to determine likelihood of failure are required. These calculations may not work on veteran trees.\n● Expensive.\n\nWhen could it be used?\n● Requires expertise to identify\n● Assessing dysfunction/decay in an included union. suitable drilling positions and to\n● Assessing residual wall thickness.\n\nTool – Sounding mallet\n\nAdvantage\n● Can determine areas of sound wood on the outside of the tree.\n● Non-invasive.\n● Quick.\n\nDisadvantages\n● Results cannot be presented pictorially.\n● User needs to have good hearing and experience.\n● Cannot map decay in the centre of tree.\n● Not very effective at assessing dysfunction/decay in included unions.\n● Results must be interpreted by the person using the tool.\n\nWhen could it be used?\n● Assessing seams of dysfunction/decay and sounds wood on the outside of the tree, particularly associated with wood decay fruiting bodies.\n● Assessing decay in buttresses.\n\nTool – Static load test (pulling test)\nAdvantage\n● Results presented as safety factor not in terms of strength loss.\n● Measured reaction of tree to a real load.\n● Non-invasive.\n● Clear and easily understood results.\n● Potential to test to destruction.\n\nDisadvantages\n● Can only be applied when assessing whole tree failure. \n● Not possible to quantify the loads on individual limbs.\n● Time consuming.\n● Expensive and specialist equipment required.\n\nWhen could it be used?\n● Stability test following root damage (e.g. following construction).\n\n\n\n",
+          "max": 6
+        },
+        {
+          "id": "C-W-B34",
+          "number": 34,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "You are surveying a veteran tree which has an old bracing system installed. List 3 things\nyou would consider prior to making recommendations. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● What type of bracing is it and how long has it been in the tree?\n● Has it altered the biomechanical function of the tree?\n● Does it need removing, replacing, additional systems adding?",
+          "max": 3
+        },
+        {
+          "id": "C-W-B35",
+          "number": 35,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "For an amenity or financial valuation system of your choice, describe 2 limitations when\nassessing veteran trees. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "System – Alnarpsmodellen 2.2/ CTLA/ Stritzkes\n\nLimitations\n● Reduces value for reduced vitality.\n● Reduces value for wounds/damage.\n● No consideration of ‘special factors’ (e.g. cultural, biological or social value).\n\nSystem – CAVAT/ Koch method/ Revised Burnley Method/ VAT 03\nLimitations\n● Reduces value for short life expectancy.\n● Reduces value for reduced vitality.\n● Reduces value for wounds/damage.\n● No consideration of ‘special factors’ (e.g. cultural, biological or social value).\n\nSystem – Helliwell system\nLimitations\n● Reduces value for ‘short life expectancy’.\n● Reduces value for smaller crowns (e.g. retrenchment, pollards, shred, coppice, etc.)\n\nSystem – Norma Granada\nLimitations\n● Reduces value for short life expectancy\n● Reduces value for reduced vitality.\n● Reduces value for wounds/damage.\n\nSystem – STEM\nLimitations\n● Reduces value for reduced vitality.\n● Reduces value for wounds/damage.\n",
+          "max": 2
+        },
+        {
+          "id": "C-W-B36",
+          "number": 36,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Forestry operations are due to be undertaken on a site with veteran trees. Name three\npotential impacts on the veteran trees.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "Damage to soil (compaction) caused by machinery, direct (impact) damage caused by machinery, direct damage to veteran trees when timber trees are felled, increased exposure to wind (increased risk of failure), increased exposure\nto sunlight when neighbouring trees removed, …",
+          "max": 3
+        },
+        {
+          "id": "C-W-B37",
+          "number": 37,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Give 2 examples of how veteran tree management may differ from that of standard arboricultural practice.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "1. Finishing cuts. Retention of stubs, creation of tear cuts or natural fracture cuts instead of target pruning.\n2. Work may be phased over a long period of time.\n3. Size of root protection areas.\n4. Allowing natural crown retrenchment.\n5. More emphasis on selecting particular branches for tree work rather than general prescriptions such as ‘crown reduce by 1m all over’. Functional units.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B38",
+          "number": 38,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "For each of the above, explain why it differs from standard arboricultural practice.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "1. Finishing cuts. Whether there is a desire for epicormic shoots to develop after pruning. To reduce desiccation in stem or primary branches.\n2. To give the tree time to respond. Especially if trees are old and a quick change in conditions would likely be detrimental to the tree.\n3. Larger root protection areas. Adopting the precautionary principle.\n4. Working with the tree’s natural ageing strategies rather than managing for aesthetics.\n5. Undertaking the minimum work required to meet the objective. Managing each functional unit separately rather than treating the tree as a whole.",
+          "max": 1
+        },
+        {
+          "id": "C-W-B39",
+          "number": 39,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Describe 2 benefits and 2 drawbacks of planting non-native tree species when planting to\nprovide future generations of veteran trees. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "½ mark per benefit/drawback, up to 1 mark for benefits and 1 mark for drawbacks\n\nBenefits\n● Allow/plan for climate change.\n● Increases species choice and can build resilience.\n● Can create certain type of decay habitat niches sooner with short lived tree species. Suitable as a short-term solution.\n● Can select species with an abundance of flowers to support adult stages of invertebrates or nuts for vertebrates.\n\nDrawbacks\n● May be to the detriment to the continuity of tree species on historic sites.\n● May not support as wide a range of species as native tree species.\n● May not be suited to the climate or site conditions.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B40",
+          "number": 40,
+          "section": "",
+          "theme": "Surveying and managing veteran trees",
+          "type": "written",
+          "text": "Give two reasons why is it important to undertake monitoring in veteran tree management. ",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Is the management having the desired effect?\n● If no, does management need to be changed or ceased?\n● To establish rate of loss of veteran trees.",
+          "max": 2
+        },
+        {
+          "id": "C-W-B41",
+          "number": 41,
+          "section": "",
+          "theme": "Country specific question(s)",
+          "type": "written",
+          "text": "The National Planning Policy Framework makes specific mention to ancient and veteran\ntrees. What does it say?",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Development resulting in loss/damage should be refused.\n● Unless there are wholly exception reasons and able to give an example of such a reason.\n\nNational Planning Policy framework 2018, section 175 – “development resulting in the loss\nor deterioration of irreplaceable habitats (such as ancient woodland and ancient or veteran\ntrees) should be refused, unless there are wholly exceptional reasons and a suitable\ncompensation strategy exists”\nFoot note reads [in relation to wholly exceptional reasons]: “For example, infrastructure\nprojects (including nationally significant infrastructure projects, orders under the Transport\nand Works Act and hybrid bills), where the public benefit would clearly outweigh the loss or\ndeterioration of habitat.”",
+          "max": 2
+        },
+        {
+          "id": "C-W-B42",
+          "number": 42,
+          "section": "",
+          "theme": "Country specific question(s)",
+          "type": "written",
+          "text": "Older trees potentially exhibit more natural resilience to pests and disease. Give 3\nreasons why this might be the case.",
+          "options": [],
+          "correctAnswer": "",
+          "scoringHelp": "● Size helps?\n● Functional units\n● Long life-cycle\n● Perhaps “protective” organisms e.g. endophytes\n● Develop resistance/tolerance\n● Genetic variation",
+          "max": 3
+        }
+      ]
+    }
+  },
+  "outdoor": {
+    "Practicing": {
+      "level": "Practicing",
+      "title": "Practicing outdoor exercises",
+      "preface": "Practising level outdoor exercises. Examiner copy. The paper includes generic oral questions and tree-based exercises; the section and mark structure is edited here as the source of truth.",
+      "candidateIntro": "The outdoor session lasts approximately 120 minutes. Candidates should attempt all questions and follow examiner instructions at each tree. A total of 102 marks are available for this paper – 26 marks for Section 1 and 76 marks for Section 2.\nThese exercises are worth 69% of the overall marks, the written paper is worth the remaining 31% of the marks.\n\n“The outdoor session will last approximately 120 minutes. It will involve some generic questions and some questions relating to specific tasks. I will explain\nthe first specific task now; the others will be explained when you are taken to the next tree.\nYou should attempt to answer all questions. No written answers are required. There are 102 marks available for the outdoor exercises. These exercises are\nworth 69% of the overall marks, the written paper is worth the remaining 31% of the marks.\nPlease ensure that you wear your hi-vis vest at all times. Please do not confer with other candidate(s); when I am examining another candidate please\nprovide us some space. The use of technology (phone, camera, etc) is not permitted.\nThe first exercise involves a pre-work assessment of a veteran tree. Here is a management plan for this tree (hand candidate management plan). Please\nassess the tree, I will then ask you about your findings and how you plan to undertake the work. When assessing the tree, I would like you to consider the\nfollowing:\n● Health/vitality of the tree.\n● Structural condition (biomechanics) of the tree.\n● The potential impacts of the work on the tree.\n● How the work will be planned. I will provide you with a blank plan to mark-up to illustrate how you intend to get onto and off the site, where vehicles\nwill be parked, where plant will be positioned, what equipment is being brought onto site, where this equipment will be stored and measures you will\ntake to avoid damage on sensitive habitats and prevent the spread of disease.\n● How you would access the tree and undertake work in a way that minimises damage on sensitive features.\nPractising level - Outside exercises – Questions (examiner copy) – March 2023 5\n● Where you will place your final cuts.\nI will leave you to conduct your survey. I will collect each of you in turn to ask you some oral questions Do you have any questions?”",
+      "exercises": [
+        {
+          "id": "P-OUT-Q1",
+          "number": "1",
+          "section": "Generic oral questions",
+          "question": "Can you provide a list of 3 characteristics a veteran tree may have?",
+          "examinerGuidance": "3 Characteristics choose from:\n● Great age for the species\n● Crown retrenchment\n● Has been through phases where it has demonstrated resilience, including history of management (e.g. pollarding)\n● Girth is often large for species\n● Showing a complex structure or architecture e.g. a colony-tree structure/multiple functional units\n● Hollowing or decaying wood\n\n(1 mark for 3 characteristics or ½ mark for up to 2 of the above) ",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q2",
+          "number": "2",
+          "section": "Generic oral questions",
+          "question": "Can you describe the value of this tree?",
+          "examinerGuidance": "● Historical value\n● Ecological/wildlife value\n● Cultural history/landscape history/heritage values\n● Aesthetic qualities (gnarly, twisted, stag headed …)\n\n(1 mark for 3 characteristics or ½ mark for up to 2 of the above)",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q3",
+          "number": "3",
+          "section": "Generic oral questions",
+          "question": "Describe 3 characteristics that enable trees to grow for a long period of time.",
+          "examinerGuidance": "● Indefinite growth habit.\n● New layer of wood produced each year.\n● Ability for re-iteration.\n● Layering/phoenix growth/suckering.\n● Stem hollows with age.\n● Retrenchment/secondary crown formation.\n\n(3 marks)",
+          "max": 3
+        },
+        {
+          "id": "P-OUT-Q4",
+          "number": "4",
+          "section": "Generic oral questions",
+          "question": "Why might wood decay in the stem of aWhy might wood decay in the stem of a\nveteran tree be beneficial to the tree?",
+          "examinerGuidance": "● Recycling of nutrients previously locked up in central wood (heartwood/ripewood).\n● Stimulation of internal roots and separate functional units (colony).",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q5",
+          "number": "5",
+          "section": "Generic oral questions",
+          "question": "How can crown retrenchment be beneficial to the tree?",
+          "examinerGuidance": "● Smaller crown = smaller biomechanical forces.\n● Shorter distance from roots to leaves.\n● Loss of apical dominance allows for re-iteration (and formation of a colony).",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q6",
+          "number": "6",
+          "section": "Generic oral questions",
+          "question": "Please identify type of decay.",
+          "examinerGuidance": "White, brown, soft rot or wood mould.\n\n(one example required - 1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q7",
+          "number": "7",
+          "section": "Generic oral questions",
+          "question": "Describe the ‘decay process’ the fungus follows.",
+          "examinerGuidance": "Decay process\n● White rot: fungus removes lignin first or cellulose and lignin at the same rate.\n● Brown rot: fungus removes cellulose first.\n● Soft rot: fungus removes cellulose by hollowing the cell walls.\n● Wood mould: late stage decay product. Only forms in stable environment, high ecological value.\n(1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q8",
+          "number": "8",
+          "section": "Generic oral questions",
+          "question": "Can you name a species of fungus that causes this type of decay? ",
+          "examinerGuidance": "Correct fungal species suggestion \n\n(1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q9",
+          "number": "9",
+          "section": "Generic oral questions",
+          "question": "I’m now going to ask you a question about wildlife species and veteran tree management.\nPlease select a number between 1 & 4.\n\n1- Saprophxylic invertebrates\n2- Birds\n3- Mammals\n4- Epiphytes (lichens, mosses, liverworts, ...)\n\nYou have chosen ............................\n\nFor this guild please choose a species (or group of species). I would like you to tell me about the following 2 things:\n• It’s (or their) habitat requirements\n• How the management of a veteran tree may need to be amended to take account of this species.",
+          "examinerGuidance": "Candidates to provide a species (or group of species), discuss its habitat requirements and elaborate on the implications for management of the presence of that species.\ne.g. Stag beetle (Lucanus cervus).\n• Habitat requirements – Larvae require decaying wood. Adults have not been observed eating but may take on water from decaying fruit. The adult female lays eggs below ground in decaying wood.\n• Management measures – Retain tree stumps. Retain deadwood.\n\nGuild selected:\n\nSpecies provided:\n\nHabitat requirements:\n\nHow veteran tree management could be amended:\n\n(4 marks – 1 mark for correct species, 1 mark for habitat requirements and 2 marks for appropriate consideration during management)",
+          "max": 4
+        },
+        {
+          "id": "P-OUT-Q10",
+          "number": "10",
+          "section": "Generic oral questions",
+          "question": "Provide some (4) examples of how you might improve or maintain the habitats provided on this site?\n\nIf veteranisation is given as an answer:\n● Which trees would you look to\n● undertake this management on?",
+          "examinerGuidance": "Maintain and continue the existing management of senescent trees.\nCreate new worked trees where appropriate (e.g. pollards).\nIdentify trees with the potential to become future senescent trees and implement measures to protect them through maturity and into old age.\nPromote natural regeneration by allowing scrub development, or identify suitable planting areas, use stock of known origin and provenance (in accordance with national biosecurity requirements), and provide appropriate aftercare.\nEncourage the establishment of nectar- and pollen-rich plant species that support saproxylic insects.\nRetain and encourage scrub and shrub vegetation to provide shelter and habitat diversity.\nLeave fallen and cut timber in situ wherever possible, rather than converting it into habitat piles, and retain standing deadwood.\nImplement habitat continuity measures where appropriate, such as re-erecting fallen or cut hollow stems.\n● Manage bark shading where excessive shade may adversely affect sensitive lichen communities.\n● Review grazing management as appropriate, including introducing, maintaining, reducing, or modifying grazing pressure.\n● Reduce soil compaction through measures such as diverting footpaths, installing raised walkways, or restricting access to sensitive areas.\n● Consider veteranisation where appropriate (see mandatory follow-up question).\n\nMaximum: 4 marks.\n\nTrees that would otherwise be removed as part of management.\nTrees of little ecological value.\nSuitable for sites lacking diversity (age class and tree species).",
+          "max": 4
+        },
+        {
+          "id": "P-OUT-Q11",
+          "number": "11",
+          "section": "Generic oral questions",
+          "question": "I am now going to ask you about different types of pruning tools used in veteran tree management.\nPlease select a number between 1 and 3:\n\n1) Hand tools\n2) Electric chainsaw\n3) Petrol chainsaw\n\nYou have chosen: ______________________\n\nFor the selected tool, describe its advantages and disadvantages when carrying out work on veteran trees.\nYour answer should consider factors such as:\n- Precision of cuts\n- Risk of damage to the tree and associated habitats\n- Noise and disturbance to wildlife\n- Operator safety\n- Accessibility and ease of use\n- Efficiency and productivity\n- Environmental impact\n\nMaximum: 3 marks",
+          "examinerGuidance": "Hand tools\n\nAdvantages\n● Allow the most accurate and precise cuts.\n● No fuel or oil required (no storage or refuelling needed).\n● Produce no emissions.\n● Easy to clean and disinfect.\n● No chain oil contamination on the tree.\n● Minimal noise and disturbance to wildlife.\n\nDisadvantages\n● Limited to cutting small-diameter material.\n● Physically demanding and tiring during prolonged use.\n● Slower when carrying out larger volumes of work.\n\nElectric chainsaw\n\nAdvantages\n● No fuel required (no storage or refuelling).\n● No direct exhaust emissions during operation.\n● Can cut larger material than hand tools.\n● Can use biodegradable chain oil.\n● Greater cutting precision than a petrol chainsaw due to the smaller bar and chain.\n● Quieter and less disturbing to wildlife than a petrol chainsaw.\n\nDisadvantages\n● Requires battery charging and battery management.\n● Limited operating time compared with petrol chainsaws.\n● Less suitable for very large material or prolonged heavy-duty work.\n● Chain oil is still required and may contaminate the tree or surrounding habitat.\n● Heavier and less precise than hand tools.\n\nPetrol chainsaw\n\nAdvantages\n● Can cut larger-diameter material efficiently.\n● Suitable for prolonged and demanding work.\n● Greater power than electric chainsaws.\n● Can use biodegradable chain oil.\n\nDisadvantages\n● Difficult to clean and disinfect thoroughly.\n● Fuel and oil are required (storage and refuelling needed).\n● Chain oil is required and may contaminate the tree.\n● Produces exhaust emissions.\n● Noisier and more disturbing to wildlife and site users.\n● Generally less precise than hand tools or small electric chainsaws.\n\nAssessment guidance:\n2 marks (½ mark for each valid advantage or disadvantage). To achieve more than 1 mark, the candidate must provide both advantages and disadvantages of the selected tool.",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q12",
+          "number": "12",
+          "section": "Generic oral questions",
+          "question": "If the management plan doesn’t specify what to do with the cut material, would you do with it and why? Discuss the advantages and disadvantages choice. There are 2 marks available for this question",
+          "examinerGuidance": "Leave it where it falls\n\nAdvantages\n● Requires little or no additional effort.\n● Provides valuable deadwood habitat.\n● No additional emissions from processing or transport.\n● No chipper required, avoiding soil compaction.\n● Suitable for naturalistic sites.\n● Avoids transporting potentially contaminated material, reducing the spread of pests and diseases.\n\nDisadvantages\n● Can appear untidy and may be unsuitable in formal landscapes.\n● The work may appear unfinished to members of the public.\n● May restrict access for future management operations.\n\nStack material on site\n\nAdvantages\n● Provides deadwood habitat and supports biodiversity.\n● No chipper required, avoiding soil compaction.\n● Often more visually acceptable than leaving material where it falls.\n● Suitable for natural and semi-formal sites.\n● Material can be positioned away from the tree to maintain access.\n● Releases nutrients gradually as it decomposes.\n● Can help discourage access by people or livestock around sensitive trees.\n● Avoids transporting potentially contaminated material, reducing the spread of pests and diseases.\n\nDisadvantages\n● Requires additional labour to move and stack material.\n● Can still be considered untidy in highly formal landscapes.\n● Habitat value may be lower than leaving material in direct contact with the soil.\n● Large habitat piles may obstruct access or management activities if poorly located.\n\nChip material\n\nAdvantages\n● Often the most appropriate option in formal or high-use areas.\n● Chips can be used as mulch around rooting areas.\n● Does not create obstacles for future access or management.\n● Can improve soil moisture retention and suppress weeds when used appropriately.\n\nDisadvantages\n● Removes deadwood habitat.\n● Requires a chipper, which may contribute to soil compaction.\n● Produces additional emissions, noise and disturbance.\n● Increased risk of spreading pests and diseases if chips are moved off site.\n● Requires additional processing time and cost.\n\nAssessment guidance\n\n2 marks (½ mark per valid advantage or disadvantage).\nCandidates should justify their chosen option and demonstrate an understanding of both benefits and drawbacks.\n\nNote: Candidates are unlikely to achieve full marks if they automatically select chipping, as retaining deadwood on site generally provides greater ecological benefits and there are similar numbers of advantages and disadvantages associated with chipping.",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q13",
+          "number": "13",
+          "section": "Generic oral questions",
+          "question": "Can you tell me some (4) things you would consider when mulching a veteran tree?",
+          "examinerGuidance": "● Assess whether the soil needs improving (check compaction, take a soil sample, …)\n● Source of material organic material (pest and diseases).\n● Choice of parent material (e.g. species of tree).\n● Woodchip must be partially degraded.\n● Fresh leaves may blow away.\n● How it is applied (on the surface or into soil e.g. vertical mulch).\n● Extent of application (spots/quadrants/wedges vs. complete surface).\n● Depth of material.\n● Avoid mounding near base of stem (avoid volcano/think doughnut).\n● Maintenance/replenishing mulch material.\n● Removal of grass sod.\n● Planting herb layer.\n● Monitor response of tree.\n\n½ mark for each",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q14",
+          "number": "14",
+          "section": "Generic oral questions",
+          "question": "Can you tell me about the (4) measures you would take to prevent the spread of pests and diseases before, during and after work.",
+          "examinerGuidance": "● Park vehicles off-site.\n● Only bring essential equipment onto site.\n● Clean and disinfect equipment.\n● Use hand tools wherever possible (easier to clean).\n● Keep cut material on-site where possible.\n● Avoiding unnecessary movement of soil or plant material.\n● Cover soil or plant material if being transported.\n● Pruning of trees at appropriate time of year (e.g. oak mildew, flowering trees, etc.).\n\n½ mark for each ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q1-2",
+          "number": "15",
+          "section": "Tree A - Exercise 1",
+          "question": "Please tell me about the health/vitality of the tree.\n\nPrompt - How have you determined this? ",
+          "examinerGuidance": "2 marks (poor) – Candidate provides a correct ‘condition score’ (e.g. good, fair, poor, dead) only.\n4 marks (fair) - Candidate provides a ‘condition score’ and up to 2 pieces of supporting information (see below).\n6 marks (good) – As above and provides at least 3 pieces of supporting information.\n8 marks (very good) – As above, provides at least 4 pieces of supporting information and must consider different condition/age of the crown/functional unit.\n10 marks (excellent) – As above, provides at least 5 pieces of supporting information and must consider different condition/age of the crown/ functional\nunit.\n\nSupporting information\nCorrect assessment or typical/atypical for species:\n● leaf/bud density\n● leaf size/colour\n● extension growth\n● woundwood (response to previous management/damage)\n● reaction growth (response to previous management/damage)\n● epicormic growth (response to previous management/damage)\n\nSee ‘notes to examiners’ information in introductory text. ½ marks are available.",
+          "max": 10
+        },
+        {
+          "id": "P-OUT-Q2-2",
+          "number": "16",
+          "section": "Tree A - Exercise 1",
+          "question": "Please tell me about the structural condition (biomechanics) of the tree.\nPrompt - How have you determined this?",
+          "examinerGuidance": "2 marks (poor) – Candidate provides a correct ‘condition score’ (e.g. good, fair, poor) only.\n4 marks (fair) - Candidate provides a ‘condition score’ and up to 1 piece of supporting information.\n6 marks (good) – Candidate provides a ‘condition score’ and up to 2 pieces of supporting information.\n8 marks (very good) – As above and candidate must consider how long the tree has been like that.\n10 marks (excellent) – As above and candidate must consider how the tree has responded (reactive growth).\n\nSupporting information\nCorrect identification/assessment of:\n● Biomechanical defects such as cavities, splits,\n● Presence of fungal fruiting bodies (should include type of decay, location and likely extent of decay)\n● History of management, lapses in management, ongoing management.\n● Consideration of different sections of the tree/crown, functional units.\n\nSee ‘notes to examiners’ information in introductory text. ½ marks are available. ",
+          "max": 10
+        },
+        {
+          "id": "P-OUT-Q3-2",
+          "number": "17",
+          "section": "Tree A - Exercise 1",
+          "question": "There are only 2 marks available for this question:\nExaminer to refer to plan produced by candidate.",
+          "examinerGuidance": "Appropriate positioning of:\n● Ingress to site / egress from site.\n● Equipment needed.\n● Vehicle parking.\n● Fuelling station.\n● Vehicular route to tree (ground protection/RPA).\n\nPlatform/lift (route to tree/ground protection/RPA) – no marks for this answer, see question 5b.\nOther plant e.g. chipper (route to tree/ground protection/RPA).\n\n½ mark for an appropriate answer to each ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q4A",
+          "number": "18",
+          "section": "Tree A - Exercise 1",
+          "question": "The next questions relate to how you would access the tree, they are worth 10 marks in total.\nHow would you access the tree?",
+          "examinerGuidance": "Climbing – Route 1.\nPlatform/lift – Route 2.\n\nQuestion 4b – Route 1 (climbing)\n\nI’d like you to tell me 3 things:\n1. What climbing equipment you could use to minimise damage to the tree when climbing.\n2. Where your final anchor points would be and the route you would take to access these.\n3. How you would avoid damaging sensitive features whilst\nclimbing.\n\n1. Cambium saver, two anchor points, re-directs, top anchors for SRT, anchoring in another tree – 2 marks.\n2. Selection of realistic, suitable final anchor points for work specification (at least 2 required) – 4 marks.\n3. Avoiding damage to sensitive features - up to 4 marks\nTaking care not to damage:\n● Deadwood\n● Epicormic shoots\n● Epiphytes\n● Flaking bark\n● Other habitat features\n\n(if they plan to use a throw bag/line they have to explain the risks to sensitive features when doing so).\n\nQuestion 4b – Route 2 (platform/lift)\n\nI’d like you to tell me 3 things:\n1. Please tell me what type of platform/lift you would use.\n2. Where you would position the platform/lift to gain the access you require.\n3. How you would avoid damaging sensitive habitats in the process of undertaking the work.\n1. Suitable choice of platform/lift\n(vehicle mounted, articulated boom and platform rotation for ease of access, outriggers or axle levelling features required on sloping or uneven\nground) – 2 marks\n2. Selection of suitable locations to position the platform/lift to complete\nwork (at least 2 required) – 4 marks.\n3. Avoiding damage to sensitive features - up to 4 marks\n● Avoiding damage to ground when using the platform/lift\n(used tracked machines rather than wheeled machines/use ground protection to minimise soil damage)\n● Avoiding damage to surrounding habitats whilst operating the platform\n● Avoiding removing or damaging deadwood, epicormics, epiphytes, flaking bark or other habitat features.",
+          "max": 0
+        },
+        {
+          "id": "P-OUT-Q5-2",
+          "number": "21",
+          "section": "Tree A - Exercise 1",
+          "question": "The next questions relate to the final cuts. Collectively they are worth 11 marks.\nCan you tell me where you would make the final cuts? \n\nPlease explain:\n● Why you would choose these locations.\n● What type of finishing cut would you use and why?\n● What are the expected impacts of the pruning on the tree; and\n● How likely is it that the tree will respond well.",
+          "examinerGuidance": "Up to 10 marks for appropriate selection of final cuts positions. Consideration given to:\n● Creation of wounds – must consider size of wounds (will wounds expose sapwood only or both sapwood and central wood).\n● Consideration of tree species – presence of durable heartwood/ripewood.\n● Location of cuts relative to side branches/epicormic.\n● Consideration of tree species – propensity of epicormic shoots.\n● Consideration of tree species and health – existing dysfunction or wood decay, likely extent of dysfunction as a result, CODIT.\n● Need for future management.\n● Type of finishing cut with justification why that type of cut has been chosen (e.g. natural fracture cuts may stimulate more epicormic growth, but also more decay; target pruning may reduce likelihood of epicormic growth, may or may not be desirable; stubs may reduce dessication, decaying wood habitat, may not be acceptable in the situation ).",
+          "max": 10
+        },
+        {
+          "id": "P-OUT-Q6-2",
+          "number": "22",
+          "section": "Tree A - Exercise 1",
+          "question": "There is only 1 mark available for this question.\nWhy would you want to control falling cut material? How might you do that?",
+          "examinerGuidance": "1 mark for a suitable suggestion. ",
+          "max": 1
+        },
+        {
+          "id": "P-OUT-Q1A",
+          "number": "23",
+          "section": "Tree B - Exercise 2 – Threats exercise (halo)",
+          "question": "What poses a threat to this tree?",
+          "examinerGuidance": "Up to 2 marks available for shade/shading. 1 for a basic answer, 2 for a detailed answer.\n\nIf candidate does not give correct answer, do not continue with these questions. ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q1B",
+          "number": "24",
+          "section": "Tree B - Exercise 2 – Threats exercise (halo)",
+          "question": "What action could you take to address this this threat?",
+          "examinerGuidance": "Up to 2 marks available for halo release. 1 for a basic answer, 2 for a detailed answer. ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q1-3",
+          "number": "25",
+          "section": "Tree B - Exercise 2 – Threats exercise (halo)",
+          "question": "Talk me through how you would undertake this work/what you would consider.",
+          "examinerGuidance": "● Stage 1 – Clear any vegetation growing up through the crown or within 1m of the edge.\n● Stage 2 – Extend halo at a future date to allow more light in but ensure conditions aren’t changed too rapidly.\n● Consideration – current/recent weather conditions (especially hot/dry).\n● Consideration – amount of shade (e.g. a large amount such as on all sides of trees or only minor shading on one side).\n\n(1 mark for each) ",
+          "max": 4
+        },
+        {
+          "id": "P-OUT-Q1-3-COPY",
+          "number": "25",
+          "section": "Tree B - Exercise 2 – Threats exercise (soil) ",
+          "question": "What poses a threat to this tree?",
+          "examinerGuidance": "Up to 2 marks available for soil damage/degradation. 1 for a basic answer, 2 for a detailed answer.\nIf candidate does not give correct answer, do not continue with these questions. ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q1-3-COPY-COPY",
+          "number": "25",
+          "section": "Tree B - Exercise 2 – Threats exercise (soil) ",
+          "question": "What action could you take to address this this threat?",
+          "examinerGuidance": "Up to 2 marks available for improving soil conditions (removal of source of damage, aerate, mulch, …). 1 for a basic answer, 2 for a detailed answer.",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q1-3-COPY-COPY-COPY",
+          "number": "25",
+          "section": "Tree B - Exercise 2 – Threats exercise (soil) ",
+          "question": "Talk me through how you would undertake this work.",
+          "examinerGuidance": "(Up to 4 marks for an appropriate answer of the practical steps taken to improve the soil – be aware that Q14 in the generic question covers mulching avoid\ndouble marking)",
+          "max": 4
+        },
+        {
+          "id": "P-OUT-Q2-3",
+          "number": "26",
+          "section": "Tree C - Exercise 3 - History of tree and site exercise.",
+          "question": "The next questions relate to the history of a specific tree and the landscape it sits within. Please take a few minutes to look at the tree and the landscape and\nprepare to answer some questions about the history of the tree and the landscape. When you are ready I will ask you the following questions:\nBased on what you have observed, tell me as much as you can about the history of the tree. Think about everything from when the tree germinated until today. You\nmay want to include any signs of management or damage, how long ago this was, how it’s surroundings may have changed overtime and anything else that the tree\nis ‘telling you’.\nSimilarly for the landscape, based on what you have observed, tell me as much as you can about the landscape the veteran tree is in. Think about how old it is, how it\nmay have changed over time, how people have used/managed the trees and landscape in the past and at present and anything else that the landscape is ‘telling\nyou’.\n\nThere are 10 marks available for both the tree and the landscape question.\n\nPlease tell me about the history of this landscape.",
+          "examinerGuidance": "Candidate to discuss and provide an answer based, but not limited to, the following:\n● Form of tree\n● Evidence of management\n● Is there evidence of different types or phases of management\n● Has the management ceased or does it continue to today?\n● Evidence of damage\n● Changes in the environment\n● How has the tree changed over time?\n● What the tree’s ‘body language’ is ‘telling you’\n\nA total of 8 marks are available. The examiner can use discretion and award multiple marks for one of the above headings if applicable.",
+          "max": 8
+        },
+        {
+          "id": "P-OUT-Q2-3-COPY",
+          "number": "26",
+          "section": "Tree C - Exercise 3 - History of tree and site exercise.",
+          "question": "Please tell me about the history of this landscape.",
+          "examinerGuidance": "Candidate to discuss and provide an answer based, but not limited to, the following:\n● Age of landscape\n● Age of trees\n● Age structure of tree population\n● Tree species diversity of the site\n● Form of the trees\n● Evidence of lapses in management or widespread changes to management across the site.\n● Potential uses of the trees/land\n● Whether the historic landscape is intact\n● Are there several layers of history?\n● Is the full extent of historic landscape intact or fragmented?\n\nA total of 8 marks are available.",
+          "max": 8
+        },
+        {
+          "id": "P-OUT-Q1-4",
+          "number": "27",
+          "section": "Tree C - Exercise 4 – Risk Management Exercise",
+          "question": "Can you identify 2 biomechanical features in this tree that may pose a hazard?",
+          "examinerGuidance": "Candidates to identify 2 biomechanical defects in the tree. \n\n(note: score should be reduced if identified features\ndo not really pose a hazard, e.g. minor, well compensated hollow in massive stem)\n\n(2 marks) ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q2-4",
+          "number": "28",
+          "section": "",
+          "question": "What are the pros and cons of keeping these features in the tree?",
+          "examinerGuidance": "Candidate to show awareness of weighing risk vs. benefits (e.g. aesthetics, habitat value, …\n\n(2 mark)",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q3-3",
+          "number": "29",
+          "section": "",
+          "question": "What is a ‘target’ in risk management, and what difference does the location of the tree make?",
+          "examinerGuidance": "● The ‘target’ is the subject of injury or damage (people, property, …) within range of a hazard\n● If the target differs, the risk also differs: the level of risk is lower in the middle of nowhere (no target = no risk\n\n(2 marks) ",
+          "max": 2
+        },
+        {
+          "id": "P-OUT-Q4-2",
+          "number": "30",
+          "section": "",
+          "question": "A member of the public is concerned about the safety of a ‘dying tree’ and suggests you should cut it down.\nHow would you respond?",
+          "examinerGuidance": "Candidate able to discuss:\n● That the tree isn’t dying.\n● Able to discuss the differences between hazard and risk.\n● The value the tree has.\n● Why it is being kept.\n\n(Max 3 marks - 1 mark for each of the above) ",
+          "max": 3
+        }
+      ]
+    },
+    "Consulting": {
+      "level": "Consulting",
+      "title": "Consulting outdoor exercises",
+      "preface": "Consulting level outdoor exercises including oral questions. Examiner copy. Generic questions and tree/site exercises are edited here as the source of truth.",
+      "candidateIntro": "Candidates have 120 minutes to complete the exercises and answer oral questions. Most oral questions are mandatory; some follow-up questions are asked only when triggered by the candidate's answer.",
+      "exercises": [
+        {
+          "id": "C-OUT-Q1",
+          "number": "1",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Can you provide a list of 3 characteristics a veteran tree may have?",
+          "examinerGuidance": "3 Characteristics choose from:\n● Great age for the species\n● Crown retrenchment\n● Has been through phases where it has demonstrated resilience, including history of management (e.g. pollarding)\n● Girth is often large for species\n● Showing a complex structure or architecture e.g. a colony-tree structure/multiple functional units\n● Hollowing or decaying wood\n\n(1 mark for 3 characteristics or ½ mark for up to 2 of the above) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q2",
+          "number": "2",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Describe 3 characteristics that enable trees to grow for a long period of time.",
+          "examinerGuidance": "● Indefinite growth habit.\n● New layer of wood produced each year.\n● Ability for re-iteration.\n● Layering/phoenix growth/suckering.\n● Stem hollows with age.\n● Retrenchment/secondary crown formation.\n\n(3 marks)",
+          "max": 3
+        },
+        {
+          "id": "C-OUT-Q3",
+          "number": "3",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "How can crown retrenchment be beneficial to the tree?",
+          "examinerGuidance": "● Smaller crown = smaller biomechanical forces.\n● Shorter distance from roots to leaves.\n● Loss of apical dominance allows for re-iteration (and formation of a colony).\n\n(max 1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q4",
+          "number": "4",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Please identify type of decay (in field or from photograph).",
+          "examinerGuidance": "White, brown, soft rot.\n\n(one example required –1 mark in total) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q5",
+          "number": "5",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Describe the ‘decay process’ the fungus\nfollows.",
+          "examinerGuidance": "Decay process\n● White rot: fungus removes lignin and hemicellulose first or cellulose, hemicellulose and lignin at the same rate.\n● Soft rot: fungus removes cellulose by hollowing the cell walls.\n● Brown rot: fungus removes cellulose first.\n\n(one type of decay required – 1 mark in total) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q6",
+          "number": "6",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Can you name two species of fungus that cause this type of decay?",
+          "examinerGuidance": "Correct fungal species suggestion\n1.\n2.\n(two examples required – ½ mark each 1 mark in total) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q7",
+          "number": "7",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Can you tell me about the interaction between each of these fungi and their host veteran tree?",
+          "examinerGuidance": "Correct fungal fruiting body locations, correct extent and impacts on structural integrity, correct reflection on how a\nveteran tree might respond/adapt to the decay associated with these species, their ecological value.\n1.\n2.\n\n(two examples required – 2 marks each 4 mark in total)",
+          "max": 4
+        },
+        {
+          "id": "C-OUT-Q8",
+          "number": "8",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "I am now going to ask you a question about wildlife species and veteran tree management.\nPlease select one of the following guilds:\n- Saproxylic invertebrates\n- Cavity-dwelling birds\n- Cavity-dwelling mammals\n- Epiphytes (lichens, mosses, liverworts, etc.)\n\nYou have chosen: ______________________\n\nPlease select a representative species (or group of species) from this guild and describe the following:\n1. Habitat requirements\n2. Life cycle\n3. Survey and identification\n4. Implications for veteran tree management",
+          "examinerGuidance": "Candidates should provide a species (or group of species), discuss its habitat requirements and explain the implications of its presence for veteran tree management.\n\nExample: Stag beetle (Lucanus cervus)\nHabitat requirements – Larvae require decaying wood. Adults have rarely been observed feeding but may take water from decaying fruit. Females lay eggs below ground in decaying wood.\nLife cycle – Individuals typically live for 3–7 years. After hatching, larvae feed on decaying wood for approximately three years before pupating. Adults emerge from the cocoon in autumn and overwinter in the soil. Emergence occurs in May, with most adults dying by autumn.\nSurvey / key identification features – Presence is most easily confirmed by observing males flying on warm, calm evenings while searching for females. Adults are large beetles (males 35–75 mm, females 30–50 mm). The head and thorax are black, and the wing cases are chestnut brown. Males have large mandibles; females have much smaller mandibles.\nManagement measures – Retain tree stumps and deadwood.\n\nGuild selected: ______________________\nSpecies provided: ______________________\nHabitat requirements:\nLife cycle:\nSurvey / key identification features:\nHow veteran tree management could be amended:\n\n6 marks – 1 mark for selecting an appropriate species, 1 mark for habitat requirements, 1 mark for life cycle, 1 mark for survey/identification features, and 2 marks for appropriate management considerations.",
+          "max": 6
+        },
+        {
+          "id": "C-OUT-Q9",
+          "number": "9",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "Thinking more generally now, can you provide some (6) examples of how you might improve or maintain the habitats provided on this site?\n\nIf veteranisation is given as an answer:\nWhich trees would you look to undertake this management on and how?",
+          "examinerGuidance": "- Continue the existing management regime for senescent trees.\n- Create new worked trees (e.g. pollards).\n- Identify existing trees that should be retained as future senescent trees and implement appropriate protection measures to ensure they reach maturity and old age.\n- Encourage natural regeneration by allowing scrub development, or identify suitable planting locations, select planting stock of known origin and provenance (in accordance with national biosecurity guidance), undertake planting, and provide appropriate aftercare.\n- Encourage plant species that provide nectar and pollen resources for saproxylic insects.\n- Encourage scrub and shrub development to provide shelter and habitat diversity.\n- Retain fallen or cut timber in situ wherever possible rather than cutting it into habitat piles, and retain standing deadwood.\n- Implement habitat continuity measures where appropriate (e.g. re-erection of fallen or cut hollow stems).\n- Manage bark shading where excessive shade has become unfavourable for sensitive lichen species.\n- Consider introducing, maintaining, or reducing grazing pressure as appropriate.\n- Minimise soil compaction through measures such as diverting footpaths, installing raised walkways, or restricting access to sensitive areas.\n- Undertake veteranisation where appropriate. See mandatory follow-up question. Marks are awarded only if the follow-up question is answered correctly.\n\nMaximum: 6 marks.\n\nTrees that would otherwise be removed as part management.\nTrees of little ecological value.\nSites lacking diversity (age class and tree same species).",
+          "max": 6
+        },
+        {
+          "id": "C-OUT-Q10",
+          "number": "10",
+          "section": "Generic oral questions – These questions can be asked at any time during the outdoor exercises.",
+          "question": "What does the presence of this vegetation at the base of a veteran tree tell you? What impact can this have on the tree?",
+          "examinerGuidance": "(Examiner to point to nettles or similar nutrient loving species.)\n● Nutrient enrichment.\n● May increase growth in the short term. Potential impact on symbiotic relationships, impacting water and nutrient\nuptake in the long term.\n\n(2 marks)",
+          "max": 2
+        },
+        {
+          "id": "C-OUT-Q1",
+          "number": "11",
+          "section": "Tree C - Exercise 2 - History of tree and site exercise.",
+          "question": "“The next questions relate to the history of a specific tree and the landscape it sits within. Please take a few minutes to look at the tree and the landscape and\nprepare to answer some questions about the history of the tree and the landscape. When you are ready I will ask you the following questions:\nBased on what you have observed, tell me as much as you can about the history of the tree. Think about everything from when the tree germinated until today. You\nmay want to include any signs of management or damage, how long ago this was, how it’s surroundings may have changed overtime and anything else that the tree\nis ‘telling you’.\nSimilarly for the landscape, based on what you have observed, tell me as much as you can about the landscape the veteran tree is in. Think about how old it is, how it\nmay have changed over time, how people have used/managed the trees and landscape in the past and at present and anything else that the landscape is ‘telling\nyou’.\nThere are 10 marks available for both the tree and the landscape question.”\n\nPlease tell me about the history of this tree.",
+          "examinerGuidance": "Candidate to discuss and provide an answer based, but not limited to, the following:\n● Form of tree\n● Evidence of management\n● Is there evidence of different types or phases of management\n● Has the management ceased or does it continue to today?\n● Evidence of damage\n● Changes in the environment\n● How has the tree changed over time?\n● What the tree’s ‘body language’ is ‘telling you’\n\nA total of 10 marks are available. The examiner can use discretion and award multiple marks for one of the above headings if applicable.",
+          "max": 10
+        },
+        {
+          "id": "C-OUT-Q2",
+          "number": "12",
+          "section": "Tree C - Exercise 2 - History of tree and site exercise.",
+          "question": "Please tell me about the history of this landscape.",
+          "examinerGuidance": "Candidate to discuss and provide an answer based, but not limited to, the following:\n● Age of landscape\n● Age of trees\n● Age structure of tree population\n● Tree species diversity of the site\n● Form of the trees\n● Evidence of lapses in management or widespread changes to management across the site.\n● Potential uses of the trees/land\n● Whether the historic landscape is intact\n● Are there several layers of history?\n● Is the full extent of historic landscape is intact or fragmented?\n\nA total of 10 marks are available.",
+          "max": 10
+        },
+        {
+          "id": "C-OUT-Q1",
+          "number": "13",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "Can you identify 1 biomechanical feature\nin this tree that may poze a hazard :\n● Now name 3 key aspects you will consider when risk assessing this biomechanical feature?",
+          "examinerGuidance": "Correct identification of biomechanical feature in the tree (note: reduce score if identified feature does not really\npose a hazard e.g. minor, well compensated hollow in massive stem)\n\nKey aspects:\n● Failure mode\n● Probability of failure – timescale\n● Severity – potential damage/injury - size of failed tree part\n● Targets\n● Compensatory growth\n\n(1/2 mark for correct biomechanical feature, ½ mark for each key aspect, 2 marks in total)",
+          "max": 2
+        },
+        {
+          "id": "C-OUT-Q2",
+          "number": "14",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "What are the pros and cons of keeping such features in the tree?",
+          "examinerGuidance": "Candidate to show awareness of weighing risk vs. benefits (e.g. aesthetics, habitat value, …\n\n(1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q3",
+          "number": "15",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "What is a ‘target’ in risk management and how does this influence risk management?",
+          "examinerGuidance": "● The ‘target’ is the subject of injury or damage (people, property, …) within range of a hazard\n● If the target differs, the risk also differs: the level of risk is lower in the middle of nowhere (no target = no risk)\n\n(1 mark)",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q4",
+          "number": "16",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "Explain how you would quantify the frequency of use or the value of the target?",
+          "examinerGuidance": "● Permanent targets (e.g. a building)\n● High use areas (major roads, busy public areas)\n● Permanent but varying value targets (e.g. car parks)\n● Seasonal or weather affected targets, (e.g. grassed areas, grass footpaths)\n● No target\n● Risk assessment systems include QTRA, TRAQ, VALID, THREATS, …\n\n(1 mark) ",
+          "max": 1
+        },
+        {
+          "id": "C-OUT-Q5",
+          "number": "17",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "Can you provide me with 3 management options you would propose?",
+          "examinerGuidance": "Ideal answer is:\n● Do nothing\n● Do work on the tree\n● Move the target (this needs to be included to get points for this exercise)\n\nOption 1 –\nOption 2 –\nOption 3 –\n\n(3 marks in total, 1 mark for each suitable management option)\n\n(If the candidate proposes ‘fell the tree’ as an option, no marks are awarded for that option i.e. they can only score a\nmaximum of 2 marks, if move the target is not one of the options, then zero marks are awarded for the whole\nquestion)",
+          "max": 3
+        },
+        {
+          "id": "C-OUT-Q6",
+          "number": "18",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "For your preferred management option, please provide 2 pros and 2 cons with that option.",
+          "examinerGuidance": "Pro’s:\n\nCons:\n\n(1/2 mark for each suitable pro/con, max. 2 marks in total) If the preferred option is felling the tree, then zero marks should be given.",
+          "max": 2
+        },
+        {
+          "id": "C-OUT-Q7",
+          "number": "19",
+          "section": "Tree D – Exercise 3 – Risk assessment exercise",
+          "question": "A member of the public is concerned about the safety of a ‘dying tree’ and suggests you should cut it down.\nHow would you respond?",
+          "examinerGuidance": "Candidate able to discuss:\n● That the tree isn’t dying.\n● Able to discuss the differences between hazard and risk.\n● The value the tree has.\n● Why it is being kept.\n\n(Max 2 marks - 1 mark for each of the above) ",
+          "max": 2
+        }
+      ]
+    }
+  },
+  "vetbaraPackageKind": "Package1",
+  "packageKind": "VetBara Package 1",
+  "packageRole": "AdminToCentre",
+  "packagePurpose": "Rules, written tests and outdoor-session forms for one language."
+}

@@ -1,0 +1,97 @@
+{
+  "kind": "vetbara.certificationPackage.v1",
+  "packageId": "vetbara-authored-package-1781156546029",
+  "createdAt": "2026-06-11T05:42:26.036Z",
+  "sourceFiles": {
+    "source": "Admin structured authoring interface",
+    "version": "2026-06-11"
+  },
+  "contentSource": "admin-structured-authoring",
+  "uiLanguageIndependent": true,
+  "authoring": {
+    "title": "VETCERT examination package",
+    "version": "2026-06-11",
+    "language": "English",
+    "updatedAt": "2026-06-11T05:42:26.028Z",
+    "documents": {
+      "writtenPracticing": {
+        "title": "Practicing written answers",
+        "preface": "Section A contains multiple choice questions. Section B contains written-answer questions grouped into themes. Each question carries the stated number of marks.",
+        "candidateIntro": "Choose the best answer for multiple-choice questions and answer all written questions as fully as possible."
+      },
+      "writtenConsulting": {
+        "title": "Consulting written answers",
+        "preface": "This written exam paper contains questions requiring written answers. Questions are grouped into themes and each question carries the stated number of marks.",
+        "candidateIntro": "Answer all questions. Provide concise technical answers and include examples where the question asks for them."
+      },
+      "outdoorPracticing": {
+        "title": "Practicing outdoor exercises",
+        "preface": "Practising level outdoor exercises. Examiner copy. The paper includes generic oral questions and tree-based exercises; the section and mark structure is edited here as the source of truth.",
+        "candidateIntro": "The outdoor session lasts approximately 120 minutes. Candidates should attempt all questions and follow examiner instructions at each tree."
+      },
+      "outdoorConsulting": {
+        "title": "Consulting outdoor exercises",
+        "preface": "Consulting level outdoor exercises including oral questions. Examiner copy. Generic questions and tree/site exercises are edited here as the source of truth.",
+        "candidateIntro": "Candidates have 120 minutes to complete the exercises and answer oral questions. Most oral questions are mandatory; some follow-up questions are asked only when triggered by the candidate's answer."
+      }
+    }
+  },
+  "variants": {
+    "Practicing": {
+      "code": "PRACTICING_ADMIN_PACKAGE",
+      "level": "Practicing",
+      "writtenQuestionCount": 0,
+      "writtenMax": 0,
+      "outdoorItemCount": 0,
+      "outdoorMax": 0
+    },
+    "Consulting": {
+      "code": "CONSULTING_ADMIN_PACKAGE",
+      "level": "Consulting",
+      "writtenQuestionCount": 0,
+      "writtenMax": 0,
+      "outdoorItemCount": 0,
+      "outdoorMax": 0
+    }
+  },
+  "written": {
+    "Practicing": {
+      "level": "Practicing",
+      "title": "Practicing written answers",
+      "preface": "Section A contains multiple choice questions. Section B contains written-answer questions grouped into themes. Each question carries the stated number of marks.",
+      "candidateIntro": "Choose the best answer for multiple-choice questions and answer all written questions as fully as possible.",
+      "questions": []
+    },
+    "Consulting": {
+      "level": "Consulting",
+      "title": "Consulting written answers",
+      "preface": "This written exam paper contains questions requiring written answers. Questions are grouped into themes and each question carries the stated number of marks.",
+      "candidateIntro": "Answer all questions. Provide concise technical answers and include examples where the question asks for them.",
+      "questions": []
+    }
+  },
+  "outdoor": {
+    "Practicing": {
+      "level": "Practicing",
+      "title": "Practicing outdoor exercises",
+      "preface": "Practising level outdoor exercises. Examiner copy. The paper includes generic oral questions and tree-based exercises; the section and mark structure is edited here as the source of truth.",
+      "candidateIntro": "The outdoor session lasts approximately 120 minutes. Candidates should attempt all questions and follow examiner instructions at each tree.",
+      "exercises": []
+    },
+    "Consulting": {
+      "level": "Consulting",
+      "title": "Consulting outdoor exercises",
+      "preface": "Consulting level outdoor exercises including oral questions. Examiner copy. Generic questions and tree/site exercises are edited here as the source of truth.",
+      "candidateIntro": "Candidates have 120 minutes to complete the exercises and answer oral questions. Most oral questions are mandatory; some follow-up questions are asked only when triggered by the candidate's answer.",
+      "exercises": []
+    }
+  },
+  "validation": {
+    "status": "requires_review",
+    "issues": [
+      "Practicing written expected 34 questions / 46 marks, got 0 / 0",
+      "Consulting written expected 45 questions / 97 marks, got 0 / 0"
+    ],
+    "checkedAt": "2026-06-11T05:42:26.036Z"
+  }
+}

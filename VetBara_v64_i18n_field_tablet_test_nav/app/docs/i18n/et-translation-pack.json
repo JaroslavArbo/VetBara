@@ -1,0 +1,3127 @@
+{
+  "language": "et",
+  "label": "Eesti",
+  "status": "draft",
+  "entries": [
+    {
+      "key": "app.title",
+      "en": "VetBara",
+      "target": "VetBara"
+    },
+    {
+      "key": "app.subtitle",
+      "en": "Digital examination workspace",
+      "target": "Digitaalne eksamikeskkond"
+    },
+    {
+      "key": "language.label",
+      "en": "Language",
+      "target": "Keel"
+    },
+    {
+      "key": "language.draftPreviewWarning",
+      "en": "Draft machine translation preview — not approved for official VETcert exam use.",
+      "target": "Mustand masintõlke eelvaade — ei ole kinnitatud ametlikuks VETcert eksamiks."
+    },
+    {
+      "key": "role.centre",
+      "en": "Centre",
+      "target": "Keskus"
+    },
+    {
+      "key": "role.candidate",
+      "en": "Candidate",
+      "target": "Kandidaat"
+    },
+    {
+      "key": "role.examiner",
+      "en": "Examiner",
+      "target": "Eksamineerija"
+    },
+    {
+      "key": "scanner.open",
+      "en": "Open QR scanner",
+      "target": "Ava QR scanner"
+    },
+    {
+      "key": "scanner.close",
+      "en": "Close scanner",
+      "target": "Sulge scanner"
+    },
+    {
+      "key": "pilot.smoke.title",
+      "en": "Pilot smoke-test checklist",
+      "target": "Pilot smoke-test checklist"
+    },
+    {
+      "key": "pilot.smoke.subtitle",
+      "en": "Use this after each deploy to confirm the pilot workflow still works.",
+      "target": "Use this after each deploy to confirm the pilot workflow still works."
+    },
+    {
+      "key": "pilot.smoke.loadCentre",
+      "en": "Load Centre Setup",
+      "target": "Laadi Keskus Seadistus"
+    },
+    {
+      "key": "pilot.smoke.candidatesExaminers",
+      "en": "Confirm candidates and examiners are visible",
+      "target": "Confirm candidates and examiners are visible"
+    },
+    {
+      "key": "pilot.smoke.testPackage",
+      "en": "Import or verify test package",
+      "target": "Impordi or verify test package"
+    },
+    {
+      "key": "pilot.smoke.candidateQr",
+      "en": "Open Candidate QR and save a written test answer",
+      "target": "Ava Kandidaat QR and save a written test answer"
+    },
+    {
+      "key": "pilot.smoke.report",
+      "en": "For Consulting Candidate, save report draft and pilot/archive placeholder",
+      "target": "For Consulting Kandidaat, save report draft and pilot/archive placeholder"
+    },
+    {
+      "key": "pilot.smoke.examinerQr",
+      "en": "Open Examiner QR and save outdoor score and note",
+      "target": "Ava Eksamineerija QR and save outdoor score and note"
+    },
+    {
+      "key": "pilot.smoke.preview",
+      "en": "Load Evaluation Preview",
+      "target": "Laadi Evaluation Preview"
+    },
+    {
+      "key": "pilot.smoke.draftExport",
+      "en": "Download Draft Export",
+      "target": "Download Mustand Ekspordi"
+    },
+    {
+      "key": "pilot.smoke.auditExport",
+      "en": "Download Centre Audit Package",
+      "target": "Download Keskus Audit Pakett"
+    },
+    {
+      "key": "pilot.release.title",
+      "en": "Pilot release notes",
+      "target": "Pilot release notes"
+    },
+    {
+      "key": "pilot.release.subtitle",
+      "en": "This panel describes the pilot prototype scope. It is not the official VETcert certification output.",
+      "target": "This panel describes the pilot prototype scope. It is not the official VETcert certification output."
+    },
+    {
+      "key": "pilot.release.available",
+      "en": "Available in this pilot",
+      "target": "Available in this pilot"
+    },
+    {
+      "key": "pilot.release.notIncluded",
+      "en": "Not included yet",
+      "target": "Eit included yet"
+    },
+    {
+      "key": "help.candidate.title",
+      "en": "Candidate quick help",
+      "target": "Kandidaat quick help"
+    },
+    {
+      "key": "help.candidate.qr",
+      "en": "Scan your personal Candidate QR issued by the Centre.",
+      "target": "Scan your personal Kandidaat QR issued by the Keskus."
+    },
+    {
+      "key": "help.candidate.identity",
+      "en": "Confirm your identity before opening sections.",
+      "target": "Confirm your identity before opening sections."
+    },
+    {
+      "key": "help.candidate.autosave",
+      "en": "Written test answers autosave to the sync queue.",
+      "target": "Written test vastused autosave to the sync queue."
+    },
+    {
+      "key": "help.candidate.photos",
+      "en": "Consulting report photo entries are pilot/archive placeholders, not real uploads yet.",
+      "target": "Consulting report photo entries are pilot/archive placeholders, not real uploads yet."
+    },
+    {
+      "key": "help.candidate.ask",
+      "en": "If something looks wrong, ask Centre staff before final submit.",
+      "target": "If something looks wrong, ask Keskus staff before final submit."
+    },
+    {
+      "key": "help.examiner.title",
+      "en": "Examiner quick help",
+      "target": "Eksamineerija quick help"
+    },
+    {
+      "key": "help.examiner.qr",
+      "en": "Scan your personal Examiner QR issued by the Centre.",
+      "target": "Scan your personal Eksamineerija QR issued by the Keskus."
+    },
+    {
+      "key": "help.examiner.identity",
+      "en": "Confirm your identity before opening outdoor forms.",
+      "target": "Confirm your identity before opening outdoor forms."
+    },
+    {
+      "key": "help.examiner.assigned",
+      "en": "Only assigned Candidates are shown.",
+      "target": "Only assigned Kandidaats are shown."
+    },
+    {
+      "key": "help.examiner.primary",
+      "en": "Primary Examiner completes the full outdoor form; Secondary input is supporting.",
+      "target": "Primary Eksamineerija completes the full outdoor form; Secondary input is supporting."
+    },
+    {
+      "key": "help.examiner.autosave",
+      "en": "Scores and notes autosave to the sync queue.",
+      "target": "Punktids and notes autosave to the sync queue."
+    },
+    {
+      "key": "help.examiner.missing",
+      "en": "If assigned Candidates are missing, ask the Centre to assign and save Centre Setup.",
+      "target": "If assigned Kandidaats are missing, ask the Keskus to assign and save Keskus Seadistus."
+    },
+    {
+      "key": "centre.validation.title",
+      "en": "Centre Setup checks",
+      "target": "Keskus Seadistus checks"
+    },
+    {
+      "key": "centre.validation.ready",
+      "en": "Ready for pilot smoke test",
+      "target": "Valmis for pilot smoke test"
+    },
+    {
+      "key": "centre.validation.action",
+      "en": "Action required before pilot smoke test",
+      "target": "Action required before pilot smoke test"
+    },
+    {
+      "key": "centre.validation.helper",
+      "en": "Errors should be fixed before distributing QR links. Warnings can be reviewed during pilot preparation.",
+      "target": "Vigas should be fixed before distributing QR links. Hoiatuss can be reviewed during pilot preparation."
+    },
+    {
+      "key": "centre.validation.empty",
+      "en": "No validation issues. Setup is ready for pilot smoke test.",
+      "target": "Ei validation issues. Seadistus is ready for pilot smoke test."
+    },
+    {
+      "key": "centre.guardrails.title",
+      "en": "Pilot readiness guardrails",
+      "target": "Pilot readiness guardrails"
+    },
+    {
+      "key": "centre.guardrails.helper",
+      "en": "These guardrails do not block demo testing, but they should be resolved before a real pilot run.",
+      "target": "These guardrails do not block demo testing, but they should be resolved before a real pilot run."
+    },
+    {
+      "key": "centre.guardrails.ready",
+      "en": "Pilot readiness looks good.",
+      "target": "Pilot readiness looks good."
+    },
+    {
+      "key": "centre.guardrails.validation",
+      "en": "Fix validation errors before distributing QR links.",
+      "target": "Fix validation errors before distributing QR links."
+    },
+    {
+      "key": "centre.guardrails.unsaved",
+      "en": "Save Centre Setup before distributing QR links.",
+      "target": "Salvesta Keskus Seadistus before distributing QR links."
+    },
+    {
+      "key": "centre.guardrails.testPackage",
+      "en": "Import/select a test package before written test pilot runs.",
+      "target": "Impordi/select a test package before written test pilot runs."
+    },
+    {
+      "key": "centre.guardrails.backend",
+      "en": "Load backend Centre Setup before pilot testing with real users.",
+      "target": "Laadi backend Keskus Seadistus before pilot testing with real users."
+    },
+    {
+      "key": "centre.run.title",
+      "en": "Pilot run summary",
+      "target": "Pilot run summary"
+    },
+    {
+      "key": "centre.run.helper",
+      "en": "Use this summary before sharing Candidate or Examiner QR links.",
+      "target": "Use this summary before sharing Kandidaat or Eksamineerija QR links."
+    },
+    {
+      "key": "centre.run.dataMode",
+      "en": "Data mode",
+      "target": "Data mode"
+    },
+    {
+      "key": "centre.run.setup",
+      "en": "Centre Setup",
+      "target": "Keskus Seadistus"
+    },
+    {
+      "key": "centre.run.validation",
+      "en": "Validation",
+      "target": "Kontroll"
+    },
+    {
+      "key": "centre.run.testPackage",
+      "en": "Test package",
+      "target": "Test package"
+    },
+    {
+      "key": "centre.run.qrDistribution",
+      "en": "QR distribution",
+      "target": "QR distribution"
+    },
+    {
+      "key": "centre.run.backend",
+      "en": "backend-loaded pilot data",
+      "target": "backend-loaded pilot data"
+    },
+    {
+      "key": "centre.run.demo",
+      "en": "demo fallback data",
+      "target": "demo fallback data"
+    },
+    {
+      "key": "centre.run.saved",
+      "en": "Saved / no local changes",
+      "target": "Salvestatud / no local changes"
+    },
+    {
+      "key": "centre.run.unsaved",
+      "en": "Unsaved local changes",
+      "target": "Unsaved local changes"
+    },
+    {
+      "key": "centre.run.imported",
+      "en": "Imported",
+      "target": "Imporditud"
+    },
+    {
+      "key": "centre.run.missing",
+      "en": "Missing",
+      "target": "Puudub"
+    },
+    {
+      "key": "centre.run.qrReady",
+      "en": "Ready after setup is saved and backend-loaded",
+      "target": "Valmis after setup is saved and backend-loaded"
+    },
+    {
+      "key": "centre.run.review",
+      "en": "Review guardrails",
+      "target": "Vaata üle guardrails"
+    },
+    {
+      "key": "centre.network.title",
+      "en": "Network readiness checklist",
+      "target": "Network readiness checklist"
+    },
+    {
+      "key": "centre.network.helper",
+      "en": "Use this before distributing Candidate QR and Examiner QR links during a pilot session.",
+      "target": "Use this before distributing Kandidaat QR and Eksamineerija QR links during a pilot session."
+    },
+    {
+      "key": "centre.network.wifi",
+      "en": "Stable Wi-Fi/router is running",
+      "target": "Stable Wi-Fi/router is running"
+    },
+    {
+      "key": "centre.network.internet",
+      "en": "Internet access works on tablets",
+      "target": "Internet access works on tablets"
+    },
+    {
+      "key": "centre.network.url",
+      "en": "Deployed VetBara URL opens on tablets",
+      "target": "Deployed VetBara URL opens on tablets"
+    },
+    {
+      "key": "centre.network.centreQr",
+      "en": "Centre QR/session opens",
+      "target": "Keskus QR/session opens"
+    },
+    {
+      "key": "centre.network.candidateQr",
+      "en": "Candidate QR opens on a tablet",
+      "target": "Kandidaat QR opens on a tablet"
+    },
+    {
+      "key": "centre.network.examinerQr",
+      "en": "Examiner QR opens on a tablet",
+      "target": "Eksamineerija QR opens on a tablet"
+    },
+    {
+      "key": "centre.network.setup",
+      "en": "Save/Load Centre Setup tested",
+      "target": "Salvesta/Laadi Keskus Seadistus tested"
+    },
+    {
+      "key": "centre.network.sync",
+      "en": "Sync/Audit panel checked",
+      "target": "Sync/Audit panel checked"
+    },
+    {
+      "key": "centre.network.export",
+      "en": "Export download tested",
+      "target": "Ekspordi download tested"
+    },
+    {
+      "key": "qr.title",
+      "en": "Centre / QR access pack",
+      "target": "Keskus / QR access pack"
+    },
+    {
+      "key": "qr.subtitle",
+      "en": "Give each Candidate or Examiner only their own Candidate QR or Examiner QR link. Backend-loaded QR URLs appear after Load/Save Centre Setup; demo fallback QR links are for local prototype testing only.",
+      "target": "Give each Kandidaat or Eksamineerija only their own Kandidaat QR or Eksamineerija QR link. Backend-loaded QR URLs appear after Laadi/Salvesta Keskus Seadistus; demo fallback QR links are for local prototype testing only."
+    },
+    {
+      "key": "qr.candidateLinks",
+      "en": "Candidate QR links",
+      "target": "Kandidaat QR links"
+    },
+    {
+      "key": "qr.examinerLinks",
+      "en": "Examiner QR links",
+      "target": "Eksamineerija QR links"
+    },
+    {
+      "key": "qr.copy",
+      "en": "Copy link",
+      "target": "Kopeeri link"
+    },
+    {
+      "key": "qr.candidateBackend",
+      "en": "backend-loaded Candidate QR",
+      "target": "backend-loaded Kandidaat QR"
+    },
+    {
+      "key": "qr.candidateDemo",
+      "en": "demo fallback Candidate QR",
+      "target": "demo fallback Kandidaat QR"
+    },
+    {
+      "key": "qr.examinerBackend",
+      "en": "backend-loaded Examiner QR",
+      "target": "backend-loaded Eksamineerija QR"
+    },
+    {
+      "key": "qr.examinerDemo",
+      "en": "demo fallback Examiner QR",
+      "target": "demo fallback Eksamineerija QR"
+    },
+    {
+      "key": "common.scanQr",
+      "en": "Scan QR",
+      "target": "Skanni QR"
+    },
+    {
+      "key": "common.loggedIn",
+      "en": "Logged in",
+      "target": "Logged in"
+    },
+    {
+      "key": "common.logout",
+      "en": "Logout",
+      "target": "Logout"
+    },
+    {
+      "key": "candidate.view.title",
+      "en": "Candidate / Tablet login and workspace",
+      "target": "Kandidaat / Tahvelarvuti login and workspace"
+    },
+    {
+      "key": "candidate.view.subtitle",
+      "en": "Candidate opens only their own QR workspace, confirms identity, then completes each exam section.",
+      "target": "Kandidaat opens only their own QR workspace, confirms identity, then completes each exam section."
+    },
+    {
+      "key": "candidate.qrAccess.title",
+      "en": "Candidate QR access",
+      "target": "Kandidaat QR access"
+    },
+    {
+      "key": "candidate.qrAccess.helper",
+      "en": "Scan the personal QR issued by the Centre. This portal only shows the current Candidate workspace.",
+      "target": "Scan the personal QR issued by the Keskus. This portal only shows the current Kandidaat workspace."
+    },
+    {
+      "key": "candidate.empty",
+      "en": "No Candidate is logged in. Scan the personal Candidate QR issued by the Centre.",
+      "target": "Ei Kandidaat is logged in. Scan the personal Kandidaat QR issued by the Keskus."
+    },
+    {
+      "key": "examiner.view.title",
+      "en": "Examiner / Landing page and Outdoor exercises",
+      "target": "Eksamineerija / Landing page and Outdoor exercises"
+    },
+    {
+      "key": "examiner.view.subtitle",
+      "en": "Examiner logs in, confirms identity, sees assigned candidates and opens outdoor forms.",
+      "target": "Eksamineerija logs in, confirms identity, sees assigned candidates and opens outdoor forms."
+    },
+    {
+      "key": "examiner.qrAccess.title",
+      "en": "Examiner QR access",
+      "target": "Eksamineerija QR access"
+    },
+    {
+      "key": "examiner.qrAccess.helper",
+      "en": "Scan the personal Examiner QR issued by the Centre. This portal only shows assigned Candidate work.",
+      "target": "Scan the personal Eksamineerija QR issued by the Keskus. This portal only shows assigned Kandidaat work."
+    },
+    {
+      "key": "examiner.empty",
+      "en": "No Examiner is logged in. Scan the personal Examiner QR issued by the Centre.",
+      "target": "Ei Eksamineerija is logged in. Scan the personal Eksamineerija QR issued by the Keskus."
+    },
+    {
+      "key": "candidate.identity.title",
+      "en": "Confirm identity",
+      "target": "Confirm identity"
+    },
+    {
+      "key": "candidate.identity.helper",
+      "en": "Check your name and document details before opening exam sections.",
+      "target": "Check your name and document details before opening exam sections."
+    },
+    {
+      "key": "candidate.identity.confirm",
+      "en": "Confirm identity",
+      "target": "Confirm identity"
+    },
+    {
+      "key": "candidate.sections.title",
+      "en": "Exam sections",
+      "target": "Exam sections"
+    },
+    {
+      "key": "candidate.sections.open",
+      "en": "Open section",
+      "target": "Ava section"
+    },
+    {
+      "key": "candidate.sections.reopen",
+      "en": "Reopen section",
+      "target": "Reopen section"
+    },
+    {
+      "key": "candidate.sections.closed",
+      "en": "Closed",
+      "target": "Sulged"
+    },
+    {
+      "key": "candidate.sections.opened",
+      "en": "Open",
+      "target": "Ava"
+    },
+    {
+      "key": "candidate.sections.locked",
+      "en": "Locked",
+      "target": "Locked"
+    },
+    {
+      "key": "test.title",
+      "en": "Written test",
+      "target": "Written test"
+    },
+    {
+      "key": "test.helper",
+      "en": "Answer the questions for the selected variant. Answers are saved to the sync queue.",
+      "target": "Vastus the küsimused for the valitud variant. Vastuss are saved to the sync queue."
+    },
+    {
+      "key": "test.noQuestions",
+      "en": "No written test questions are available for this variant.",
+      "target": "Ei written test küsimused are available for this variant."
+    },
+    {
+      "key": "test.answer",
+      "en": "Answer",
+      "target": "Vastus"
+    },
+    {
+      "key": "test.save",
+      "en": "Save answer",
+      "target": "Salvesta answer"
+    },
+    {
+      "key": "test.submit",
+      "en": "Submit and close written test",
+      "target": "Submit and close written test"
+    },
+    {
+      "key": "test.back",
+      "en": "Back to sections",
+      "target": "Back to sections"
+    },
+    {
+      "key": "report.title",
+      "en": "Consulting report draft",
+      "target": "Consulting report draft"
+    },
+    {
+      "key": "report.helper",
+      "en": "Prepare field notes and final text for the Consulting report. Photo entries are pilot/archive placeholders, not real uploads.",
+      "target": "Prepare field notes and final text for the Consulting report. Foto entries are pilot/archive placeholders, not real uploads."
+    },
+    {
+      "key": "report.tree",
+      "en": "Tree",
+      "target": "Puu"
+    },
+    {
+      "key": "report.fieldNotes",
+      "en": "Field notes",
+      "target": "Field notes"
+    },
+    {
+      "key": "report.finalText",
+      "en": "Final text",
+      "target": "Final text"
+    },
+    {
+      "key": "report.photoPlaceholder",
+      "en": "Photo placeholder / archive note",
+      "target": "Foto placeholder / archive note"
+    },
+    {
+      "key": "report.addPhoto",
+      "en": "Add photo placeholder",
+      "target": "Add photo placeholder"
+    },
+    {
+      "key": "report.submit",
+      "en": "Submit and close report",
+      "target": "Submit and close report"
+    },
+    {
+      "key": "report.back",
+      "en": "Back to sections",
+      "target": "Back to sections"
+    },
+    {
+      "key": "common.back",
+      "en": "Back",
+      "target": "Back"
+    },
+    {
+      "key": "common.offlineRetry",
+      "en": "If offline, visible local work remains and sync will retry when session/backend is available.",
+      "target": "If offline, visible local work remains and sync will retry when session/backend is available."
+    },
+    {
+      "key": "common.opened",
+      "en": "Opened",
+      "target": "Avaed"
+    },
+    {
+      "key": "common.closed",
+      "en": "Closed",
+      "target": "Sulged"
+    },
+    {
+      "key": "common.points",
+      "en": "point(s)",
+      "target": "point(s)"
+    },
+    {
+      "key": "candidate.identity.detailsTitle",
+      "en": "Confirm personal details",
+      "target": "Confirm personal details"
+    },
+    {
+      "key": "candidate.identity.name",
+      "en": "Candidate name",
+      "target": "Kandidaat name"
+    },
+    {
+      "key": "candidate.identity.birthDate",
+      "en": "Date of birth",
+      "target": "Kuupäev of birth"
+    },
+    {
+      "key": "candidate.identity.documentId",
+      "en": "Document / registration ID",
+      "target": "Document / registration ID"
+    },
+    {
+      "key": "candidate.identity.examLevel",
+      "en": "Exam level",
+      "target": "Exam level"
+    },
+    {
+      "key": "candidate.identity.warning",
+      "en": "Confirm identity before opening exam sections.",
+      "target": "Confirm identity before opening exam sections."
+    },
+    {
+      "key": "candidate.identity.confirmed",
+      "en": "Identity confirmed",
+      "target": "Identity confirmed"
+    },
+    {
+      "key": "candidate.landing.title",
+      "en": "Candidate landing page",
+      "target": "Kandidaat landing page"
+    },
+    {
+      "key": "candidate.landing.helper",
+      "en": "Review which sections are ready before opening work for this exam attempt.",
+      "target": "Vaata üle which sections are ready before opening work for this exam attempt."
+    },
+    {
+      "key": "candidate.readiness.title",
+      "en": "Candidate readiness",
+      "target": "Kandidaat readiness"
+    },
+    {
+      "key": "candidate.readiness.identity",
+      "en": "Identity confirmed",
+      "target": "Identity confirmed"
+    },
+    {
+      "key": "candidate.readiness.writtenTest",
+      "en": "Written test available",
+      "target": "Written test available"
+    },
+    {
+      "key": "candidate.readiness.report",
+      "en": "Report section available",
+      "target": "Aruanne section available"
+    },
+    {
+      "key": "candidate.section.confirmFirst",
+      "en": "Confirm identity first.",
+      "target": "Confirm identity first."
+    },
+    {
+      "key": "candidate.section.closed",
+      "en": "This section is closed.",
+      "target": "This section is closed."
+    },
+    {
+      "key": "candidate.section.open",
+      "en": "This section is open.",
+      "target": "This section is open."
+    },
+    {
+      "key": "candidate.section.locked",
+      "en": "This section is locked.",
+      "target": "This section is locked."
+    },
+    {
+      "key": "candidate.section.requestReopen",
+      "en": "Request reopen",
+      "target": "Request reopen"
+    },
+    {
+      "key": "test.variantAutosave",
+      "en": "Variant: {variant}. Autosaved to the sync queue. Final submit closes this section.",
+      "target": "Variant: {variant}. Autosaved to the sync queue. Final submit closes this section."
+    },
+    {
+      "key": "test.askCentre",
+      "en": "Ask the Centre to import/select a test package and save Centre Setup.",
+      "target": "Ask the Keskus to import/select a test package and save Keskus Seadistus."
+    },
+    {
+      "key": "test.question",
+      "en": "Question",
+      "target": "Küsimus"
+    },
+    {
+      "key": "test.writeAnswer",
+      "en": "Write your answer here",
+      "target": "Write your answer here"
+    },
+    {
+      "key": "examiner.writtenReview.title",
+      "en": "Written test review",
+      "target": "Written test review"
+    },
+    {
+      "key": "examiner.writtenReview.variant",
+      "en": "Variant",
+      "target": "Variant"
+    },
+    {
+      "key": "examiner.writtenReview.correct",
+      "en": "correct",
+      "target": "correct"
+    },
+    {
+      "key": "examiner.writtenReview.incorrect",
+      "en": "incorrect",
+      "target": "incorrect"
+    },
+    {
+      "key": "examiner.writtenReview.unanswered",
+      "en": "unanswered",
+      "target": "unanswered"
+    },
+    {
+      "key": "examiner.writtenReview.manual",
+      "en": "manual review",
+      "target": "manual review"
+    },
+    {
+      "key": "examiner.writtenReview.candidateAnswer",
+      "en": "Candidate answer",
+      "target": "Kandidaat answer"
+    },
+    {
+      "key": "examiner.writtenReview.correctAnswer",
+      "en": "Correct answer",
+      "target": "Correct answer"
+    },
+    {
+      "key": "examiner.writtenReview.computedScore",
+      "en": "Computed written score",
+      "target": "Computed written score"
+    },
+    {
+      "key": "examiner.writtenReview.apply",
+      "en": "Apply computed written score",
+      "target": "Apply computed written score"
+    },
+    {
+      "key": "examiner.writtenReview.helper",
+      "en": "Only questions with a configured correctAnswer are auto-scored. Written answers remain examiner-reviewed.",
+      "target": "Only küsimused with a configured correctVastus are auto-scored. Written vastused remain examiner-reviewed."
+    },
+    {
+      "key": "examiner.reportReview.title",
+      "en": "Consulting report review",
+      "target": "Consulting report review"
+    },
+    {
+      "key": "examiner.reportReview.helper",
+      "en": "Review the candidate report draft, field notes, photos and section completeness before assigning the report score.",
+      "target": "Vaata üle the candidate report draft, field notes, photos and section completeness before assigning the report score."
+    },
+    {
+      "key": "examiner.reportReview.sections",
+      "en": "sections",
+      "target": "sections"
+    },
+    {
+      "key": "examiner.reportReview.photos",
+      "en": "photos",
+      "target": "photos"
+    },
+    {
+      "key": "examiner.reportReview.complete",
+      "en": "complete",
+      "target": "complete"
+    },
+    {
+      "key": "examiner.reportReview.filled",
+      "en": "filled",
+      "target": "filled"
+    },
+    {
+      "key": "examiner.reportReview.missing",
+      "en": "missing",
+      "target": "missing"
+    },
+    {
+      "key": "report.titleFull",
+      "en": "Consulting report - 2 trees",
+      "target": "Consulting report - 2 trees"
+    },
+    {
+      "key": "report.photos",
+      "en": "Photos",
+      "target": "Fotod"
+    },
+    {
+      "key": "report.photoHelper",
+      "en": "Photos are captured locally on this device and saved into the report draft.",
+      "target": "Fotod are captured locally on this device and saved into the report draft."
+    },
+    {
+      "key": "report.addPhotoShort",
+      "en": "Add photo",
+      "target": "Add photo"
+    },
+    {
+      "key": "report.photoAdded",
+      "en": "Photo added to the report draft.",
+      "target": "Foto added to the report draft."
+    },
+    {
+      "key": "report.photoError",
+      "en": "Photo could not be loaded. Try another image.",
+      "target": "Foto could not be loaded. Try another image."
+    },
+    {
+      "key": "report.fieldPlaceholder",
+      "en": "Field observations and rough notes...",
+      "target": "Field observations and rough notes..."
+    },
+    {
+      "key": "report.handwritingSaved",
+      "en": "Handwritten notes were saved among the photos.",
+      "target": "Handwritten notes were saved among the photos."
+    },
+    {
+      "key": "report.saveHandwriting",
+      "en": "Save handwriting",
+      "target": "Salvesta handwriting"
+    },
+    {
+      "key": "report.clearHandwriting",
+      "en": "Clear",
+      "target": "Clear"
+    },
+    {
+      "key": "report.handwritingHelper",
+      "en": "Write only with the stylus on the canvas. Finger touch is ignored to prevent accidental palm drawing.",
+      "target": "Write only with the stylus on the canvas. Finger touch is ignored to prevent accidental palm drawing."
+    },
+    {
+      "key": "report.openHandwriting",
+      "en": "Handwritten notes",
+      "target": "Handwritten notes"
+    },
+    {
+      "key": "report.openFullscreen",
+      "en": "Open fullscreen",
+      "target": "Ava fullscreen"
+    },
+    {
+      "key": "report.fieldNotesFullscreenHelper",
+      "en": "Large editor. Adjust the field height with the slider on the left.",
+      "target": "Large editor. Adjust the field height with the slider on the left."
+    },
+    {
+      "key": "report.fieldNotesPrivateHelper",
+      "en": "Working field notes. They are not automatically included in the final report.",
+      "target": "Working field notes. They are not automatically included in the final report."
+    },
+    {
+      "key": "report.fieldNotesPrivate",
+      "en": "Field notes (not included in the report)",
+      "target": "Field notes (not included in the report)"
+    },
+    {
+      "key": "report.photoUseInReport",
+      "en": "Use in report",
+      "target": "Use in report"
+    },
+    {
+      "key": "report.photoOpenFullscreen",
+      "en": "Double-click to open fullscreen",
+      "target": "Double-click to open fullscreen"
+    },
+    {
+      "key": "report.photoFullscreenHelper",
+      "en": "You can zoom the image on iPad with the pinch zoom gesture.",
+      "target": "You can zoom the image on iPad with the pinch zoom gesture."
+    },
+    {
+      "key": "report.photoDescriptionPlaceholder",
+      "en": "Short description, max. 100 characters",
+      "target": "Short description, max. 100 characters"
+    },
+    {
+      "key": "report.photoDescription",
+      "en": "Photo description",
+      "target": "Foto description"
+    },
+    {
+      "key": "examiner.identity.title",
+      "en": "Confirm Examiner identity",
+      "target": "Confirm Eksamineerija identity"
+    },
+    {
+      "key": "examiner.identity.name",
+      "en": "Examiner name",
+      "target": "Eksamineerija name"
+    },
+    {
+      "key": "examiner.identity.registrationId",
+      "en": "Registration ID",
+      "target": "Registration ID"
+    },
+    {
+      "key": "examiner.identity.confirmed",
+      "en": "Identity confirmed",
+      "target": "Identity confirmed"
+    },
+    {
+      "key": "examiner.identity.confirm",
+      "en": "Confirm identity",
+      "target": "Confirm identity"
+    },
+    {
+      "key": "examiner.readiness.title",
+      "en": "Examiner readiness",
+      "target": "Eksamineerija readiness"
+    },
+    {
+      "key": "examiner.readiness.identity",
+      "en": "Identity confirmed",
+      "target": "Identity confirmed"
+    },
+    {
+      "key": "examiner.readiness.assignments",
+      "en": "Assignments available",
+      "target": "Assignments available"
+    },
+    {
+      "key": "examiner.worklist.title",
+      "en": "Assigned Candidate worklist",
+      "target": "Assigned Kandidaat worklist"
+    },
+    {
+      "key": "examiner.worklist.helper",
+      "en": "Primary Examiner must complete the full outdoor form. Secondary Examiner input is optional/supporting.",
+      "target": "Primary Eksamineerija must complete the full outdoor form. Secondary Eksamineerija input is optional/supporting."
+    },
+    {
+      "key": "examiner.worklist.emptyTitle",
+      "en": "No assigned Candidates are available for this Examiner.",
+      "target": "Ei assigned Kandidaats are available for this Eksamineerija."
+    },
+    {
+      "key": "examiner.worklist.emptyHelper",
+      "en": "Ask the Centre to assign this Examiner as primary or secondary, save Centre Setup, then reopen the Examiner QR session.",
+      "target": "Ask the Keskus to assign this Eksamineerija as primary or secondary, save Keskus Seadistus, then reopen the Eksamineerija QR session."
+    },
+    {
+      "key": "examiner.worklist.primaryCheckbox",
+      "en": "I am the primary examiner for this candidate",
+      "target": "I am the primary examiner for this candidate"
+    },
+    {
+      "key": "examiner.worklist.openOutdoor",
+      "en": "Open outdoor form",
+      "target": "Ava outdoor form"
+    },
+    {
+      "key": "examiner.role.primary",
+      "en": "primary",
+      "target": "primary"
+    },
+    {
+      "key": "examiner.role.secondary",
+      "en": "secondary",
+      "target": "secondary"
+    },
+    {
+      "key": "outdoor.backToLanding",
+      "en": "Back to landing",
+      "target": "Back to landing"
+    },
+    {
+      "key": "outdoor.candidateBinding",
+      "en": "Candidate binding",
+      "target": "Kandidaat binding"
+    },
+    {
+      "key": "outdoor.activeRecord",
+      "en": "Active record",
+      "target": "Active record"
+    },
+    {
+      "key": "outdoor.level",
+      "en": "Level",
+      "target": "Level"
+    },
+    {
+      "key": "outdoor.total",
+      "en": "Outdoor total",
+      "target": "Outdoor total"
+    },
+    {
+      "key": "outdoor.paperArchive.title",
+      "en": "Paper management plan archive",
+      "target": "Paper management plan archive"
+    },
+    {
+      "key": "outdoor.paperArchive.helper",
+      "en": "Candidate prepares this on paper. Examiner photographs it as a pilot/archive placeholder.",
+      "target": "Kandidaat prepares this on paper. Eksamineerija photographs it as a pilot/archive placeholder."
+    },
+    {
+      "key": "outdoor.paperArchive.button",
+      "en": "Photograph paper plan",
+      "target": "Fotograph paper plan"
+    },
+    {
+      "key": "outdoor.paperArchive.photos",
+      "en": "Archived photos",
+      "target": "Archived photos"
+    },
+    {
+      "key": "outdoor.points",
+      "en": "points",
+      "target": "points"
+    },
+    {
+      "key": "outdoor.detail.title",
+      "en": "Outdoor form detail",
+      "target": "Outdoor form detail"
+    },
+    {
+      "key": "outdoor.detail.helper",
+      "en": "Jump between sections freely. Each question includes Notes / marking guidance.",
+      "target": "Jump between sections freely. Each question includes Märkused / marking guidance."
+    },
+    {
+      "key": "outdoor.notesGuidance",
+      "en": "Notes / marking guidance",
+      "target": "Märkused / marking guidance"
+    },
+    {
+      "key": "outdoor.pointsLabel",
+      "en": "Points",
+      "target": "Points"
+    },
+    {
+      "key": "outdoor.examinerNotes",
+      "en": "Examiner notes / justification",
+      "target": "Eksamineerija notes / justification"
+    },
+    {
+      "key": "outdoor.submit",
+      "en": "Submit and close outdoor form",
+      "target": "Submit and close outdoor form"
+    },
+    {
+      "key": "outdoor.mode.primary",
+      "en": "primary - full form required",
+      "target": "primary - full form required"
+    },
+    {
+      "key": "outdoor.mode.secondary",
+      "en": "secondary - optional input",
+      "target": "secondary - optional input"
+    },
+    {
+      "key": "outdoor.mode.unassigned",
+      "en": "unassigned",
+      "target": "unassigned"
+    },
+    {
+      "key": "outdoor.autosave",
+      "en": "autosave to sync queue",
+      "target": "autosave to sync queue"
+    },
+    {
+      "key": "scoring.title",
+      "en": "Examiner / Candidate scoring and evaluation",
+      "target": "Eksamineerija / Kandidaat scoring and evaluation"
+    },
+    {
+      "key": "scoring.subtitle",
+      "en": "Scoring engine uses the candidate level.",
+      "target": "Scoring engine uses the candidate level."
+    },
+    {
+      "key": "scoring.status",
+      "en": "Status",
+      "target": "Olek"
+    },
+    {
+      "key": "scoring.written",
+      "en": "Written",
+      "target": "Written"
+    },
+    {
+      "key": "scoring.outdoor",
+      "en": "Outdoor",
+      "target": "Outdoor"
+    },
+    {
+      "key": "scoring.report",
+      "en": "Report",
+      "target": "Aruanne"
+    },
+    {
+      "key": "scoring.total",
+      "en": "Total",
+      "target": "Total"
+    },
+    {
+      "key": "scoring.percentage",
+      "en": "Percentage",
+      "target": "Percentage"
+    },
+    {
+      "key": "scoring.result",
+      "en": "Result",
+      "target": "Tulemus"
+    },
+    {
+      "key": "scoring.pass",
+      "en": "PASS",
+      "target": "PASS"
+    },
+    {
+      "key": "scoring.notPassed",
+      "en": "NOT PASSED",
+      "target": "NOT PASSED"
+    },
+    {
+      "key": "scoring.generate",
+      "en": "Generate Evaluation",
+      "target": "Generate Evaluation"
+    },
+    {
+      "key": "scoring.loadPreview",
+      "en": "Load Evaluation Preview",
+      "target": "Laadi Evaluation Preview"
+    },
+    {
+      "key": "scoring.loading",
+      "en": "Loading...",
+      "target": "Laadiing..."
+    },
+    {
+      "key": "scoring.downloadDraftExport",
+      "en": "Download Draft Export (.xls)",
+      "target": "Download Mustand Ekspordi (.xls)"
+    },
+    {
+      "key": "scoring.exporting",
+      "en": "Exporting...",
+      "target": "Ekspordiing..."
+    },
+    {
+      "key": "scoring.draftOnly",
+      "en": "Draft Export only — not the official VETcert evaluation template.",
+      "target": "Mustand Ekspordi only — not the official VETcert evaluation template."
+    },
+    {
+      "key": "scoring.lastGenerated",
+      "en": "Last generated evaluation",
+      "target": "Last generated evaluation"
+    },
+    {
+      "key": "evaluation.preview.title",
+      "en": "Evaluation preview",
+      "target": "Evaluation preview"
+    },
+    {
+      "key": "evaluation.preview.helper",
+      "en": "Backend-loaded preview of the current Candidate evaluation data.",
+      "target": "Backend-loaded preview of the current Kandidaat evaluation data."
+    },
+    {
+      "key": "evaluation.preview.summary",
+      "en": "Summary",
+      "target": "Summary"
+    },
+    {
+      "key": "evaluation.preview.written",
+      "en": "Written",
+      "target": "Written"
+    },
+    {
+      "key": "evaluation.preview.outdoor",
+      "en": "Outdoor",
+      "target": "Outdoor"
+    },
+    {
+      "key": "evaluation.preview.report",
+      "en": "Report",
+      "target": "Aruanne"
+    },
+    {
+      "key": "evaluation.preview.total",
+      "en": "Total",
+      "target": "Total"
+    },
+    {
+      "key": "evaluation.preview.percentage",
+      "en": "Percentage",
+      "target": "Percentage"
+    },
+    {
+      "key": "evaluation.preview.result",
+      "en": "Result",
+      "target": "Tulemus"
+    },
+    {
+      "key": "evaluation.preview.outdoorScores",
+      "en": "Outdoor scores",
+      "target": "Outdoor scores"
+    },
+    {
+      "key": "evaluation.preview.reportSummary",
+      "en": "Report summary",
+      "target": "Aruanne summary"
+    },
+    {
+      "key": "evaluation.preview.hasReportDraft",
+      "en": "Report draft",
+      "target": "Aruanne draft"
+    },
+    {
+      "key": "evaluation.preview.treesWithContent",
+      "en": "Trees with content",
+      "target": "Puus with content"
+    },
+    {
+      "key": "evaluation.preview.fieldNotesFilled",
+      "en": "Field notes filled",
+      "target": "Field notes filled"
+    },
+    {
+      "key": "evaluation.preview.finalSectionsFilled",
+      "en": "Final sections filled",
+      "target": "Final sections filled"
+    },
+    {
+      "key": "evaluation.preview.photoPlaceholders",
+      "en": "Photo placeholders",
+      "target": "Foto placeholders"
+    },
+    {
+      "key": "evaluation.preview.submitted",
+      "en": "Submitted",
+      "target": "Submitted"
+    },
+    {
+      "key": "evaluation.preview.primaryScores",
+      "en": "Primary scores",
+      "target": "Primary scores"
+    },
+    {
+      "key": "evaluation.preview.secondaryScores",
+      "en": "Secondary scores",
+      "target": "Secondary scores"
+    },
+    {
+      "key": "evaluation.preview.yes",
+      "en": "yes",
+      "target": "yes"
+    },
+    {
+      "key": "evaluation.preview.no",
+      "en": "no",
+      "target": "no"
+    },
+    {
+      "key": "centre.access.title",
+      "en": "Certification centre / Open delegated workspace",
+      "target": "Certification centre / Ava delegated workspace"
+    },
+    {
+      "key": "centre.access.subtitle",
+      "en": "Open workspace using Centre QR received from Admin.",
+      "target": "Ava workspace using Keskus QR received from Administraator."
+    },
+    {
+      "key": "centre.access.placeholder",
+      "en": "Paste centre token",
+      "target": "Paste centre token"
+    },
+    {
+      "key": "centre.access.open",
+      "en": "Open centre workspace",
+      "target": "Ava centre workspace"
+    },
+    {
+      "key": "centre.access.prototypeToken",
+      "en": "Prototype token",
+      "target": "Prototype token"
+    },
+    {
+      "key": "centre.config.title",
+      "en": "Centre / Configure levels, variants, candidates and examiners",
+      "target": "Keskus / Configure levels, variants, candidates and examiners"
+    },
+    {
+      "key": "centre.config.subtitle",
+      "en": "One exam can contain Practicing, Consulting or both. Each candidate has primary and secondary examiner.",
+      "target": "One exam can contain Practicing, Consulting or both. Each candidate has primary and secondary examiner."
+    },
+    {
+      "key": "centre.setupPersistence.title",
+      "en": "Centre Setup persistence",
+      "target": "Keskus Seadistus persistence"
+    },
+    {
+      "key": "centre.setupPersistence.helper",
+      "en": "Load or save the current Centre Setup through the backend. Returned Candidate QR and Examiner QR links are shown in the QR access pack below.",
+      "target": "Laadi or save the current Keskus Seadistus through the backend. Returned Kandidaat QR and Eksamineerija QR links are shown in the QR access pack below."
+    },
+    {
+      "key": "centre.setupPersistence.load",
+      "en": "Load Centre Setup",
+      "target": "Laadi Keskus Seadistus"
+    },
+    {
+      "key": "centre.setupPersistence.loading",
+      "en": "Loading...",
+      "target": "Laadiing..."
+    },
+    {
+      "key": "centre.setupPersistence.save",
+      "en": "Save Centre Setup",
+      "target": "Salvesta Keskus Seadistus"
+    },
+    {
+      "key": "centre.setupPersistence.saving",
+      "en": "Saving...",
+      "target": "Saving..."
+    },
+    {
+      "key": "centre.setupPersistence.auditExport",
+      "en": "Download Centre Audit Package (.xls)",
+      "target": "Download Keskus Audit Pakett (.xls)"
+    },
+    {
+      "key": "centre.setupPersistence.exporting",
+      "en": "Exporting...",
+      "target": "Ekspordiing..."
+    },
+    {
+      "key": "centre.setupPersistence.unsaved",
+      "en": "Unsaved local changes",
+      "target": "Unsaved local changes"
+    },
+    {
+      "key": "centre.setupPersistence.saved",
+      "en": "Saved / no local changes",
+      "target": "Salvestatud / no local changes"
+    },
+    {
+      "key": "centre.setupPersistence.saveHelper",
+      "en": "Click Save Centre Setup to persist roster, examiners, assignments, variants, and imported tests.",
+      "target": "Click Salvesta Keskus Seadistus to persist roster, examiners, assignments, variants, and imported tests."
+    },
+    {
+      "key": "centre.dataMode.title",
+      "en": "Centre data mode",
+      "target": "Keskus data mode"
+    },
+    {
+      "key": "centre.dataMode.backendHelper",
+      "en": "This session uses backend-loaded pilot data.",
+      "target": "This session uses backend-loaded pilot data."
+    },
+    {
+      "key": "centre.dataMode.demoHelper",
+      "en": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data.",
+      "target": "This session uses demo fallback data for testing only. Laadi Keskus Seadistus to use backend-loaded pilot data."
+    },
+    {
+      "key": "centre.dataMode.saveAfterChanges",
+      "en": "Save Centre Setup after changing roster, examiners, assignments, or imported tests.",
+      "target": "Salvesta Keskus Seadistus after changing roster, examiners, assignments, or imported tests."
+    },
+    {
+      "key": "centre.dataMode.backend",
+      "en": "backend-loaded pilot data",
+      "target": "backend-loaded pilot data"
+    },
+    {
+      "key": "centre.dataMode.demo",
+      "en": "demo fallback data",
+      "target": "demo fallback data"
+    },
+    {
+      "key": "centre.copy.copied",
+      "en": "Copied {label} QR link",
+      "target": "Copied {label} QR link"
+    },
+    {
+      "key": "centre.copy.unavailable",
+      "en": "Copy unavailable. Select and copy {label} QR link manually.",
+      "target": "Copy unavailable. Select and copy {label} QR link manually."
+    },
+    {
+      "key": "centre.levels.title",
+      "en": "Levels",
+      "target": "Levels"
+    },
+    {
+      "key": "centre.variants.title",
+      "en": "Approved test variants",
+      "target": "Approved test variants"
+    },
+    {
+      "key": "centre.variants.helper",
+      "en": "Import CSV or JSON package with real tests. The selected variant is then shown to candidates.",
+      "target": "Impordi CSV or JSON package with real tests. The valitud variant is then shown to candidates."
+    },
+    {
+      "key": "centre.variants.import",
+      "en": "Import tests",
+      "target": "Impordi tests"
+    },
+    {
+      "key": "centre.variants.noImported",
+      "en": "No imported variant",
+      "target": "Ei imported variant"
+    },
+    {
+      "key": "centre.variants.csvHelper",
+      "en": "CSV columns: variantCode, level, language, questionId, type, points, text, optionA, optionB, optionC, optionD, correctAnswer. JSON format: { \"variants\": [...], \"questions\": { \"VARIANT_CODE\": [...] } }.",
+      "target": "CSV columns: variantCode, level, language, questionId, type, points, text, optionA, optionB, optionC, optionD, correctVastus. JSON format: { \"variants\": [...], \"küsimused\": { \"VARIANT_CODE\": [...] } }."
+    },
+    {
+      "key": "centre.variants.importedSummary",
+      "en": "Imported summary: {variants} variant(s), {questions} question(s).",
+      "target": "Imporditud summary: {variants} variant(s), {küsimused} question(s). {questions}"
+    },
+    {
+      "key": "centre.candidates.title",
+      "en": "Candidate list",
+      "target": "Kandidaat list"
+    },
+    {
+      "key": "centre.candidates.add",
+      "en": "Add candidate",
+      "target": "Add candidate"
+    },
+    {
+      "key": "centre.candidateDetails.title",
+      "en": "Candidate details",
+      "target": "Kandidaat details"
+    },
+    {
+      "key": "centre.candidateDetails.id",
+      "en": "Candidate ID",
+      "target": "Kandidaat ID"
+    },
+    {
+      "key": "centre.candidateDetails.name",
+      "en": "Name",
+      "target": "Nimi"
+    },
+    {
+      "key": "centre.candidateDetails.level",
+      "en": "Level",
+      "target": "Level"
+    },
+    {
+      "key": "centre.candidateDetails.birthDate",
+      "en": "Birth date",
+      "target": "Birth date"
+    },
+    {
+      "key": "centre.candidateDetails.documentId",
+      "en": "Document ID",
+      "target": "Document ID"
+    },
+    {
+      "key": "centre.candidateDetails.email",
+      "en": "Email",
+      "target": "Email"
+    },
+    {
+      "key": "centre.examiners.title",
+      "en": "Examiner list",
+      "target": "Eksamineerija list"
+    },
+    {
+      "key": "centre.examiners.add",
+      "en": "Add examiner",
+      "target": "Add examiner"
+    },
+    {
+      "key": "centre.examinerDetails.id",
+      "en": "ID",
+      "target": "ID"
+    },
+    {
+      "key": "centre.examinerDetails.name",
+      "en": "Name",
+      "target": "Nimi"
+    },
+    {
+      "key": "centre.examinerDetails.registrationId",
+      "en": "Registration ID",
+      "target": "Registration ID"
+    },
+    {
+      "key": "centre.examinerDetails.email",
+      "en": "Email",
+      "target": "Email"
+    },
+    {
+      "key": "centre.assignments.title",
+      "en": "Examiner assignments",
+      "target": "Eksamineerija assignments"
+    },
+    {
+      "key": "centre.assignments.candidate",
+      "en": "Candidate",
+      "target": "Kandidaat"
+    },
+    {
+      "key": "centre.assignments.level",
+      "en": "Level",
+      "target": "Level"
+    },
+    {
+      "key": "centre.assignments.primary",
+      "en": "Primary Examiner",
+      "target": "Primary Eksamineerija"
+    },
+    {
+      "key": "centre.assignments.secondary",
+      "en": "Secondary Examiner",
+      "target": "Secondary Eksamineerija"
+    },
+    {
+      "key": "centre.workflow.title",
+      "en": "Pilot workflow status",
+      "target": "Pilot workflow status"
+    },
+    {
+      "key": "centre.workflow.helper",
+      "en": "Pilot workflow status across setup, assignments, candidate sections, responses, report drafts and outdoor scoring.",
+      "target": "Pilot workflow status across setup, assignments, candidate sections, responses, report drafts and outdoor scoring."
+    },
+    {
+      "key": "centre.workflow.syncHelper",
+      "en": "Use the sync queue panel to review sync status after smoke test.",
+      "target": "Use the sync queue panel to review sync status after smoke test."
+    },
+    {
+      "key": "centre.workflow.setupIssues",
+      "en": "Centre Setup issue(s)",
+      "target": "Keskus Seadistus issue(s)"
+    },
+    {
+      "key": "centre.workflow.candidates",
+      "en": "candidates",
+      "target": "candidates"
+    },
+    {
+      "key": "centre.workflow.examiners",
+      "en": "examiners",
+      "target": "examiners"
+    },
+    {
+      "key": "centre.workflow.assignments",
+      "en": "assignments",
+      "target": "assignments"
+    },
+    {
+      "key": "centre.workflow.testPackageImported",
+      "en": "test package imported",
+      "target": "test package imported"
+    },
+    {
+      "key": "centre.workflow.noTestPackage",
+      "en": "no test package",
+      "target": "no test package"
+    },
+    {
+      "key": "centre.workflow.demoWarning",
+      "en": "This session uses demo fallback data for testing only. Load Centre Setup to use backend-loaded pilot data; counts may reflect demo fallback state until then.",
+      "target": "This session uses demo fallback data for testing only. Laadi Keskus Seadistus to use backend-loaded pilot data; counts may reflect demo fallback state until then."
+    },
+    {
+      "key": "centre.workflow.candidate",
+      "en": "Candidate",
+      "target": "Kandidaat"
+    },
+    {
+      "key": "centre.workflow.level",
+      "en": "Level",
+      "target": "Level"
+    },
+    {
+      "key": "centre.workflow.primaryExaminer",
+      "en": "Primary Examiner",
+      "target": "Primary Eksamineerija"
+    },
+    {
+      "key": "centre.workflow.secondaryExaminer",
+      "en": "Secondary Examiner",
+      "target": "Secondary Eksamineerija"
+    },
+    {
+      "key": "centre.workflow.identity",
+      "en": "Identity",
+      "target": "Identity"
+    },
+    {
+      "key": "centre.workflow.writtenTest",
+      "en": "Written test",
+      "target": "Written test"
+    },
+    {
+      "key": "centre.workflow.report",
+      "en": "Report",
+      "target": "Aruanne"
+    },
+    {
+      "key": "centre.workflow.responses",
+      "en": "Responses",
+      "target": "Responses"
+    },
+    {
+      "key": "centre.workflow.outdoorScores",
+      "en": "Outdoor scores",
+      "target": "Outdoor scores"
+    },
+    {
+      "key": "centre.workflow.confirmed",
+      "en": "confirmed",
+      "target": "confirmed"
+    },
+    {
+      "key": "centre.workflow.notConfirmed",
+      "en": "not confirmed",
+      "target": "not confirmed"
+    },
+    {
+      "key": "centre.workflow.closedAt",
+      "en": "Closed",
+      "target": "Sulged"
+    },
+    {
+      "key": "centre.workflow.sections",
+      "en": "sections",
+      "target": "sections"
+    },
+    {
+      "key": "centre.workflow.photos",
+      "en": "photos",
+      "target": "photos"
+    },
+    {
+      "key": "status.centreQrRequired",
+      "en": "Open the Centre portal with a valid Centre QR session, then try again.",
+      "target": "Ava the Keskus portal with a valid Keskus QR session, then try again."
+    },
+    {
+      "key": "status.backendPersistenceUnavailable",
+      "en": "Backend persistence is not configured. Set up Supabase persistence environment variables on the server, then restart the backend and try again.",
+      "target": "Backend persistence is not configured. Set up Supabase persistence environment variables on the server, then restart the backend and try again."
+    },
+    {
+      "key": "status.centreSetup.loadedEvent",
+      "en": "Loaded Centre Setup for exam event {event}.",
+      "target": "Laadied Keskus Seadistus for exam event {event}."
+    },
+    {
+      "key": "status.centreSetup.savedEvent",
+      "en": "Saved Centre Setup for exam event {event}.",
+      "target": "Salvestatud Keskus Seadistus for exam event {event}."
+    },
+    {
+      "key": "status.centreSetup.loadFailed",
+      "en": "Centre Setup could not be loaded. Check the session and try again.",
+      "target": "Keskus Seadistus could not be loaded. Check the session and try again."
+    },
+    {
+      "key": "status.centreSetup.saveFailed",
+      "en": "Centre Setup could not be saved. Check the Centre session and try again.",
+      "target": "Keskus Seadistus could not be saved. Check the Keskus session and try again."
+    },
+    {
+      "key": "status.centreAuditExport.sessionRequired",
+      "en": "Open the Centre portal with a valid Centre QR session before downloading the Audit Package.",
+      "target": "Ava the Keskus portal with a valid Keskus QR session before downloading the Audit Pakett."
+    },
+    {
+      "key": "status.testImport.importedFull",
+      "en": "Imported {variants} variants and {questions} questions.",
+      "target": "Imporditud {variants} variants and {küsimused} küsimused. {questions}"
+    },
+    {
+      "key": "status.testImport.failedWithMessage",
+      "en": "Test import failed: {message}",
+      "target": "Test import failed: {message}"
+    },
+    {
+      "key": "status.testImport.fileReadFailed",
+      "en": "Test import failed: the file could not be read.",
+      "target": "Test import failed: the file could not be read."
+    },
+    {
+      "key": "status.testImport.summary",
+      "en": "Imported {variants} variant(s), {questions} question(s).",
+      "target": "Imporditud {variants} variant(s), {küsimused} question(s). {questions}"
+    },
+    {
+      "key": "status.evaluation.previewSessionRequired",
+      "en": "Open this portal with a valid QR session before loading the evaluation preview.",
+      "target": "Ava this portal with a valid QR session before loading the evaluation preview."
+    },
+    {
+      "key": "status.evaluation.previewUnavailable",
+      "en": "Evaluation preview is unavailable. Reopen the Examiner QR session and try again.",
+      "target": "Evaluation preview is unavailable. Reopen the Eksamineerija QR session and try again."
+    },
+    {
+      "key": "status.export.sessionRequired",
+      "en": "Open this portal with a valid QR session before downloading the Draft Export.",
+      "target": "Ava this portal with a valid QR session before downloading the Mustand Ekspordi."
+    },
+    {
+      "key": "status.export.unavailable",
+      "en": "Draft Export is unavailable. Reopen the Examiner QR session and try again.",
+      "target": "Mustand Ekspordi is unavailable. Reopen the Eksamineerija QR session and try again."
+    },
+    {
+      "key": "auditSync.title",
+      "en": "Sync queue / audit trail",
+      "target": "Sync queue / audit trail"
+    },
+    {
+      "key": "auditSync.subtitle",
+      "en": "Sync queue shows local actions waiting for backend confirmation or already recorded during this session.",
+      "target": "Sync queue shows local actions waiting for backend confirmation or already recorded during this session."
+    },
+    {
+      "key": "auditSync.markAllSynced",
+      "en": "Mark all synced",
+      "target": "Mark all synced"
+    },
+    {
+      "key": "auditSync.queue",
+      "en": "Sync queue",
+      "target": "Sync queue"
+    },
+    {
+      "key": "auditSync.audit",
+      "en": "Audit trail",
+      "target": "Audit trail"
+    },
+    {
+      "key": "auditSync.emptyQueue",
+      "en": "No sync queue items.",
+      "target": "Ei sync queue üksused."
+    },
+    {
+      "key": "auditSync.emptyAudit",
+      "en": "No audit entries yet.",
+      "target": "Ei audit entries yet."
+    },
+    {
+      "key": "auditSync.status",
+      "en": "Status",
+      "target": "Olek"
+    },
+    {
+      "key": "auditSync.time",
+      "en": "Time",
+      "target": "Time"
+    },
+    {
+      "key": "auditSync.type",
+      "en": "Type",
+      "target": "Tüüp"
+    },
+    {
+      "key": "auditSync.detail",
+      "en": "Detail",
+      "target": "Detail"
+    },
+    {
+      "key": "common.open",
+      "en": "Open",
+      "target": "Ava"
+    },
+    {
+      "key": "common.close",
+      "en": "Close",
+      "target": "Sulge"
+    },
+    {
+      "key": "common.save",
+      "en": "Save",
+      "target": "Salvesta"
+    },
+    {
+      "key": "common.load",
+      "en": "Load",
+      "target": "Laadi"
+    },
+    {
+      "key": "common.download",
+      "en": "Download",
+      "target": "Download"
+    },
+    {
+      "key": "common.import",
+      "en": "Import",
+      "target": "Impordi"
+    },
+    {
+      "key": "common.export",
+      "en": "Export",
+      "target": "Ekspordi"
+    },
+    {
+      "key": "common.submit",
+      "en": "Submit",
+      "target": "Submit"
+    },
+    {
+      "key": "common.confirm",
+      "en": "Confirm",
+      "target": "Confirm"
+    },
+    {
+      "key": "common.add",
+      "en": "Add",
+      "target": "Add"
+    },
+    {
+      "key": "common.cancel",
+      "en": "Cancel",
+      "target": "Cancel"
+    },
+    {
+      "key": "common.review",
+      "en": "Review",
+      "target": "Vaata üle"
+    },
+    {
+      "key": "common.ready",
+      "en": "Ready",
+      "target": "Valmis"
+    },
+    {
+      "key": "common.missing",
+      "en": "Missing",
+      "target": "Puudub"
+    },
+    {
+      "key": "common.yes",
+      "en": "yes",
+      "target": "yes"
+    },
+    {
+      "key": "common.no",
+      "en": "no",
+      "target": "no"
+    },
+    {
+      "key": "app.heroTitle",
+      "en": "Digital VETcert examination system",
+      "target": "Digital VETcert examination system"
+    },
+    {
+      "key": "app.dedicatedPortal",
+      "en": "Dedicated {role} portal",
+      "target": "Dedicated {role} portal"
+    },
+    {
+      "key": "workspace.current",
+      "en": "Current workspace",
+      "target": "Praegune workspace"
+    },
+    {
+      "key": "workspace.candidates",
+      "en": "candidates",
+      "target": "candidates"
+    },
+    {
+      "key": "qrScanner.helper",
+      "en": "Allow camera access and point the tablet at a VetBara QR.",
+      "target": "Kõikow camera access and point the tablet at a VetBara QR."
+    },
+    {
+      "key": "qrScanner.scan",
+      "en": "Scan {role} QR",
+      "target": "Scan {role} QR"
+    },
+    {
+      "key": "admin.openExam.title",
+      "en": "Admin / Open exam event",
+      "target": "Administraator / Ava exam event"
+    },
+    {
+      "key": "admin.openExam.subtitle",
+      "en": "Admin sets centre, date, place and exam language, then sends centre access QR.",
+      "target": "Administraator sets centre, date, place and exam language, then sends centre access QR."
+    },
+    {
+      "key": "admin.centre",
+      "en": "Certification centre",
+      "target": "Certification centre"
+    },
+    {
+      "key": "admin.examLanguage",
+      "en": "Exam language",
+      "target": "Exam language"
+    },
+    {
+      "key": "admin.examDate",
+      "en": "Exam date",
+      "target": "Exam date"
+    },
+    {
+      "key": "admin.place",
+      "en": "Place",
+      "target": "Place"
+    },
+    {
+      "key": "admin.authoring.sectionTitle",
+      "en": "A - Create/edit examination materials",
+      "target": "A - Create/edit examination materials"
+    },
+    {
+      "key": "admin.authoring.sectionDescription",
+      "en": "Structured source of four examination documents. Questions, sections, scoring and examiner guidance are edited here and saved as the final examination package.",
+      "target": "Structured source of four examination documents. Küsimuss, sections, scoring and examiner guidance are edited here and saved as the final examination package."
+    },
+    {
+      "key": "admin.authoring.panelTitle",
+      "en": "Create/edit examination materials",
+      "target": "Create/edit examination materials"
+    },
+    {
+      "key": "admin.authoring.panelDescription",
+      "en": "Edit the four source examination documents. These data create the examination package for the system and the print/PDF document version.",
+      "target": "Muuda the four source examination documents. These data create the examination package for the system and the print/PDF document version."
+    },
+    {
+      "key": "admin.authoring.loadVet",
+      "en": "Load .vet",
+      "target": "Laadi .vet"
+    },
+    {
+      "key": "admin.authoring.printPdf",
+      "en": "Print / PDF",
+      "target": "Print / PDF"
+    },
+    {
+      "key": "admin.authoring.createPackage",
+      "en": "Create package",
+      "target": "Create package"
+    },
+    {
+      "key": "admin.authoring.advancedTools",
+      "en": "Advanced tools",
+      "target": "Advanced tools"
+    },
+    {
+      "key": "admin.authoring.hideAdvanced",
+      "en": "Hide advanced tools",
+      "target": "Hide advanced tools"
+    },
+    {
+      "key": "admin.authoring.advancedServiceActions",
+      "en": "Advanced / service actions",
+      "target": "Advanced / service actions"
+    },
+    {
+      "key": "admin.authoring.openCurrent",
+      "en": "Open current materials",
+      "target": "Ava current materials"
+    },
+    {
+      "key": "admin.authoring.openDraft",
+      "en": "Open working draft",
+      "target": "Ava working draft"
+    },
+    {
+      "key": "admin.authoring.saveDraft",
+      "en": "Save draft",
+      "target": "Salvesta draft"
+    },
+    {
+      "key": "admin.authoring.saveAdminJson",
+      "en": "Save as Admin JSON package",
+      "target": "Salvesta as Administraator JSON package"
+    },
+    {
+      "key": "admin.authoring.useLatestAdminPackage",
+      "en": "Use latest package from Admin workflow",
+      "target": "Use latest package from Administraator workflow"
+    },
+    {
+      "key": "admin.authoring.listDrafts",
+      "en": "List all drafts",
+      "target": "List all drafts"
+    },
+    {
+      "key": "admin.authoring.importJson",
+      "en": "Import JSON",
+      "target": "Impordi JSON"
+    },
+    {
+      "key": "admin.authoring.exportDraft",
+      "en": "Export draft",
+      "target": "Ekspordi draft"
+    },
+    {
+      "key": "admin.authoring.exportPackageJson",
+      "en": "Export package JSON",
+      "target": "Ekspordi package JSON"
+    },
+    {
+      "key": "admin.authoring.advancedHelper",
+      "en": "These tools are mainly for migration, backups and technical checks. For routine exam preparation, use the main buttons above.",
+      "target": "These tools are mainly for migration, backups and technical checks. For routine exam preparation, use the main buttons above."
+    },
+    {
+      "key": "admin.authoring.savedDrafts",
+      "en": "Saved structured drafts",
+      "target": "Salvestatud structured drafts"
+    },
+    {
+      "key": "admin.authoring.selectDraft",
+      "en": "Select draft...",
+      "target": "Select draft..."
+    },
+    {
+      "key": "admin.authoring.openDraftShort",
+      "en": "Open draft",
+      "target": "Ava draft"
+    },
+    {
+      "key": "admin.authoring.itemsLabel",
+      "en": "items",
+      "target": "üksused"
+    },
+    {
+      "key": "admin.authoring.questionsLabel",
+      "en": "questions",
+      "target": "küsimused"
+    },
+    {
+      "key": "admin.authoring.pointsLabel",
+      "en": "marks",
+      "target": "punktid"
+    },
+    {
+      "key": "admin.authoring.manualReviewTitle",
+      "en": "Manual document review",
+      "target": "Manual document review"
+    },
+    {
+      "key": "admin.authoring.manualReviewDescription",
+      "en": "Edit the preface, candidate introduction, sections and questions. This structure is the source for the JSON package and print/PDF.",
+      "target": "Muuda the preface, candidate introduction, sections and küsimused. This structure is the source for the JSON package and print/PDF."
+    },
+    {
+      "key": "admin.authoring.filterSection",
+      "en": "Filter section",
+      "target": "Filter section"
+    },
+    {
+      "key": "admin.authoring.allSections",
+      "en": "All sections",
+      "target": "Kõik sections"
+    },
+    {
+      "key": "admin.authoring.documentTitle",
+      "en": "Document title",
+      "target": "Document title"
+    },
+    {
+      "key": "admin.authoring.prefaceLabel",
+      "en": "Preface / document notes",
+      "target": "Preface / document notes"
+    },
+    {
+      "key": "admin.authoring.candidateIntroLabel",
+      "en": "Introductory text for candidates",
+      "target": "Introductory text for candidates"
+    },
+    {
+      "key": "admin.authoring.sectionsEmpty",
+      "en": "Sections are created from the Section field in individual questions.",
+      "target": "Jaotiss are created from the Jaotis field in individual küsimused."
+    },
+    {
+      "key": "admin.authoring.addItem",
+      "en": "+ item",
+      "target": "+ item"
+    },
+    {
+      "key": "admin.authoring.noItems",
+      "en": "This document has no items yet.",
+      "target": "This document has no üksused yet."
+    },
+    {
+      "key": "admin.authoring.noSectionItems",
+      "en": "This section has no items yet.",
+      "target": "This section has no üksused yet."
+    },
+    {
+      "key": "admin.authoring.noActivePackage",
+      "en": "No active package is loaded. Use Load .vet or create a new package.",
+      "target": "Ei active package is loaded. Use Laadi .vet or create a new package."
+    },
+    {
+      "key": "admin.authoring.itemEditorTitle",
+      "en": "Edit item",
+      "target": "Muuda item"
+    },
+    {
+      "key": "admin.authoring.idLabel",
+      "en": "ID",
+      "target": "ID"
+    },
+    {
+      "key": "admin.authoring.numberLabel",
+      "en": "Number",
+      "target": "Number"
+    },
+    {
+      "key": "admin.authoring.typeLabel",
+      "en": "Type",
+      "target": "Tüüp"
+    },
+    {
+      "key": "admin.authoring.maxScoreLabel",
+      "en": "Maximum score",
+      "target": "Maximum score"
+    },
+    {
+      "key": "admin.authoring.sectionFieldLabel",
+      "en": "Section",
+      "target": "Jaotis"
+    },
+    {
+      "key": "admin.authoring.themeLabel",
+      "en": "Theme",
+      "target": "Teema"
+    },
+    {
+      "key": "admin.authoring.questionBodyLabel",
+      "en": "Question body",
+      "target": "Küsimus body"
+    },
+    {
+      "key": "admin.authoring.outdoorQuestionTextLabel",
+      "en": "Question body / candidate text",
+      "target": "Küsimus body / candidate text"
+    },
+    {
+      "key": "admin.authoring.examinerGuidanceLabel",
+      "en": "Examiner help / scoring guidance",
+      "target": "Eksamineerija help / scoring guidance"
+    },
+    {
+      "key": "admin.authoring.optionsLabel",
+      "en": "Options, one per line, e.g. A. ...",
+      "target": "Options, one per line, e.g. A. ..."
+    },
+    {
+      "key": "admin.authoring.correctAnswerLabel",
+      "en": "Correct answer",
+      "target": "Correct answer"
+    },
+    {
+      "key": "admin.authoring.scoringHelpLabel",
+      "en": "Examiner help / correct answer / scoring guidance",
+      "target": "Eksamineerija help / correct answer / scoring guidance"
+    },
+    {
+      "key": "admin.authoring.renameFilteredSection",
+      "en": "Rename filtered section",
+      "target": "Rename filtered section"
+    },
+    {
+      "key": "admin.authoring.autosavedLocal",
+      "en": "Changes were saved locally.",
+      "target": "Changes were saved locally."
+    },
+    {
+      "key": "admin.authoring.autosaveFailed",
+      "en": "Local autosave failed.",
+      "target": "Local autosave failed."
+    },
+    {
+      "key": "common.duplicate",
+      "en": "Duplicate",
+      "target": "Dubleeri"
+    },
+    {
+      "key": "common.delete",
+      "en": "Delete",
+      "target": "Kustuta"
+    },
+    {
+      "key": "admin.openExam.sectionDescription",
+      "en": "The administrator sets the certification centre, date, place and examination language, then sends the Centre access link / QR.",
+      "target": "The administrator sets the certification centre, date, place and examination language, then sends the Keskus access link / QR."
+    },
+    {
+      "key": "admin.translation.sectionTitle",
+      "en": "C - Interface translation",
+      "target": "C - Interface translation"
+    },
+    {
+      "key": "admin.translation.sectionDescription",
+      "en": "User interface translations are managed here. Examination content translation is controlled by the package created in section A.",
+      "target": "User interface translations are managed here. Examination content translation is controlled by the package created in section A."
+    },
+    {
+      "key": "admin.centreAccess.title",
+      "en": "Centre access link / QR",
+      "target": "Keskus access link / QR"
+    },
+    {
+      "key": "admin.centreAccess.send",
+      "en": "Send centre link / QR",
+      "target": "Send centre link / QR"
+    },
+    {
+      "key": "admin.centreAccess.scan",
+      "en": "Scan centre QR",
+      "target": "Scan centre QR"
+    },
+    {
+      "key": "admin.multilingual.title",
+      "en": "Admin / Multilingual layer",
+      "target": "Administraator / Multilingual layer"
+    },
+    {
+      "key": "admin.multilingual.subtitle",
+      "en": "UI translations are managed separately from exam content.",
+      "target": "UI translations are managed separately from exam content."
+    },
+    {
+      "key": "admin.multilingual.sourceTerms",
+      "en": "EN source + national terms",
+      "target": "EN source + national terms"
+    },
+    {
+      "key": "admin.multilingual.needsReview",
+      "en": "needs review",
+      "target": "needs review"
+    },
+    {
+      "key": "admin.multilingual.export",
+      "en": "Export translation XLSX",
+      "target": "Ekspordi translation XLSX"
+    },
+    {
+      "key": "status.openedForCentre",
+      "en": "Opened for Centre",
+      "target": "Avaed for Keskus"
+    },
+    {
+      "key": "audit.centreAccessSent",
+      "en": "Centre access link sent",
+      "target": "Keskus access link sent"
+    },
+    {
+      "key": "status.testImport.loadedStoredFull",
+      "en": "Loaded stored test package with {variants} variant(s) and {questions} question(s).",
+      "target": "Laadied stored test package with {variants} variant(s) and {küsimused} question(s). {questions}"
+    },
+    {
+      "key": "status.testImport.loadedStored",
+      "en": "Loaded stored test package.",
+      "target": "Laadied stored test package."
+    },
+    {
+      "key": "status.centreAuditExport.unavailable",
+      "en": "The Centre Audit Package requires a valid Centre session. Reopen the Centre QR and try again.",
+      "target": "The Keskus Audit Pakett requires a valid Keskus session. Reopen the Keskus QR and try again."
+    },
+    {
+      "key": "app.mvpPrototype",
+      "en": "Full workflow",
+      "target": "Full workflow"
+    },
+    {
+      "key": "app.offlineFirst",
+      "en": "offline-first",
+      "target": "offline-first"
+    },
+    {
+      "key": "sectionStatus.locked",
+      "en": "locked",
+      "target": "locked"
+    },
+    {
+      "key": "sectionStatus.open",
+      "en": "open",
+      "target": "open"
+    },
+    {
+      "key": "sectionStatus.closed",
+      "en": "closed",
+      "target": "closed"
+    },
+    {
+      "key": "common.loading",
+      "en": "Loading...",
+      "target": "Laadiing..."
+    },
+    {
+      "key": "common.saved",
+      "en": "Saved",
+      "target": "Salvestatud"
+    },
+    {
+      "key": "admin.translation.interfaceOnly",
+      "en": "Translation management applies only to the application interface. Exam content comes from the Admin package and must not be changed by UX language.",
+      "target": "Translation management applies only to the application interface. Exam content comes from the Administraator package and must not be changed by UX language."
+    },
+    {
+      "key": "admin.translation.tableTitle",
+      "en": "Dedicated UI translation table",
+      "target": "Dedicated UI translation table"
+    },
+    {
+      "key": "admin.translation.tableHelper",
+      "en": "Every interface term is stored here with its key, English source, current UI translation and context for Admin review.",
+      "target": "Every interface term is stored here with its key, English source, current UI translation and context for Administraator review."
+    },
+    {
+      "key": "admin.translation.key",
+      "en": "Key",
+      "target": "Key"
+    },
+    {
+      "key": "admin.translation.source",
+      "en": "EN source",
+      "target": "EN source"
+    },
+    {
+      "key": "admin.translation.current",
+      "en": "Current UI text",
+      "target": "Praegune UI text"
+    },
+    {
+      "key": "admin.translation.context",
+      "en": "Context",
+      "target": "Kontekst"
+    },
+    {
+      "key": "admin.translation.exportCsv",
+      "en": "Export translation CSV",
+      "target": "Ekspordi translation CSV"
+    },
+    {
+      "key": "admin.translation.import",
+      "en": "Import translation file",
+      "target": "Impordi translation file"
+    },
+    {
+      "key": "admin.translation.importHelper",
+      "en": "Import UI translations into the currently selected interface language. The file may be CSV exported from this table or a flat JSON dictionary.",
+      "target": "Impordi UI translations into the currently valitud interface language. The file may be CSV exported from this table or a flat JSON dictionary."
+    },
+    {
+      "key": "admin.translation.importConfirm",
+      "en": "Importing translations for {language} (from the system setting). Overwrite the current interface?",
+      "target": "Impordiing translations for {language} (from the system setting). Overwrite the current interface?"
+    },
+    {
+      "key": "admin.translation.importYes",
+      "en": "Yes, overwrite",
+      "target": "Jah, overwrite"
+    },
+    {
+      "key": "admin.translation.importNo",
+      "en": "No",
+      "target": "Ei"
+    },
+    {
+      "key": "admin.translation.importReady",
+      "en": "{count} translation term(s) found.",
+      "target": "{count} translation term(s) found."
+    },
+    {
+      "key": "admin.translation.imported",
+      "en": "Translations were imported. Reloading the interface.",
+      "target": "Translations were imported. Reloading the interface."
+    },
+    {
+      "key": "admin.translation.importFailed",
+      "en": "Translation import failed. Check the file format.",
+      "target": "Translation import failed. Check the file format."
+    },
+    {
+      "key": "admin.centreAccess.helper",
+      "en": "Generate the centre link only when the package is ready and the exam is open.",
+      "target": "Generate the centre link only when the package is ready and the exam is open."
+    },
+    {
+      "key": "admin.centreAccess.copyPrompt",
+      "en": "Copy the Centre access link",
+      "target": "Copy the Keskus access link"
+    },
+    {
+      "key": "admin.packagePdf.helper",
+      "en": "Certification PDFs are converted into a local JSON package. The application UX language does not change the language or content of exam documents.",
+      "target": "Certification PDFs are converted into a local JSON package. The application UX language does not change the language or content of exam documents."
+    },
+    {
+      "key": "admin.packagePdf.convert",
+      "en": "Convert 4 PDFs",
+      "target": "Convert 4 PDFs"
+    },
+    {
+      "key": "admin.packagePdf.loadList",
+      "en": "Load list",
+      "target": "Laadi list"
+    },
+    {
+      "key": "admin.packagePdf.loadLatest",
+      "en": "Load latest",
+      "target": "Laadi latest"
+    },
+    {
+      "key": "admin.packagePdf.loadActive",
+      "en": "Load active",
+      "target": "Laadi active"
+    },
+    {
+      "key": "admin.packagePdf.approve",
+      "en": "Approve for Centre",
+      "target": "Approve for Keskus"
+    },
+    {
+      "key": "admin.packagePdf.overrideApprove",
+      "en": "Override approval",
+      "target": "Override approval"
+    },
+    {
+      "key": "centre.package.sectionTitle",
+      "en": "A - Load exam package",
+      "target": "A - Laadi exam package"
+    },
+    {
+      "key": "centre.package.sectionDescription",
+      "en": "Load the .vet package sent by Admin. The package sets the content of tests and forms for further exam preparation.",
+      "target": "Laadi the .vet package sent by Administraator. The package sets the content of tests and forms for further exam preparation."
+    },
+    {
+      "key": "centre.package.panelTitle",
+      "en": "Load the .vet package sent by Admin",
+      "target": "Laadi the .vet package sent by Administraator"
+    },
+    {
+      "key": "centre.package.panelHelper",
+      "en": "This step sets the current exam content for the centre. Levels and variants are taken directly from the package.",
+      "target": "This step sets the current exam content for the centre. Levels and variants are taken directly from the package."
+    },
+    {
+      "key": "centre.package.cardTitle",
+      "en": "Load the .vet package sent by Admin",
+      "target": "Laadi the .vet package sent by Administraator"
+    },
+    {
+      "key": "centre.package.cardHelper",
+      "en": "Select VetBara Package 1. The package contains rules, tests and forms for the outdoor session in the relevant language.",
+      "target": "Select VetBara Pakett 1. The package contains rules, tests and forms for the outdoor session in the relevant language."
+    },
+    {
+      "key": "centre.package.loadFile",
+      "en": "Load .vet",
+      "target": "Laadi .vet"
+    },
+    {
+      "key": "centre.package.loadServer",
+      "en": "Load from server",
+      "target": "Laadi from server"
+    },
+    {
+      "key": "centre.package.defaultLabel",
+      "en": "package",
+      "target": "package"
+    },
+    {
+      "key": "centre.package.activeLabel",
+      "en": "active package",
+      "target": "active package"
+    },
+    {
+      "key": "centre.package.statusLoaded",
+      "en": "Loaded: {label} ({testQuestions} test questions, {outdoorItems} outdoor items).",
+      "target": "Laadied: {label} ({testKüsimuss} test küsimused, {outdoorItems} outdoor üksused). {testQuestions}"
+    },
+    {
+      "key": "centre.package.statusLoadingVet",
+      "en": "Loading VetBara Package 1 (.vet)...",
+      "target": "Laadiing VetBara Pakett 1 (.vet)..."
+    },
+    {
+      "key": "centre.package.statusLoadingServer",
+      "en": "Loading active package from server...",
+      "target": "Laadiing active package from server..."
+    },
+    {
+      "key": "centre.package.errorNoData",
+      "en": "The package does not contain Package 1 data.",
+      "target": "The package does not contain Pakett 1 data."
+    },
+    {
+      "key": "centre.package.errorImportFailed",
+      "en": "Importing the .vet package failed.",
+      "target": "Impordiing the .vet package failed."
+    },
+    {
+      "key": "centre.package.errorServerFailed",
+      "en": "Loading the active package failed.",
+      "target": "Laadiing the active package failed."
+    },
+    {
+      "key": "centre.advancedTools",
+      "en": "Advanced tools",
+      "target": "Advanced tools"
+    },
+    {
+      "key": "centre.advancedTools.helper",
+      "en": "Service options for audit, manual import of older packages and operational checks. A normal exam run usually does not need them.",
+      "target": "Service options for audit, manual import of older packages and operational checks. A normal exam run usually does not need them."
+    },
+    {
+      "key": "centre.setup.openSaved",
+      "en": "Open saved setup",
+      "target": "Ava saved setup"
+    },
+    {
+      "key": "centre.fieldSetup.sectionTitle",
+      "en": "B - Field site setup",
+      "target": "B - Field site setup"
+    },
+    {
+      "key": "centre.fieldSetup.sectionDescription",
+      "en": "Preparation of the field part of the exam: test centre, physical trees, Practicing/Consulting A-D assignments, Practicing A data, validation and candidate exports.",
+      "target": "Preparation of the field part of the exam: test centre, physical trees, Practicing/Consulting A-D assignments, Practicing A data, validation and candidate exports."
+    },
+    {
+      "key": "centre.people.sectionTitle",
+      "en": "C - Candidates and examiners",
+      "target": "C - Kandidaats and examiners"
+    },
+    {
+      "key": "centre.people.sectionDescription",
+      "en": "Manage candidates, examiners and primary/secondary examiner assignments. Candidate and examiner lists use the same type of edit cards.",
+      "target": "Manage candidates, examiners and primary/secondary examiner assignments. Kandidaat and examiner lists use the same type of edit cards."
+    },
+    {
+      "key": "candidate.section.orientation",
+      "en": "Orientation",
+      "target": "Orientation"
+    },
+    {
+      "key": "candidate.section.trees",
+      "en": "Tree preparation",
+      "target": "Puu preparation"
+    },
+    {
+      "key": "field.map.packageStored",
+      "en": "Field map package is stored on this tablet.",
+      "target": "Field map package is stored on this tablet."
+    },
+    {
+      "key": "examiner.offlinePackage.title",
+      "en": "Offline candidate package",
+      "target": "Offline candidate package"
+    },
+    {
+      "key": "examiner.offlinePackage.helper",
+      "en": "If the backend or internet does not work, upload the JSON package exported from the Candidate portal here.",
+      "target": "If the backend or internet does not work, upload the JSON package exported from the Kandidaat portal here."
+    },
+    {
+      "key": "examiner.offlinePackage.import",
+      "en": "Import offline package",
+      "target": "Impordi offline package"
+    },
+    {
+      "key": "common.remove",
+      "en": "Remove",
+      "target": "Eemalda"
+    },
+    {
+      "key": "common.saving",
+      "en": "Saving...",
+      "target": "Saving..."
+    },
+    {
+      "key": "centre.setup.save",
+      "en": "Save setup",
+      "target": "Salvesta setup"
+    },
+    {
+      "key": "centre.meta.packageLoaded",
+      "en": "Package loaded",
+      "target": "Pakett loaded"
+    },
+    {
+      "key": "centre.meta.waitingForPackage",
+      "en": "Waiting for package",
+      "target": "Waiting for package"
+    },
+    {
+      "key": "centre.meta.peopleCount",
+      "en": "{candidates} candidate(s) · {examiners} examiner(s)",
+      "target": "{candidates} candidate(s) · {examiners} examiner(s)"
+    },
+    {
+      "key": "centre.meta.checkCount",
+      "en": "{count} check(s)",
+      "target": "{count} check(s)"
+    },
+    {
+      "key": "centre.candidates.helper",
+      "en": "Enter candidates and their exam level.",
+      "target": "Enter candidates and their exam level."
+    },
+    {
+      "key": "centre.examiners.helper",
+      "en": "Add or edit examiners who will be assigned to candidates.",
+      "target": "Add or edit examiners who will be assigned to candidates."
+    },
+    {
+      "key": "centre.accessControl.sectionTitle",
+      "en": "D - Access and checks",
+      "target": "D - Access and checks"
+    },
+    {
+      "key": "centre.accessControl.sectionDescription",
+      "en": "QR links for candidates and examiners, readiness checks and operational exam overview.",
+      "target": "QR links for candidates and examiners, readiness checks and operational exam overview."
+    },
+    {
+      "key": "centre.results.title",
+      "en": "Candidate results overview",
+      "target": "Kandidaat results overview"
+    },
+    {
+      "key": "centre.results.helper",
+      "en": "Summary of individual candidate results. Result editing takes place in the Examiner interface after clicking the relevant result.",
+      "target": "Summary of individual candidate results. Tulemus editing takes place in the Eksamineerija interface after clicking the relevant result."
+    },
+    {
+      "key": "centre.results.candidateNumber",
+      "en": "Candidate number",
+      "target": "Kandidaat number"
+    },
+    {
+      "key": "centre.results.name",
+      "en": "Name",
+      "target": "Nimi"
+    },
+    {
+      "key": "centre.results.testResult",
+      "en": "Test result",
+      "target": "Test result"
+    },
+    {
+      "key": "centre.results.outdoorResult",
+      "en": "Outdoor result",
+      "target": "Outdoor result"
+    },
+    {
+      "key": "centre.results.reportResult",
+      "en": "Report result",
+      "target": "Aruanne result"
+    },
+    {
+      "key": "centre.results.answeredCount",
+      "en": "{answered} / {total} answered",
+      "target": "{answered} / {total} answered"
+    },
+    {
+      "key": "centre.results.primary",
+      "en": "Primary",
+      "target": "Primary"
+    },
+    {
+      "key": "centre.results.secondary",
+      "en": "Secondary",
+      "target": "Secondary"
+    },
+    {
+      "key": "centre.results.notRequired",
+      "en": "Not required",
+      "target": "Eit required"
+    },
+    {
+      "key": "common.find",
+      "en": "Find",
+      "target": "Find"
+    },
+    {
+      "key": "common.name",
+      "en": "Name",
+      "target": "Nimi"
+    },
+    {
+      "key": "centre.fieldSetup.panelTitle",
+      "en": "Field site setup",
+      "target": "Field site setup"
+    },
+    {
+      "key": "centre.fieldSetup.panelHelper",
+      "en": "Prepare the map and trees, open tablet mode, load changes from the tablet and save the final field setup.",
+      "target": "Prepare the map and trees, open tablet mode, load changes from the tablet and save the final field setup."
+    },
+    {
+      "key": "centre.fieldSetup.errorCount",
+      "en": "{count} error(s)",
+      "target": "{count} viga(d)"
+    },
+    {
+      "key": "centre.fieldSetup.noBlockingError",
+      "en": "No blocking error",
+      "target": "Ei blocking error"
+    },
+    {
+      "key": "centre.fieldSetup.requiredAssignments",
+      "en": "{ready} / {total} required assignments",
+      "target": "{ready} / {total} required assignments"
+    },
+    {
+      "key": "centre.fieldSetup.tabletSyncLoaded",
+      "en": "Tablet sync loaded",
+      "target": "Tahvelarvuti sync loaded"
+    },
+    {
+      "key": "centre.fieldSetup.tabletAccess",
+      "en": "Tablet access",
+      "target": "Tahvelarvuti access"
+    },
+    {
+      "key": "centre.fieldSetup.reopenRequiresPassword",
+      "en": "Reopen requires Vetarbo",
+      "target": "Reopen requires Vetarbo"
+    },
+    {
+      "key": "centre.fieldSetup.openTablet",
+      "en": "Open tablet",
+      "target": "Ava tablet"
+    },
+    {
+      "key": "centre.fieldSetup.loadTabletChanges",
+      "en": "Load tablet changes",
+      "target": "Laadi tablet changes"
+    },
+    {
+      "key": "centre.fieldSetup.loadTabletChangesTitle",
+      "en": "Load changes saved by the tablet",
+      "target": "Laadi changes saved by the tablet"
+    },
+    {
+      "key": "centre.fieldSetup.lastSyncLoaded",
+      "en": "Last sync loaded: {date}",
+      "target": "Last sync loaded: {date}"
+    },
+    {
+      "key": "centre.fieldSetup.siteName",
+      "en": "Site name",
+      "target": "Site name"
+    },
+    {
+      "key": "centre.fieldSetup.examId",
+      "en": "Exam ID",
+      "target": "Exam ID"
+    },
+    {
+      "key": "centre.fieldSetup.referenceCoordinates",
+      "en": "Reference coordinates",
+      "target": "Reference coordinates"
+    },
+    {
+      "key": "centre.fieldSetup.mapPreviewTitle",
+      "en": "Field site map preview",
+      "target": "Field site map preview"
+    },
+    {
+      "key": "centre.fieldSetup.mapPreviewHelper",
+      "en": "The MVP shows a working map canvas with GPS points. Real Leaflet/CUZK layers are prepared as the next technical step of the module.",
+      "target": "The MVP shows a working map canvas with GPS points. Real Leaflet/CUZK layers are prepared as the next technical step of the module."
+    },
+    {
+      "key": "centre.fieldSetup.reference",
+      "en": "Reference",
+      "target": "Reference"
+    },
+    {
+      "key": "centre.fieldSetup.centerMarker",
+      "en": "Centre",
+      "target": "Keskus"
+    },
+    {
+      "key": "centre.fieldSetup.treeMarker",
+      "en": "tree",
+      "target": "tree"
+    },
+    {
+      "key": "centre.fieldSetup.examCentre",
+      "en": "Exam centre",
+      "target": "Exam centre"
+    },
+    {
+      "key": "centre.fieldSetup.latitude",
+      "en": "Latitude",
+      "target": "Latitude"
+    },
+    {
+      "key": "centre.fieldSetup.longitude",
+      "en": "Longitude",
+      "target": "Longitude"
+    },
+    {
+      "key": "centre.fieldSetup.candidateNote",
+      "en": "Candidate note",
+      "target": "Kandidaat note"
+    },
+    {
+      "key": "centre.fieldSetup.internalNote",
+      "en": "Internal note",
+      "target": "Internal note"
+    },
+    {
+      "key": "centre.fieldSetup.selectedTree",
+      "en": "Selected tree",
+      "target": "Selected tree"
+    },
+    {
+      "key": "centre.fieldSetup.treeName",
+      "en": "Tree name",
+      "target": "Puu name"
+    },
+    {
+      "key": "centre.fieldSetup.assignments",
+      "en": "Assignments",
+      "target": "Assignments"
+    },
+    {
+      "key": "centre.fieldSetup.addAssignment",
+      "en": "+ assignment",
+      "target": "+ assignment"
+    },
+    {
+      "key": "centre.fieldSetup.managementDataTitle",
+      "en": "Practicing A · management data",
+      "target": "Practicing A · management data"
+    },
+    {
+      "key": "centre.fieldSetup.taxon",
+      "en": "Taxon",
+      "target": "Taxon"
+    },
+    {
+      "key": "centre.fieldSetup.heightM",
+      "en": "Height m",
+      "target": "Height m"
+    },
+    {
+      "key": "centre.fieldSetup.stemDiameterCm",
+      "en": "Stem diameter cm",
+      "target": "Stem diameter cm"
+    },
+    {
+      "key": "centre.fieldSetup.crownSpreadM",
+      "en": "Crown spread m",
+      "target": "Crown spread m"
+    },
+    {
+      "key": "centre.fieldSetup.interventionTechnology",
+      "en": "Intervention technology",
+      "target": "Intervention technology"
+    },
+    {
+      "key": "centre.fieldSetup.addTechnology",
+      "en": "+ technology",
+      "target": "+ technology"
+    },
+    {
+      "key": "centre.fieldSetup.technology",
+      "en": "Technology",
+      "target": "Technology"
+    },
+    {
+      "key": "centre.fieldSetup.description",
+      "en": "Description",
+      "target": "Kirjeldus"
+    },
+    {
+      "key": "centre.fieldSetup.photos",
+      "en": "Photos",
+      "target": "Fotod"
+    },
+    {
+      "key": "centre.fieldSetup.selectTreeOrCentre",
+      "en": "Select a tree or the exam centre on the map.",
+      "target": "Select a tree or the exam centre on the map."
+    },
+    {
+      "key": "centre.fieldSetup.validationTitle",
+      "en": "Validation",
+      "target": "Kontroll"
+    },
+    {
+      "key": "centre.fieldSetup.validationComplete",
+      "en": "Preparation is complete.",
+      "target": "Preparation is complete."
+    },
+    {
+      "key": "centre.fieldSetup.error.allRequiredReady",
+      "en": "All required Practicing A-D and Consulting A-D trees are already prepared. Add another tree only by changing an existing assignment.",
+      "target": "Kõik required Practicing A-D and Consulting A-D trees are already prepared. Add another tree only by changing an existing assignment."
+    },
+    {
+      "key": "centre.fieldSetup.error.loadFailed",
+      "en": "Field setup could not be loaded.",
+      "target": "Field setup could not be loaded."
+    },
+    {
+      "key": "centre.fieldSetup.status.loaded",
+      "en": "Field setup loaded.",
+      "target": "Field setup loaded."
+    },
+    {
+      "key": "centre.fieldSetup.error.tabletLoadFailed",
+      "en": "Tablet changes could not be loaded.",
+      "target": "Tahvelarvuti changes could not be loaded."
+    },
+    {
+      "key": "centre.fieldSetup.status.tabletChangesLoadedWithId",
+      "en": "Tablet changes loaded ({syncId}).",
+      "target": "Tahvelarvuti changes loaded ({syncId})."
+    },
+    {
+      "key": "centre.fieldSetup.status.tabletChangesLoaded",
+      "en": "Tablet changes loaded.",
+      "target": "Tahvelarvuti changes loaded."
+    },
+    {
+      "key": "centre.fieldSetup.error.saveFailed",
+      "en": "Field setup could not be saved.",
+      "target": "Field setup could not be saved."
+    },
+    {
+      "key": "centre.fieldSetup.status.saved",
+      "en": "Field setup saved.",
+      "target": "Field setup saved."
+    },
+    {
+      "key": "centre.fieldSetup.error.coordinateFormat",
+      "en": "Coordinates must use a format such as 49.406706323, 15.129055089.",
+      "target": "Coordinates must use a format such as 49.406706323, 15.129055089."
+    },
+    {
+      "key": "centre.fieldSetup.reopenPrompt",
+      "en": "Field tablet has already been synced back. Enter Vetarbo password to reopen it:",
+      "target": "Field tablet has already been synced back. Enter Vetarbo password to reopen it:"
+    },
+    {
+      "key": "centre.fieldSetup.error.tabletLocked",
+      "en": "Tablet mode is locked after tablet changes were loaded. Enter the Vetarbo password to reopen it.",
+      "target": "Tahvelarvuti mode is locked after tablet changes were loaded. Enter the Vetarbo password to reopen it."
+    },
+    {
+      "key": "centre.fieldSetup.validation.centerGps",
+      "en": "Exam centre does not have valid GPS coordinates.",
+      "target": "Exam centre does not have valid GPS coordinates."
+    },
+    {
+      "key": "centre.fieldSetup.validation.treeGps",
+      "en": "{tree} does not have valid GPS coordinates.",
+      "target": "{tree} does not have valid GPS coordinates."
+    },
+    {
+      "key": "centre.fieldSetup.validation.missingTree",
+      "en": "Missing {level} tree {code}.",
+      "target": "Puudub {level} tree {code}."
+    },
+    {
+      "key": "centre.fieldSetup.validation.duplicateTree",
+      "en": "{level} tree {code} is assigned more than once.",
+      "target": "{level} tree {code} is assigned more than once."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingAMissingData",
+      "en": "Practicing A has no management data.",
+      "target": "Practicing A has no management data."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingATaxon",
+      "en": "Practicing A: taxon is missing.",
+      "target": "Practicing A: taxon is missing."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingAHeight",
+      "en": "Practicing A: height is missing.",
+      "target": "Practicing A: height is missing."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingAStemDiameter",
+      "en": "Practicing A: stem diameter is missing.",
+      "target": "Practicing A: stem diameter is missing."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingACrownSpread",
+      "en": "Practicing A: crown spread is missing.",
+      "target": "Practicing A: crown spread is missing."
+    },
+    {
+      "key": "centre.fieldSetup.validation.practicingAIntervention",
+      "en": "Practicing A: at least one intervention technology is missing.",
+      "target": "Practicing A: at least one intervention technology is missing."
+    },
+    {
+      "key": "fieldTablet.defaultTreeName",
+      "en": "Tree {index}",
+      "target": "Puu {index}"
+    },
+    {
+      "key": "vetcert.rules.title",
+      "en": "VETcert Rules reference",
+      "target": "VETcert Rules reference"
+    },
+    {
+      "key": "vetcert.rules.body",
+      "en": "Official examination rules are the reference document for the certification process. Examination materials, model answers and completed exams are confidential.",
+      "target": "Official examination rules are the reference document for the certification process. Examination materials, model vastused and completed exams are confidential."
+    },
+    {
+      "key": "vetcert.rules.confidentiality",
+      "en": "Do not show correct answers, answer keys or guiding marking notes to Candidates or Examiners in the assessment interface.",
+      "target": "Do not show correct vastused, answer keys or guiding marking notes to Kandidaats or Eksamineerijas in the assessment interface."
+    },
+    {
+      "key": "centre.fieldSetup.choosePhotos",
+      "en": "Choose photos",
+      "target": "Vali fotod"
+    },
+    {
+      "key": "centre.fieldSetup.noPhotosSelected",
+      "en": "No photos selected",
+      "target": "Fotosid pole valitud"
+    },
+    {
+      "key": "centre.fieldSetup.photoCount",
+      "en": "{count} photo(s) selected",
+      "target": "Valitud fotosid: {count}"
+    },
+    {
+      "key": "admin.translation.termSaved",
+      "en": "Translation saved locally.",
+      "target": "Tõlge salvestati lokaalselt."
+    },
+    {
+      "key": "admin.translation.clickToEdit",
+      "en": "Click to edit this UI text.",
+      "target": "Klõpsa selle UI teksti muutmiseks."
+    },
+    {
+      "key": "admin.translation.editCurrent",
+      "en": "Edit current UI text for {key}",
+      "target": "Muuda praegust UI teksti: {key}"
+    }
+  ]
+}
