@@ -1,0 +1,218 @@
+{
+  "kind": "vetbara.fieldPreparation.v1",
+  "id": "field-prep-3f15e041-205a-4205-aedf-9eaa6c184a80",
+  "examId": "VETBARA-CENTRE-ARBOR-2026",
+  "siteName": "Arboricultural Academy - terénní stanoviště",
+  "referenceLatitude": 49.406706323273454,
+  "referenceLongitude": 15.129055089456797,
+  "mapProvider": "CUZK_ORTHO",
+  "status": "DRAFT",
+  "language": "EN",
+  "updatedAt": "2026-06-12T08:06:31.215Z",
+  "updatedBy": "Centre",
+  "examCenter": {
+    "id": "field-center-d7f777cb-1ac4-4052-aafd-f455d1e566a7",
+    "name": "Zkušební centrum / registrace",
+    "point": {
+      "x": 12,
+      "y": 18,
+      "lat": 49.405888298283934,
+      "lng": 15.128912434693621
+    },
+    "candidateNote": "Sraz kandidátů.",
+    "internalNote": "",
+    "photos": []
+  },
+  "trees": [
+    {
+      "id": "field-tree-4ef636ef-0099-4619-9966-151f6817160b",
+      "name": "Strom 1",
+      "point": {
+        "x": 32,
+        "y": 30,
+        "lat": 49.40678632327345,
+        "lng": 15.129135089456797
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-f07412a8-f654-42bb-a02e-f3fcfaddfa15",
+          "level": "Practicing",
+          "code": "A",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": {
+        "taxon": "",
+        "heightM": "",
+        "stemDiameterCm": "",
+        "crownSpreadM": "",
+        "note": "",
+        "interventions": [
+          {
+            "id": "intervention-eaeccd52-5a27-44cb-ba22-387775efc76b",
+            "technology": "",
+            "description": "",
+            "orderIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "field-tree-c29741a3-d85b-4ba8-b81b-3c30b600eb1d",
+      "name": "Strom 2",
+      "point": {
+        "x": 44,
+        "y": 38,
+        "lat": 49.406866323273455,
+        "lng": 15.129215089456796
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-7746f131-1a85-4736-8afd-f5f12de24cd0",
+          "level": "Practicing",
+          "code": "B",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-0cb816d0-9655-4e2f-afe8-97e3ed65beff",
+      "name": "Strom 3",
+      "point": {
+        "x": 56,
+        "y": 46,
+        "lat": 49.40694632327345,
+        "lng": 15.129295089456797
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-5fa10288-458f-4f89-b3a3-00099e749e68",
+          "level": "Practicing",
+          "code": "C",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-42f58bca-7767-4916-9bf6-050487f928dc",
+      "name": "Strom 4",
+      "point": {
+        "x": 68,
+        "y": 54,
+        "lat": 49.407026323273456,
+        "lng": 15.129375089456797
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-abe0bdd0-20f4-4a53-98b9-89ee60e690ae",
+          "level": "Practicing",
+          "code": "D",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-37ad9d06-e76e-45f1-96f0-04a81b5df86b",
+      "name": "Strom 5",
+      "point": {
+        "x": 80,
+        "y": 62,
+        "lat": 49.40710632327345,
+        "lng": 15.129455089456798
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-399c3308-fb31-496f-964f-104e17dc7a6a",
+          "level": "Consulting",
+          "code": "A",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-9dd55a80-40c2-4dba-9857-663215fb1127",
+      "name": "Strom 6",
+      "point": {
+        "x": 86,
+        "y": 70,
+        "lat": 49.40718632327346,
+        "lng": 15.129535089456796
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-f9c02ef9-67e4-489c-8d04-be0c254c0c4d",
+          "level": "Consulting",
+          "code": "B",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-f965baea-c018-46fd-88f3-e300c619b852",
+      "name": "Strom 7",
+      "point": {
+        "x": 86,
+        "y": 78,
+        "lat": 49.407266323273454,
+        "lng": 15.129615089456797
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-304d0037-e6b6-4233-95aa-57444fa74053",
+          "level": "Consulting",
+          "code": "C",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    },
+    {
+      "id": "field-tree-5a3b117c-bead-41ff-b708-20a04d5207d7",
+      "name": "Strom 8",
+      "point": {
+        "x": 86,
+        "y": 78,
+        "lat": 49.40734632327345,
+        "lng": 15.129695089456797
+      },
+      "candidateNote": "",
+      "internalNote": "",
+      "photos": [],
+      "assignments": [
+        {
+          "id": "field-assignment-e740314f-d2ac-412f-8077-dc224c62bf69",
+          "level": "Consulting",
+          "code": "D",
+          "visibleToCandidate": true
+        }
+      ],
+      "practicingTreeAData": null
+    }
+  ]
+}
