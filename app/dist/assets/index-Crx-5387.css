@@ -157,3 +157,9 @@ body,
     box-shadow: none !important;
   }
 }
+
+/* VetBara v64: outdoor/tablet touch target baseline */
+button,[role=button],input[type=button],input[type=submit],input[type=reset],.vetbara-touch-target{min-height:44px;min-width:44px}
+input[type=radio],input[type=checkbox]{min-width:20px;min-height:20px}
+label:has(input[type=radio]),label:has(input[type=checkbox]){min-height:44px;align-items:center}
+@media (pointer:coarse){button,[role=button],input[type=button],input[type=submit],input[type=reset]{min-height:46px}select,input[type=text],input[type=email],input[type=date],input[type=number],textarea{font-size:16px}.vetbara-question-nav button{min-height:46px;min-width:46px}}

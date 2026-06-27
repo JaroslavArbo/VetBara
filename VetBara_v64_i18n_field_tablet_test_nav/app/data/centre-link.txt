@@ -1,1 +1,0 @@
-http://1.2.3.4:3010/?role=Centre&id=ARBOR-2026&token=VETBARA-CENTRE-ARBOR-2026
