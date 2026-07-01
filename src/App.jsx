@@ -593,17 +593,6 @@ function qrAccessFromCurrentUrl() {
   }
 }
 
-function centreUrlTokenAccepted() {
-  try {
-    const query = new URLSearchParams(window.location.search);
-    const urlRole = query.get("role");
-    const urlToken = query.get("token");
-    return urlRole === "Centre" && (urlToken === CENTRE_ACCESS_TOKEN || urlToken === "VETBARA-CENTRE-ARBOR-2026");
-  } catch {
-    return false;
-  }
-}
-
 function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token"), name: url.searchParams.get("name"), level: url.searchParams.get("level"),  }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
 function parseOfflineCandidatePackage(payload) {
   try {
@@ -683,28 +672,35 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
   );
 }
 
+function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel }) {
+  const [password, setPassword] = useState("");
 
-function examinerLoginFromCurrentUrl(examiners) {
-  try {
-    const query = new URLSearchParams(window.location.search);
-    const role = query.get("role") || "";
-    const id = query.get("id") || "";
-    const token = query.get("token") || "";
-
-    if (role !== "Examiner") return "";
-
-    const validToken =
-      token === DEMO_QR_TOKENS.Examiner ||
-      String(token || "").startsWith("VETBARA-EXAMINER");
-
-    if (!validToken) return "";
-    if (!examiners.some((examiner) => examiner.id === id)) return "";
-
-    return id;
-  } catch {
-    return "";
-  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+        <h3 className="text-lg font-semibold">Znovuotevření uzavřené části</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Část <strong>{sectionKey}</strong> je uzavřená. Znovuotevření musí schválit dohlížející pracovník (Vetarbo) zadáním schvalovacího hesla přímo na tomto zařízení.
+        </p>
+        <input
+          type="password"
+          autoFocus
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onConfirm(password); }}
+          placeholder="Schvalovací heslo"
+          className="mt-3 w-full rounded-xl border bg-white p-2 font-mono text-sm"
+        />
+        {error && <p className="mt-2 rounded-xl bg-rose-50 p-2 text-sm font-medium text-rose-900">{error}</p>}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => onConfirm(password)} className="rounded-2xl">Potvrdit</Button>
+          <Button onClick={onCancel} variant="outline" className="rounded-2xl">Zrušit</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
+
 
 function VetBaraPrototype() {
   const [runtimeError, setRuntimeError] = useState(null);
@@ -733,11 +729,20 @@ function VetBaraPrototype() {
     const requestedRole = new URLSearchParams(window.location.search).get("role");
     return ROLES.includes(requestedRole) ? requestedRole : null;
   });
-  const [role, setRole] = useState(() => {
-    if (centreUrlTokenAccepted()) return "Centre";
-    if (examinerLoginFromCurrentUrl(EXAMINERS)) return "Examiner";
-    return portalRole ?? "Admin";
-  });
+  // The requested role from the URL only picks which shell renders first; it grants no access
+  // by itself. Centre unlock / Examiner login / Candidate login only happen once the server has
+  // verified the token (see the openQrSession effect below), never from the URL alone.
+  const [role, setRole] = useState(() => portalRole ?? "Admin");
+  // Draft/machine-translated languages are for translator/Centre review, not for a live exam:
+  // a Candidate must not be able to sit the exam in a language whose text hasn't been through
+  // the human review workflow in docs/i18n/translation-review-workflow.md. Admin/Centre/Examiner
+  // keep full access so they can review and test draft content before it gets promoted.
+  const uiLanguageChoices = role === "Candidate" ? UI_LANGUAGES.filter((lang) => !lang.draft) : UI_LANGUAGES;
+  useEffect(() => {
+    if (role !== "Candidate") return;
+    if (!UI_LANGUAGES.find((lang) => lang.code === uiLanguage)?.draft) return;
+    setUiLanguage("en");
+  }, [role, uiLanguage]);
   const [centre, setCentre] = useState(CENTRES[0]);
   const [examDate, setExamDate] = useState("2026-03-31");
   const [place, setPlace] = useState("Buchlovice");
@@ -771,37 +776,11 @@ function VetBaraPrototype() {
   const [importedCandidatePackages, setImportedCandidatePackages] = useState({});
   const [reportDrafts, setReportDrafts] = useState({ "C-001": createReportDraft(), "C-004": createReportDraft() });
   const [activeReportTree, setActiveReportTree] = useState("Tree A");
-  const [loggedExaminerId, setLoggedExaminerId] = useState(() => examinerLoginFromCurrentUrl(EXAMINERS) || null);
-
-  useEffect(() => {
-    try {
-      const access = qrAccessFromCurrentUrl();
-
-      if (access.role !== "Examiner") return;
-
-      const token = String(access.token || "");
-      const validToken =
-        token === DEMO_QR_TOKENS.Examiner ||
-        token.startsWith("VETBARA-EXAMINER");
-
-      const examinerExists = examiners.some((examiner) => examiner.id === access.id);
-
-      if (!validToken || !examinerExists) {
-        setRuntimeError(new Error(`Neplatný Examiner QR odkaz: id=${access.id || "-"}, token=${token || "-"}`));
-        return;
-      }
-
-      setRole("Examiner");
-      setLoggedExaminerId(access.id);
-      setActiveExaminerPage("landing");
-
-      if (window.history?.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    } catch (error) {
-      setRuntimeError(error);
-    }
-  }, [examiners]);
+  // Examiner login id is set only after the openQrSession effect verifies the token with the
+  // server (via resolveAccessWithFallback -> applyResolvedAccess -> loginExaminer). It used to
+  // also be set directly from the URL here, checking only that the token started with the
+  // string "VETBARA-EXAMINER" — that accepted any suffix and never asked the server.
+  const [loggedExaminerId, setLoggedExaminerId] = useState(null);
 
   const [examinerConfirmed, setExaminerConfirmed] = useState({});
   const [activeExaminerPage, setActiveExaminerPage] = useState("landing");
@@ -819,6 +798,7 @@ function VetBaraPrototype() {
   const [lastEvaluation, setLastEvaluation] = useState(null);
   const [authenticatedPortalRole, setAuthenticatedPortalRole] = useState(null);
   const [activeSessionToken, setActiveSessionToken] = useState(null);
+  const [reopenRequest, setReopenRequest] = useState(null);
   const [evaluationPreview, setEvaluationPreview] = useState(null);
   const [evaluationLoading, setEvaluationLoading] = useState(false);
   const [evaluationError, setEvaluationError] = useState("");
@@ -898,7 +878,11 @@ function VetBaraPrototype() {
       const parsed = parseQrPayload(window.location.href);
       if (!parsed.role && !parsed.token) return;
       const access = await resolveAccessWithFallback(parsed, "Direct QR session accepted");
-      if (!cancelled && access) applyResolvedAccess(access, "Direct QR session accepted");
+      if (cancelled || !access) return;
+      applyResolvedAccess(access, "Direct QR session accepted");
+      if (window.history?.replaceState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
     }
 
     openQrSession();
@@ -1080,7 +1064,18 @@ function VetBaraPrototype() {
       const session = await bootstrapSession(resolved.sessionToken);
       return { ...resolved, ...session, sessionToken: resolved.sessionToken };
     } catch (error) {
-      console.error("Session bootstrap failed; using local demo fallback when available", error);
+      // Only fall back to local demo matching when there was no backend to authoritatively
+      // answer at all (offline LAN use, plain `vite dev` with no API, network down). A
+      // definitive server answer (e.g. 401 invalid token) must be respected as-is —
+      // otherwise anyone could present one of the public demo-token constants and get the
+      // client to grant access locally even though the server explicitly rejected it, which
+      // is exactly the gap this fixes.
+      if (!error?.isBackendUnavailable) {
+        console.warn("QR/session request rejected by server", error);
+        addAudit("QR resolve failed", parsed.id ?? "Unknown QR", error?.message || "The QR could not be verified.");
+        return null;
+      }
+      console.error("Backend unreachable; using local demo fallback when available", error);
       const fallback = demoAccess(parsed);
       if (fallback) {
         addAudit("Backend unavailable", fallback.subjectId ?? fallback.role, `${detail}; local demo fallback used`);
@@ -1152,13 +1147,9 @@ function VetBaraPrototype() {
     addAudit("QR role blocked", access.role ?? "Unknown role", "Resolved role or subject does not match this portal package");
   }
 
-  useEffect(() => {
-    if (!centreUrlTokenAccepted()) return;
-
-    setCentreCode(CENTRE_ACCESS_TOKEN);
-    setCentreUnlocked(true);
-    setRole("Centre");
-  }, []);
+  // Centre unlock for a ?role=Centre&token=... direct link is handled by the openQrSession
+  // effect above (server-verified), not here. This used to also unlock straight from the URL
+  // by comparing the token to the single hardcoded CENTRE_ACCESS_TOKEN client-side.
 
   async function handleQrScan(text) {
     const offlinePackage = parseOfflineCandidatePackage(text);
@@ -1699,8 +1690,9 @@ function VetBaraPrototype() {
     }
   }
 
-  function unlockCentre() {
+  async function unlockCentre() {
     const raw = centreCode.trim();
+    if (!raw) return addAudit("Centre access failed", centre, "empty code");
     let token = raw;
     try {
       const parsed = new URL(raw);
@@ -1708,10 +1700,14 @@ function VetBaraPrototype() {
     } catch {
       token = raw;
     }
-    if (token !== CENTRE_ACCESS_TOKEN) return addAudit("Centre access failed", centre, raw || "empty code");
-    setCentreUnlocked(true);
-    setRole("Centre");
-    addAudit("Centre workspace opened", centre, "Delegated token accepted");
+    // Verified through the same server-side path as a scanned QR link, instead of comparing
+    // the typed code to the single hardcoded CENTRE_ACCESS_TOKEN in the browser.
+    const access = await resolveAccessWithFallback({ role: "Centre", token, id: CENTRE_QR_ID }, "Delegated token accepted");
+    if (access && access.role === "Centre") {
+      applyResolvedAccess(access, "Delegated token accepted");
+      return;
+    }
+    addAudit("Centre access failed", centre, raw);
   }
   function toggleLevel(level) { setCentreSetupDirty(true); setEnabledLevels((prev) => prev.includes(level) && prev.length > 1 ? prev.filter((x) => x !== level) : prev.includes(level) ? prev : [...prev, level]); }
   function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
@@ -1761,19 +1757,34 @@ function VetBaraPrototype() {
     if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return;
     const current = candidateStatus[loggedCandidate.id]?.[key];
     if (current === "closed") {
-      const password = window.prompt("Pro znovuotevření uzavřené části zadejte schvalovací heslo:");
-      if (password !== "Vetarbo") {
-        window.alert("Neplatné heslo. Znovuotevření nebylo povoleno.");
-        return;
-      }
+      // Reopening a closed section needs proctor approval on the spot, so this is shown as a
+      // blocking in-app dialog with a clear message (not a native browser prompt/alert) —
+      // both the ask itself and a wrong-password result are visible to the candidate/proctor.
+      setReopenRequest({ key, error: "" });
+      return;
     }
+    performOpenCandidateSection(key, current);
+  }
+
+  function performOpenCandidateSection(key, previousStatus) {
     const openedAt = nowStamp();
     const openedAtIso = new Date().toISOString();
     setCandidateStatus((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level)), [key]: "open" } }));
     setCandidateTimes((prev) => ({ ...prev, [loggedCandidate.id]: { ...(prev[loggedCandidate.id] ?? {}), [key]: { ...(prev[loggedCandidate.id]?.[key] ?? {}), openedAt, openedAtIso, closedAt: null, closedAtIso: null } } }));
     setActiveCandidateSection(key);
-    addAudit("Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`);
-    sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: current === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt: openedAtIso, openedAtLabel: openedAt }, createdAt: openedAtIso });
+    addAudit(previousStatus === "closed" ? "Candidate section reopened" : "Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`);
+    sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: previousStatus === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt: openedAtIso, openedAtLabel: openedAt }, createdAt: openedAtIso });
+  }
+
+  function confirmReopenRequest(password) {
+    if (!reopenRequest) return;
+    if (password !== "Vetarbo") {
+      setReopenRequest((prev) => prev && { ...prev, error: "Neplatné heslo. Znovuotevření nebylo povoleno." });
+      addAudit("Candidate reopen request denied", loggedCandidate?.name ?? "-", `${reopenRequest.key} / wrong password`);
+      return;
+    }
+    performOpenCandidateSection(reopenRequest.key, "closed");
+    setReopenRequest(null);
   }
   function closeCandidateSection(key) {
     if (!loggedCandidate) return;
@@ -2121,7 +2132,7 @@ function VetBaraPrototype() {
   if (runtimeError) return <RuntimeCrashScreen error={runtimeError} />;
 
   return <main className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-8"><div className="mx-auto max-w-7xl">
-    <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-4"><img src="/brand/vetcert-logo.jpg" alt="VETcert Certified Veteran Tree Specialist" className="h-14 w-14 shrink-0 rounded-full border bg-white object-contain p-1 shadow-sm md:h-16 md:w-16" /><div><div className="mb-2 flex flex-wrap items-center gap-2"><div className="rounded-2xl bg-slate-950 px-3 py-1 text-sm font-semibold text-white">{t("app.title")}</div><StatusPill tone="warn">{t("app.mvpPrototype")}</StatusPill><StatusPill><CloudOff className="mr-1 h-3.5 w-3.5" /> {t("app.offlineFirst")}</StatusPill></div><h1 className="text-3xl font-bold tracking-tight md:text-5xl">{t("app.heroTitle")}</h1><p className="mt-2 max-w-3xl text-slate-600">{t("app.subtitle")}</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-medium text-slate-500">{t("language.label")}<select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)} className="ml-2 rounded-xl border bg-white p-2 text-sm text-slate-950">{UI_LANGUAGES.map((lang) => <option key={lang.code} value={lang.code}>{lang.draft ? `${lang.label} - draft` : lang.label}</option>)}</select></label>{lockedPortalRole ? <StatusPill tone="good">{tf("app.dedicatedPortal", { role: roleLabel(lockedPortalRole) })}</StatusPill> : role === "Admin" ? <StatusPill tone="good">Admin</StatusPill> : ROLES.map((r) => <Button key={r} onClick={() => setRole(r)} variant={role === r ? "default" : "outline"} className="rounded-2xl">{roleLabel(r)}</Button>)}</div></header>
+    <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-4"><img src="/brand/vetcert-logo.jpg" alt="VETcert Certified Veteran Tree Specialist" className="h-14 w-14 shrink-0 rounded-full border bg-white object-contain p-1 shadow-sm md:h-16 md:w-16" /><div><div className="mb-2 flex flex-wrap items-center gap-2"><div className="rounded-2xl bg-slate-950 px-3 py-1 text-sm font-semibold text-white">{t("app.title")}</div><StatusPill tone="warn">{t("app.mvpPrototype")}</StatusPill><StatusPill><CloudOff className="mr-1 h-3.5 w-3.5" /> {t("app.offlineFirst")}</StatusPill></div><h1 className="text-3xl font-bold tracking-tight md:text-5xl">{t("app.heroTitle")}</h1><p className="mt-2 max-w-3xl text-slate-600">{t("app.subtitle")}</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-medium text-slate-500">{t("language.label")}<select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)} className="ml-2 rounded-xl border bg-white p-2 text-sm text-slate-950">{uiLanguageChoices.map((lang) => <option key={lang.code} value={lang.code}>{lang.draft ? `${lang.label} - draft` : lang.label}</option>)}</select></label>{lockedPortalRole ? <StatusPill tone="good">{tf("app.dedicatedPortal", { role: roleLabel(lockedPortalRole) })}</StatusPill> : role === "Admin" ? <StatusPill tone="good">Admin</StatusPill> : ROLES.map((r) => <Button key={r} onClick={() => setRole(r)} variant={role === r ? "default" : "outline"} className="rounded-2xl">{roleLabel(r)}</Button>)}</div></header>
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} t={t}  adminPdfPackageStatus={adminPdfPackageStatus} adminPdfPackageError={adminPdfPackageError} adminPdfPackageList={adminPdfPackageList} adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageList={setAdminPdfPackageList} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
@@ -2131,6 +2142,7 @@ function VetBaraPrototype() {
       {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
+    {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} />}
   </div></main>;
 }
 
@@ -5513,8 +5525,43 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   const [showCentreAdvanced, setShowCentreAdvanced] = useState(false);
-  const candidateQrUrl = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url;
-  const examinerQrUrl = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url;
+  // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
+  // default; switching to a local base URL is explicit, session-only, and never silently
+  // rewrites links unless a validated local URL is set.
+  const [qrBaseUrlMode, setQrBaseUrlMode] = useState("production");
+  const [localQrBaseUrlInput, setLocalQrBaseUrlInput] = useState("");
+  const [localQrBaseUrl, setLocalQrBaseUrl] = useState(null);
+  const [localQrBaseUrlError, setLocalQrBaseUrlError] = useState("");
+  const candidateQrUrlRaw = (id) => centreQrAccess?.candidates?.find((item) => item.subjectId === id || item.subject_id === id)?.url;
+  const examinerQrUrlRaw = (id) => centreQrAccess?.examiners?.find((item) => item.subjectId === id || item.subject_id === id)?.url;
+
+  function rewriteQrBaseUrl(url) {
+    if (!url || qrBaseUrlMode !== "local" || !localQrBaseUrl) return url;
+    try {
+      const original = new URL(url);
+      const local = new URL(localQrBaseUrl);
+      return `${local.origin}${original.pathname}${original.search}${original.hash}`;
+    } catch {
+      return url;
+    }
+  }
+
+  function applyLocalQrBaseUrl() {
+    const raw = localQrBaseUrlInput.trim();
+    try {
+      const parsed = new URL(raw);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("scheme");
+      setLocalQrBaseUrl(raw);
+      setLocalQrBaseUrlError("");
+    } catch {
+      setLocalQrBaseUrlError("Neplatná Local LAN URL. Zadejte celou adresu, např. http://192.168.0.186:3010");
+    }
+  }
+
+  const candidateQrUrl = (id) => rewriteQrBaseUrl(candidateQrUrlRaw(id));
+  const examinerQrUrl = (id) => rewriteQrBaseUrl(examinerQrUrlRaw(id));
+  const candidateQrForRewritten = (id) => rewriteQrBaseUrl(candidateQrFor(id));
+  const examinerQrForRewritten = (id) => rewriteQrBaseUrl(examinerQrFor(id));
 
   async function copyQrLink(label, value) {
     const text = String(value ?? "").trim();
@@ -5799,7 +5846,33 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
             </div>
             <CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} />
             <CentreCandidateResultsOverview candidates={candidates} assignments={assignments} examiners={examiners} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorItemsByLevel={outdoorItemsByLevel} t={t} />
-            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrFor} examinerQrFor={examinerQrFor} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} />
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">QR base URL</div>
+                  <p className="mt-1 text-sm text-slate-600">Production QR je výchozí a bezpečný. Local LAN QR použijte jen pro dočasné testování v místní síti.</p>
+                </div>
+                <StatusPill tone={qrBaseUrlMode === "local" ? "warn" : "good"}>
+                  {qrBaseUrlMode === "local" ? "Local LAN QR" : "Production QR"}
+                </StatusPill>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button onClick={() => setQrBaseUrlMode("production")} variant={qrBaseUrlMode === "production" ? "default" : "outline"} className="rounded-2xl">Production QR</Button>
+                <Button onClick={() => setQrBaseUrlMode("local")} variant={qrBaseUrlMode === "local" ? "default" : "outline"} className="rounded-2xl">Local LAN QR</Button>
+              </div>
+              {qrBaseUrlMode === "local" && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-950">Local LAN linky fungují jen na stejné síti jako tento počítač a mohou se rozbít po změně Wi-Fi/routeru. Před distribucí kandidátům/examinerům zkontrolujte náhled odkazu níže.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <input value={localQrBaseUrlInput} onChange={(e) => setLocalQrBaseUrlInput(e.target.value)} placeholder="http://192.168.0.186:3010" className="min-w-64 flex-1 rounded-xl border bg-white p-2 font-mono text-sm" />
+                    <Button onClick={applyLocalQrBaseUrl} className="rounded-2xl">Použít adresu</Button>
+                  </div>
+                  {localQrBaseUrlError && <p className="mt-2 text-sm font-medium text-rose-900">{localQrBaseUrlError}</p>}
+                  {localQrBaseUrl && !localQrBaseUrlError && <p className="mt-2 text-xs text-emerald-800">Aktivní Local LAN base URL: {localQrBaseUrl}</p>}
+                </div>
+              )}
+            </div>
+            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} />
           </div>
         </AdminDashboardSection>
       </div>
@@ -7391,6 +7464,7 @@ function ExaminerView({
 
       {activePage === "scoring" && <ScoringCard
         selectedCandidate={selectedCandidate}
+        assignment={assignments[selectedCandidate.id]}
         scoring={scoring}
         updateScore={updateScore}
         generateEvaluation={generateEvaluation}
@@ -9338,11 +9412,11 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
   return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className={isOutdoorFallback ? "text-amber-700" : "text-emerald-700"}>{isOutdoorFallback ? "Outdoor source: demo fallback" : "Outdoor source: active Admin package"}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><Button onClick={archivePlan} variant="outline" className="mt-3 w-full rounded-2xl">{t("outdoor.paperArchive.button")}</Button><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div></div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /></div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div>;
 }
 
-function ScoringCard({ selectedCandidate, scoring, updateScore, generateEvaluation, lastEvaluation, loadEvaluationPreview, evaluationPreview, evaluationLoading, evaluationError, downloadDraftExport, exportLoading, exportError, variants, testBank, testResponses, reportDrafts, t }) {
+function ScoringCard({ selectedCandidate, assignment, scoring, updateScore, generateEvaluation, lastEvaluation, loadEvaluationPreview, evaluationPreview, evaluationLoading, evaluationError, downloadDraftExport, exportLoading, exportError, variants, testBank, testResponses, reportDrafts, t }) {
   const writtenReview = computeWrittenTestReview(selectedCandidate, variants, testBank, testResponses);
   const reportReview = computeReportReview(reportDrafts?.[selectedCandidate.id] ?? createReportDraft());
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={BadgeCheck} title={t("scoring.title")} subtitle={t("scoring.subtitle")} /><div className="grid gap-4"><div className="rounded-2xl border bg-white p-4"><div className="grid gap-3 md:grid-cols-3"><label className="text-sm font-medium">{t("scoring.written")} / {scoring.writtenMax}<input type="number" value={selectedCandidate.written ?? ""} onChange={(e) => updateScore("written", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label><label className="text-sm font-medium">{t("scoring.outdoor")} / {scoring.outdoorMax}<input type="number" value={selectedCandidate.outdoor ?? ""} onChange={(e) => updateScore("outdoor", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>{selectedCandidate.level === "Consulting" && <label className="text-sm font-medium">{t("scoring.report")} / {scoring.reportMax}<input type="number" value={selectedCandidate.report ?? ""} onChange={(e) => updateScore("report", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>}</div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.writtenReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.writtenReview.variant")}: {writtenReview.variantCode || "-"}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{writtenReview.correctCount} {t("examiner.writtenReview.correct")}</StatusPill><StatusPill>{writtenReview.unansweredCount} {t("examiner.writtenReview.unanswered")}</StatusPill><StatusPill>{writtenReview.computedScore} / {writtenReview.computedMax} {t("common.points")}</StatusPill></div></div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><strong>{t("examiner.writtenReview.computedScore")}:</strong> {writtenReview.computedScore} / {writtenReview.computedMax}<p className="mt-1 text-xs text-slate-500">{t("examiner.writtenReview.helper")}</p><Button onClick={() => updateScore("written", writtenReview.computedScore)} disabled={writtenReview.computedMax === 0} variant="outline" className="mt-3 rounded-2xl">{t("examiner.writtenReview.apply")}</Button></div><div className="mt-3 space-y-3">{writtenReview.items.map((item, index) => <div key={item.question.id} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-xs text-slate-500">{t("test.question")} {index + 1} / {item.question.points} {t("common.points")}</div><div className="mt-1 font-medium">{item.question.text}</div></div><StatusPill tone={!item.hasAnswer ? "warn" : item.hasCorrectAnswer ? item.correct ? "good" : "bad" : "default"}>{!item.hasAnswer ? t("examiner.writtenReview.unanswered") : item.hasCorrectAnswer ? item.correct ? t("examiner.writtenReview.correct") : t("examiner.writtenReview.incorrect") : t("examiner.writtenReview.manual")}</StatusPill></div><div className="mt-2 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("examiner.writtenReview.candidateAnswer")}</div><div className="mt-1 whitespace-pre-wrap">{item.hasAnswer ? item.answer : "-"}</div></div>{item.hasCorrectAnswer && <div className="mt-2 rounded-lg bg-emerald-50 p-2"><div className="text-xs font-semibold text-emerald-800">{t("examiner.writtenReview.correctAnswer")}</div><div className="mt-1 whitespace-pre-wrap text-emerald-950">{item.question.correctAnswer}</div></div>}</div>)}</div></div>{selectedCandidate.level === "Consulting" && <div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.reportReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.reportReview.helper")}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{reportReview.filledSections} / {reportReview.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{reportReview.photos} {t("examiner.reportReview.photos")}</StatusPill><StatusPill>{reportReview.completeness}% {t("examiner.reportReview.complete")}</StatusPill></div></div><div className="mt-3 space-y-4">{reportReview.trees.map((tree) => <div key={tree.treeName} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{tree.treeName}</h4><div className="flex flex-wrap gap-2"><StatusPill>{tree.filledSections} / {tree.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{tree.photos.length} {t("examiner.reportReview.photos")}</StatusPill></div></div><div className="mt-3 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("report.fieldNotes")}</div><div className="mt-1 whitespace-pre-wrap">{String(tree.fieldNotes).trim() || "-"}</div></div>{tree.photos.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3">{tree.photos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border bg-white p-2"><div className="h-16 w-16 overflow-hidden rounded-lg bg-slate-200">{photo.dataUrl ? <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>}</div><div className="min-w-0 text-xs"><div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div><div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div></div></div>)}</div>}<div className="mt-3 grid gap-3 md:grid-cols-2">{tree.finalSections.map((section) => <div key={section.key} className="rounded-lg bg-slate-50 p-2"><div className="flex items-center justify-between gap-2"><div className="text-xs font-semibold text-slate-500">{section.title}</div><StatusPill tone={section.filled ? "good" : "warn"}>{section.filled ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill></div><div className="mt-1 whitespace-pre-wrap">{String(section.value).trim() || "-"}</div></div>)}</div></div>)}</div></div>}<div className="mt-4 grid gap-3 md:grid-cols-5"><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.total")}</div><div className="text-xl font-bold">{scoring.total} / {scoring.max}</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.percentage")}</div><div className="text-xl font-bold">{scoring.percentage}%</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.result")}</div><div className="text-xl font-bold">{scoring.pass ? t("scoring.pass") : t("scoring.notPassed")}</div></div><Button onClick={generateEvaluation} className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {t("scoring.generate")}</Button><Button onClick={() => loadEvaluationPreview(selectedCandidate.id)} disabled={evaluationLoading} variant="outline" className="h-full rounded-2xl">{evaluationLoading ? t("scoring.loading") : t("scoring.loadPreview")}</Button><Button onClick={() => downloadDraftExport(selectedCandidate.id)} disabled={exportLoading} variant="outline" className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {exportLoading ? t("scoring.exporting") : t("scoring.downloadDraftExport")}</Button></div><p className="mt-3 text-xs text-slate-500">{t("scoring.draftOnly")}</p>{evaluationError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{evaluationError}</div>}{exportError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{exportError}</div>}{lastEvaluation && <div className="mt-4 rounded-2xl border bg-white p-4 text-sm"><div className="font-semibold">{t("scoring.lastGenerated")}</div><div className="mt-1 text-slate-600">{lastEvaluation.candidate} / {lastEvaluation.level}: {lastEvaluation.total}/{lastEvaluation.max} ({lastEvaluation.percentage}%) - {lastEvaluation.result}</div></div>}<EvaluationPreviewCard preview={evaluationPreview} t={t} /></div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={BadgeCheck} title={t("scoring.title")} subtitle={t("scoring.subtitle")} /><div className="grid gap-4"><div className="rounded-2xl border bg-white p-4"><div className="grid gap-3 md:grid-cols-3"><label className="text-sm font-medium">{t("scoring.written")} / {scoring.writtenMax}<input type="number" value={selectedCandidate.written ?? ""} onChange={(e) => updateScore("written", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label><label className="text-sm font-medium">{t("scoring.outdoor")} / {scoring.outdoorMax}<input type="number" value={selectedCandidate.outdoor ?? ""} onChange={(e) => updateScore("outdoor", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>{selectedCandidate.level === "Consulting" && <label className="text-sm font-medium">{t("scoring.report")} / {scoring.reportMax}<input type="number" value={selectedCandidate.report ?? ""} onChange={(e) => updateScore("report", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>}</div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.writtenReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.writtenReview.variant")}: {writtenReview.variantCode || "-"}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{writtenReview.correctCount} {t("examiner.writtenReview.correct")}</StatusPill><StatusPill>{writtenReview.unansweredCount} {t("examiner.writtenReview.unanswered")}</StatusPill><StatusPill>{writtenReview.computedScore} / {writtenReview.computedMax} {t("common.points")}</StatusPill></div></div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><strong>{t("examiner.writtenReview.computedScore")}:</strong> {writtenReview.computedScore} / {writtenReview.computedMax}<p className="mt-1 text-xs text-slate-500">{t("examiner.writtenReview.helper")}</p><Button onClick={() => updateScore("written", writtenReview.computedScore)} disabled={writtenReview.computedMax === 0} variant="outline" className="mt-3 rounded-2xl">{t("examiner.writtenReview.apply")}</Button></div><div className="mt-3 space-y-3">{writtenReview.items.map((item, index) => <div key={item.question.id} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-xs text-slate-500">{t("test.question")} {index + 1} / {item.question.points} {t("common.points")}</div><div className="mt-1 font-medium">{item.question.text}</div></div><StatusPill tone={!item.hasAnswer ? "warn" : item.hasCorrectAnswer ? item.correct ? "good" : "bad" : "default"}>{!item.hasAnswer ? t("examiner.writtenReview.unanswered") : item.hasCorrectAnswer ? item.correct ? t("examiner.writtenReview.correct") : t("examiner.writtenReview.incorrect") : t("examiner.writtenReview.manual")}</StatusPill></div><div className="mt-2 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("examiner.writtenReview.candidateAnswer")}</div><div className="mt-1 whitespace-pre-wrap">{item.hasAnswer ? item.answer : "-"}</div></div>{item.hasCorrectAnswer && <div className="mt-2 rounded-lg bg-emerald-50 p-2"><div className="text-xs font-semibold text-emerald-800">{t("examiner.writtenReview.correctAnswer")}</div><div className="mt-1 whitespace-pre-wrap text-emerald-950">{item.question.correctAnswer}</div></div>}</div>)}</div></div>{selectedCandidate.level === "Consulting" && <div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.reportReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.reportReview.helper")}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{reportReview.filledSections} / {reportReview.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{reportReview.photos} {t("examiner.reportReview.photos")}</StatusPill><StatusPill>{reportReview.completeness}% {t("examiner.reportReview.complete")}</StatusPill></div></div><div className="mt-3 space-y-4">{reportReview.trees.map((tree) => <div key={tree.treeName} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{tree.treeName}</h4><div className="flex flex-wrap gap-2"><StatusPill>{tree.filledSections} / {tree.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{tree.photos.length} {t("examiner.reportReview.photos")}</StatusPill></div></div><div className="mt-3 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("report.fieldNotes")}</div><div className="mt-1 whitespace-pre-wrap">{String(tree.fieldNotes).trim() || "-"}</div></div>{tree.photos.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3">{tree.photos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border bg-white p-2"><div className="h-16 w-16 overflow-hidden rounded-lg bg-slate-200">{photo.dataUrl ? <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>}</div><div className="min-w-0 text-xs"><div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div><div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div></div></div>)}</div>}<div className="mt-3 grid gap-3 md:grid-cols-2">{tree.finalSections.map((section) => <div key={section.key} className="rounded-lg bg-slate-50 p-2"><div className="flex items-center justify-between gap-2"><div className="text-xs font-semibold text-slate-500">{section.title}</div><StatusPill tone={section.filled ? "good" : "warn"}>{section.filled ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill></div><div className="mt-1 whitespace-pre-wrap">{String(section.value).trim() || "-"}</div></div>)}</div></div>)}</div></div>}<div className="mt-4 grid gap-3 md:grid-cols-5"><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.total")}</div><div className="text-xl font-bold">{scoring.total} / {scoring.max}</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.percentage")}</div><div className="text-xl font-bold">{scoring.percentage}%</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.result")}</div><div className="text-xl font-bold">{scoring.pass ? t("scoring.pass") : t("scoring.notPassed")}</div></div><Button onClick={generateEvaluation} className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {t("scoring.generate")}</Button><Button onClick={() => loadEvaluationPreview(selectedCandidate.id)} disabled={evaluationLoading} variant="outline" className="h-full rounded-2xl">{evaluationLoading ? t("scoring.loading") : t("scoring.loadPreview")}</Button><Button onClick={() => downloadDraftExport(selectedCandidate.id)} disabled={exportLoading} variant="outline" className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {exportLoading ? t("scoring.exporting") : t("scoring.downloadDraftExport")}</Button></div><p className="mt-3 text-xs text-slate-500">{t("scoring.draftOnly")}</p>{evaluationError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{evaluationError}</div>}{exportError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{exportError}</div>}{lastEvaluation && <div className="mt-4 rounded-2xl border bg-white p-4 text-sm"><div className="font-semibold">{t("scoring.lastGenerated")}</div><div className="mt-1 text-slate-600">{lastEvaluation.candidate} / {lastEvaluation.level}: {lastEvaluation.total}/{lastEvaluation.max} ({lastEvaluation.percentage}%) - {lastEvaluation.result}</div></div>}<EvaluationPreviewCard preview={evaluationPreview} t={t} assignment={assignment} /></div></div></CardContent></Card>;
 }
 
 export default function VetBaraApp() {

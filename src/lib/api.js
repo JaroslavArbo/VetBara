@@ -1,18 +1,36 @@
 async function requestJson(path, options = {}) {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (networkError) {
+    // fetch() itself threw: no response reached us at all (offline, DNS failure, LAN server
+    // down). Callers use this flag to decide whether a local/offline fallback is appropriate.
+    const error = new Error(networkError?.message || "Network request failed");
+    error.isBackendUnavailable = true;
+    throw error;
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const body = contentType.includes("application/json") ? await response.json() : await response.text();
 
   if (!response.ok) {
+    // 404 means this deployment simply has no backend implementing this API (e.g. plain `vite
+    // dev` without the Vercel/Supabase or LAN-portable backend) -- that's "unavailable", not a
+    // rejection, so local/offline fallback is still appropriate. Any other non-2xx (401, 403,
+    // 400, 500...) means a real backend looked at the request and explicitly said no; callers
+    // must respect that and must NOT fall back to local/offline access as if it had just been
+    // unreachable.
     const message = typeof body === "object" && body?.error ? body.error : `Request failed: ${response.status}`;
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.isBackendUnavailable = response.status === 404;
+    throw error;
   }
 
   return body;

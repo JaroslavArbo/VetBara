@@ -96,7 +96,12 @@ export default async function handler(request, response) {
       }
     }
 
-    if (!access && process.env.VETBARA_DEMO_MODE !== "false") access = DEMO_TOKENS[token] ?? null;
+    // Demo tokens are a local/offline convenience only: once Supabase is configured (envReady),
+    // a lookup miss means the token is genuinely invalid/revoked and must not fall back to the
+    // well-known demo constants (they are public in this repo). Every other resolveSession() in
+    // this codebase already gates its demo path behind !envReady(); this one didn't, which let
+    // the hardcoded demo tokens authenticate as Centre/Candidate/Examiner on a live deployment.
+    if (!access && !envReady() && process.env.VETBARA_DEMO_MODE !== "false") access = DEMO_TOKENS[token] ?? null;
     if (!access) return sendJson(response, 401, { error: "Invalid or expired QR token" });
 
     const session = await createSession(access);

@@ -569,7 +569,9 @@ Object.assign(translations.en, {
   "evaluation.preview.primaryScores": "Primary scores",
   "evaluation.preview.secondaryScores": "Secondary scores",
   "evaluation.preview.yes": "yes",
-  "evaluation.preview.no": "no"
+  "evaluation.preview.no": "no",
+  "evaluation.preview.discrepancyTitle": "Primary and secondary examiner scores disagree",
+  "evaluation.preview.discrepancyHelper": "Review these items before generating the final evaluation."
 });
 
 Object.assign(translations.cs, {
@@ -612,7 +614,9 @@ Object.assign(translations.cs, {
   "evaluation.preview.primaryScores": "Primary skóre",
   "evaluation.preview.secondaryScores": "Secondary skóre",
   "evaluation.preview.yes": "ano",
-  "evaluation.preview.no": "ne"
+  "evaluation.preview.no": "ne",
+  "evaluation.preview.discrepancyTitle": "Primary a secondary examiner se v hodnocení neshodují",
+  "evaluation.preview.discrepancyHelper": "Před vygenerováním finálního hodnocení tyto položky zkontrolujte."
 });
 
 
