@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
-import { CandidateQuickHelp, ExaminerQuickHelp, PilotReleaseNotesPanel, PilotSmokeTestChecklist } from "./components/PilotInfoPanels";
-import { EvaluationPreviewCard } from "./components/EvaluationPreviewCard";
+import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
+import { CandidateQuickHelp, ExaminerQuickHelp } from "./components/PilotInfoPanels";
 import { AuditSyncView } from "./components/AuditSyncView";
-import { CentreNetworkReadinessChecklist, CentreValidationSummary, PilotReadinessGuardrails, PilotRunSummary } from "./components/CentreReadinessPanels";
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
+import { HandwritingPad } from "./components/HandwritingPad";
 import { LANGUAGES as UI_LANGUAGES, makeTranslator } from "./i18n";
 import { QRCodeSVG } from "qrcode.react";
+import JSZip from "jszip";
+import jsPDF from "jspdf";
 
 async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage }) {
   const response = await fetch("/api/centre/setup", {
@@ -75,25 +78,19 @@ function RuntimeCrashScreen({ error }) {
   );
 }
 
-function VetCertRulesReference() {
+function VetCertRulesReference({ t }) {
   return (
     <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-      <div className="font-semibold">VETcert Rules reference</div>
-      <p className="mt-1">
-        Oficiální pravidla zkoušky jsou referenční dokument pro průběh certifikace.
-        Zkušební materiály, vzorové odpovědi a dokončené zkoušky jsou důvěrné.
-      </p>
-      <p className="mt-2 text-xs">
-        Kandidátům ani zkoušejícím v hodnoticím rozhraní nezobrazovat správné odpovědi,
-        answer key ani návodné hodnoticí poznámky.
-      </p>
+      <div className="font-semibold">{t("vetcertRules.title")}</div>
+      <p className="mt-1">{t("vetcertRules.body1")}</p>
+      <p className="mt-2 text-xs">{t("vetcertRules.body2")}</p>
     </div>
   );
 }
 
-function StatusPill({ children, tone = "default" }) {
+function StatusPill({ children, tone = "default", icon: Icon }) {
   const cls = { good: "bg-emerald-100 text-emerald-800", warn: "bg-amber-100 text-amber-800", bad: "bg-rose-100 text-rose-800", default: "bg-slate-100 text-slate-700" }[tone] || "bg-slate-100 text-slate-700";
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{children}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{Icon && <Icon className="h-3.5 w-3.5" />}{children}</span>;
 }
 function IconBase({ children, className = "h-5 w-5" }) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>; }
 function BadgeCheck({ className }) { return <IconBase className={className}><path d="M8 12.5l2.5 2.5L16 9" /><path d="M12 2l2.1 2.2 3-.4.8 2.9 2.7 1.4-1.4 2.7.4 3-2.9.8-1.4 2.7-3-.4L12 22l-2.1-2.2-3 .4-.8-2.9-2.7-1.4 1.4-2.7-.4-3 2.9-.8 1.4-2.7 3 .4L12 2z" /></IconBase>; }
@@ -105,7 +102,59 @@ function ShieldCheck({ className }) { return <IconBase className={className}><pa
 function Tablet({ className }) { return <IconBase className={className}><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M11 18h2" /></IconBase>; }
 function Users({ className }) { return <IconBase className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></IconBase>; }
 function QrCodeIcon({ className }) { return <IconBase className={className}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h2v2h-2z" /><path d="M18 14h3" /><path d="M14 18h3" /><path d="M19 18h2v3h-3" /></IconBase>; }
-function SectionTitle({ icon: Icon, title, subtitle }) { return <div className="mb-4 flex items-start gap-3"><div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5" /></div><div><h2 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h2><p className="text-sm text-slate-500">{subtitle}</p></div></div>; }
+function Info({ className }) { return <IconBase className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></IconBase>; }
+function AlertTriangle({ className }) { return <IconBase className={className}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></IconBase>; }
+function Camera({ className }) { return <IconBase className={className}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></IconBase>; }
+function MapPin({ className }) { return <IconBase className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></IconBase>; }
+function ChevronDown({ className }) { return <IconBase className={className}><path d="M6 9l6 6 6-6" /></IconBase>; }
+function Check({ className }) { return <IconBase className={className}><path d="M20 6L9 17l-5-5" /></IconBase>; }
+function X({ className }) { return <IconBase className={className}><path d="M18 6L6 18" /><path d="M6 6l12 12" /></IconBase>; }
+function Wifi({ className }) { return <IconBase className={className}><path d="M5 12.5a11 11 0 0 1 14 0" /><path d="M8.5 16a6 6 0 0 1 7 0" /><path d="M12 19.5h.01" /></IconBase>; }
+function Search({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconBase>; }
+function ZoomIn({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M11 8v6" /><path d="M8 11h6" /></IconBase>; }
+function ZoomOut({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M8 11h6" /></IconBase>; }
+function Layers({ className }) { return <IconBase className={className}><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5" /><path d="M3 17l9 5 9-5" /></IconBase>; }
+function Maximize({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
+function Minimize({ className }) { return <IconBase className={className}><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></IconBase>; }
+function RefreshCw({ className }) { return <IconBase className={className}><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" /><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" /><path d="M3 16v4h4" /><path d="M21 8V4h-4" /></IconBase>; }
+function Eraser({ className }) { return <IconBase className={className}><path d="M7 21H4a1 1 0 0 1-.7-1.7l10-10a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L15 21" /><path d="M22 21H7" /><path d="m5 12 5 5" /></IconBase>; }
+function Undo({ className }) { return <IconBase className={className}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v6h6" /></IconBase>; }
+function Pencil({ className }) { return <IconBase className={className}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></IconBase>; }
+function SectionTitle({ icon: Icon, title, subtitle, tooltip }) { return <div className="mb-4 flex items-start gap-3"><div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5" /></div><div className="min-w-0"><div className="flex items-center gap-1.5"><h2 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h2>{tooltip && <InfoTooltip text={tooltip} />}</div><p className="text-sm text-slate-500">{subtitle}</p></div></div>; }
+
+// Tap-to-toggle explanation bubble (not hover-based: this app runs on touch tablets, which have
+// no hover state). Closes on outside click/tap or Escape so it never gets stuck open.
+function InfoTooltip({ text, label }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function onOutside(event) { if (ref.current && !ref.current.contains(event.target)) setOpen(false); }
+    function onKey(event) { if (event.key === "Escape") setOpen(false); }
+    document.addEventListener("pointerdown", onOutside);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onOutside); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  if (!text) return null;
+  return (
+    <span className="relative inline-flex" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label || "Info"}
+        aria-expanded={open}
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+      >
+        <Info className="h-4 w-4" />
+      </button>
+      {open && (
+        <span className="absolute left-1/2 top-full z-30 mt-2 w-64 -translate-x-1/2 rounded-xl border bg-slate-950 p-3 text-xs leading-relaxed text-white shadow-xl">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
 
 const LANGUAGES = ["EN", "CZ", "PL", "DE", "NL"];
 const EXAM_LEVELS = ["Practicing", "Consulting"];
@@ -532,6 +581,43 @@ function parseTestPackage(text, fileName = "", mimeType = "") {
 }
 
 function nowStamp() { return new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+// Human-readable labels for the sync-event types pushed by Candidate/Examiner sessions
+// (candidate_section.opened, test_response.saved, session.fullscreen_exited, ...), so the
+// server-synced activity from OTHER devices can render in the Centre's audit trail the same
+// way locally-logged entries do. Unknown types fall back to a readable version of the raw type.
+const SYNC_EVENT_LABELS = {
+  "candidate_section.opened": "Candidate section opened",
+  "candidate_section.reopened": "Candidate section reopened",
+  "candidate_section.closed": "Candidate section closed",
+  "test_response.saved": "Test answer edited",
+  "report_draft.saved": "Report field edited",
+  "report_photo.added": "Report photo added",
+  "outdoor_assessment.opened": "Outdoor form opened",
+  "outdoor_assessment.submitted": "Outdoor assessment submitted",
+  "outdoor_score.saved": "Outdoor score edited",
+  "outdoor_note.saved": "Outdoor note edited",
+  "outdoor_note_sketch.saved": "Outdoor sketch edited",
+  "session.fullscreen_entered": "Entered fullscreen",
+  "session.fullscreen_exited": "Exited fullscreen",
+  "session.app_backgrounded": "Switched away from app",
+  "session.app_foregrounded": "Returned to app",
+};
+function describeSyncEventLabel(type) {
+  return SYNC_EVENT_LABELS[type] || String(type || "").replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function syncEventToAuditEntry(event) {
+  const payload = event.payload || {};
+  const target = payload.subjectName || event.candidateId || payload.candidateId || payload.examinerId || event.entityId || "";
+  const detailParts = [payload.sectionKey, payload.questionId, payload.itemId, payload.treeId].filter(Boolean);
+  const time = event.createdAt || event.receivedAt ? new Date(event.createdAt || event.receivedAt).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  return {
+    id: `remote-${event.clientEventId || `${event.type}-${event.entityId}-${event.receivedAt || event.createdAt}`}`,
+    action: describeSyncEventLabel(event.type),
+    target,
+    detail: detailParts.join(" / "),
+    time,
+  };
+}
 function createReportDraft() { return REPORT_TREES.reduce((acc, tree) => ({ ...acc, [tree]: { fieldNotes: "", photos: [], finalSections: REPORT_SECTIONS.reduce((s, sec) => ({ ...s, [sec.key]: "" }), {}) } }), {}); }
 function createSectionStatus(level) { return CANDIDATE_SECTIONS[level].reduce((acc, sec) => ({ ...acc, [sec.key]: "locked" }), {}); }
 function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, outdoorMax: 58, reportMax: 117 } : { writtenMax: 46, outdoorMax: 102, reportMax: 0 }; }
@@ -544,13 +630,27 @@ function scoreLimitsForCandidate(candidate, variants, testBank, outdoorItemsByLe
   const outdoorMax = sumOutdoorItemsMax(effectiveOutdoorItemsForLevel(outdoorItemsByLevel, candidate?.level)) || fallback.outdoorMax;
   return { ...fallback, writtenMax, outdoorMax };
 }
-function safeRatio(score, max) { return max > 0 ? score / max : 0; }
-function scoreCandidate(c, limits = scoreLimits(c?.level)) { const l = limits; const w = Number(c?.written ?? 0); const o = Number(c?.outdoor ?? 0); const r = c?.level === "Consulting" ? Number(c?.report ?? 0) : 0; const total = w + o + r; const max = l.writtenMax + l.outdoorMax + l.reportMax; const pass = safeRatio(w, l.writtenMax) >= 0.5 && safeRatio(o, l.outdoorMax) >= 0.5 && (c?.level !== "Consulting" || safeRatio(r, l.reportMax) >= 0.5) && safeRatio(total, max) >= 0.75; return { ...l, total, max, percentage: max > 0 ? Math.round((total / max) * 1000) / 10 : 0, pass }; }
 function isObject(value) { return value && typeof value === "object" && !Array.isArray(value); }
 function storedAnswerValue(row) { const answer = row?.answer; return isObject(answer) ? answer.selectedAnswer ?? answer.answer ?? answer.value ?? "" : answer ?? ""; }
 function isBackendPersistenceUnavailable(error) {
   const message = String(error?.message ?? error ?? "");
   return error?.status === 503 || /503/.test(message) || /Backend persistence is not configured/i.test(message);
+}
+
+// Synchronously renders a QR code to a standalone <svg>...</svg> markup string, for embedding
+// into print windows built via document.write (a separate document, so React components/props
+// can't be handed to it directly — only raw HTML/markup).
+function renderQrSvgMarkup(value, size = 160) {
+  const safeValue = String(value ?? "");
+  if (!safeValue) return "";
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  flushSync(() => {
+    root.render(<QRCodeSVG value={safeValue} size={size} level="M" includeMargin={false} />);
+  });
+  const markup = container.querySelector("svg")?.outerHTML || "";
+  root.unmount();
+  return markup;
 }
 
 function RealQr({ value, size = 112 }) {
@@ -576,21 +676,6 @@ function RealQr({ value, size = 112 }) {
       )}
     </div>
   );
-}
-
-function qrAccessFromCurrentUrl() {
-  try {
-    const query = new URLSearchParams(window.location.search);
-    return {
-      role: query.get("role") || "",
-      id: query.get("id") || "",
-      token: query.get("token") || "",
-      level: query.get("level") || "",
-      name: query.get("name") || "",
-    };
-  } catch {
-    return { role: "", id: "", token: "", level: "", name: "" };
-  }
 }
 
 function parseQrPayload(payload) { try { const url = new URL(payload); return { role: url.searchParams.get("role"), id: url.searchParams.get("id"), token: url.searchParams.get("token"), name: url.searchParams.get("name"), level: url.searchParams.get("level"),  }; } catch { const [role, id, token] = String(payload).split("|"); return { role, id, token }; } }
@@ -632,7 +717,7 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
             </p>
           </div>
           <Button onClick={onClose} variant="outline" className="rounded-2xl">
-            {t("common.close")}
+            <X className="mr-1 h-4 w-4" />{t("common.close")}
           </Button>
         </div>
 
@@ -691,7 +776,7 @@ function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel }) {
           placeholder="Schvalovací heslo"
           className="mt-3 w-full rounded-xl border bg-white p-2 font-mono text-sm"
         />
-        {error && <p className="mt-2 rounded-xl bg-rose-50 p-2 text-sm font-medium text-rose-900">{error}</p>}
+        {error && <p className="mt-2 flex items-center gap-2 rounded-xl bg-rose-50 p-2 text-sm font-medium text-rose-900"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={() => onConfirm(password)} className="rounded-2xl">Potvrdit</Button>
           <Button onClick={onCancel} variant="outline" className="rounded-2xl">Zrušit</Button>
@@ -703,7 +788,7 @@ function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel }) {
 
 
 function VetBaraPrototype() {
-  const [runtimeError, setRuntimeError] = useState(null);
+  const [runtimeError] = useState(null);
   const fieldTabletMode = (() => {
     try {
       const query = new URLSearchParams(window.location.search);
@@ -758,7 +843,6 @@ function VetBaraPrototype() {
   const [testImportSummary, setTestImportSummary] = useState(null);
   const [adminPdfPackageStatus, setAdminPdfPackageStatus] = useState("");
   const [adminPdfPackageError, setAdminPdfPackageError] = useState("");
-  const [adminPdfPackageList, setAdminPdfPackageList] = useState([]);
   const [adminPdfPackageLatest, setAdminPdfPackageLatest] = useState(null);
   const [variants, setVariants] = useState({ Practicing: "PRACTICING_2026_V1_CZ", Consulting: "CONSULTING_2026_V1_EN" });
   const [status, setStatus] = useState("Draft by Admin");
@@ -787,6 +871,7 @@ function VetBaraPrototype() {
   const [assignments, setAssignments] = useState(START_ASSIGNMENTS);
   const [outdoor, setOutdoor] = useState({});
   const [outdoorNotes, setOutdoorNotes] = useState({});
+  const [outdoorNoteDrawings, setOutdoorNoteDrawings] = useState({});
   const [outdoorItemsByLevel, setOutdoorItemsByLevel] = useState({});
   const [activeAdminPackageMeta, setActiveAdminPackageMeta] = useState(null);
   const [activeOutdoorSection, setActiveOutdoorSection] = useState("generic");
@@ -795,15 +880,9 @@ function VetBaraPrototype() {
   const [audit, setAudit] = useState([{ id: "A-001", action: "Exam event opened", target: "Exam event", time: "09:00", detail: "Initial offline package prepared" }]);
   const [sync, setSync] = useState([{ id: "S-001", type: "Exam package", status: "Ready offline" }]);
   const [scannerMode, setScannerMode] = useState(null);
-  const [lastEvaluation, setLastEvaluation] = useState(null);
   const [authenticatedPortalRole, setAuthenticatedPortalRole] = useState(null);
   const [activeSessionToken, setActiveSessionToken] = useState(null);
   const [reopenRequest, setReopenRequest] = useState(null);
-  const [evaluationPreview, setEvaluationPreview] = useState(null);
-  const [evaluationLoading, setEvaluationLoading] = useState(false);
-  const [evaluationError, setEvaluationError] = useState("");
-  const [exportLoading, setExportLoading] = useState(false);
-  const [exportError, setExportError] = useState("");
   const [centreSetupLoading, setCentreSetupLoading] = useState(false);
   const [centreSetupSaving, setCentreSetupSaving] = useState(false);
   const [centreSetupError, setCentreSetupError] = useState("");
@@ -814,18 +893,31 @@ function VetBaraPrototype() {
   const [centreValidationIssues, setCentreValidationIssues] = useState([]);
   const [centreSetupDirty, setCentreSetupDirty] = useState(false);
 
+  // Silent background safety net replacing the removed manual "Uložit Centre Setup" button:
+  // periodically persists candidates/examiners/assignments once Centre is unlocked, so closing
+  // the tab doesn't lose setup work. Errors are swallowed on purpose (best-effort, retried next tick).
+  const centreAutosaveStateRef = useRef({ dirty: centreSetupDirty, save: null });
+  useEffect(() => { centreAutosaveStateRef.current.dirty = centreSetupDirty; }, [centreSetupDirty]);
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (centreAutosaveStateRef.current.dirty && activeSessionToken) {
+        Promise.resolve(centreAutosaveStateRef.current.save?.()).catch(() => {});
+      }
+    }, 120000);
+    return () => window.clearInterval(intervalId);
+  }, [activeSessionToken]);
+
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) ?? candidates[0];
   const loggedCandidate = candidates.find((c) => c.id === loggedCandidateId) ?? null;
   const loggedExaminer = EXAMINERS.find((e) => e.id === loggedExaminerId) ?? null;
   const assignedCandidates = loggedExaminer ? candidates.filter((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(loggedExaminer.id)) : [];
   const selectedMode = loggedExaminer && assignments[selectedCandidate.id]?.primary === loggedExaminer.id ? "primary" : loggedExaminer && assignments[selectedCandidate.id]?.secondary === loggedExaminer.id ? "secondary" : "unassigned";
   const activeScoreLimits = useMemo(() => scoreLimitsForCandidate(selectedCandidate, variants, testBank, outdoorItemsByLevel), [selectedCandidate, variants, testBank, outdoorItemsByLevel]);
-  const scoring = useMemo(() => scoreCandidate(selectedCandidate, activeScoreLimits), [selectedCandidate, activeScoreLimits]);
   const summary = useMemo(() => ({ total: candidates.length, practicing: candidates.filter((c) => c.level === "Practicing").length, consulting: candidates.filter((c) => c.level === "Consulting").length }), [candidates]);
   const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp() }, ...prev]);
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
   const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => {
-    const url = new URL(window.location.pathname || "/", window.location.origin);
+    const url = new URL(window.location.pathname || "/", portableLanOrigin() || window.location.origin);
     url.searchParams.set("role", roleName);
     url.searchParams.set("id", id);
     url.searchParams.set("token", token);
@@ -845,6 +937,84 @@ function VetBaraPrototype() {
   const localEventId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const knownCandidate = (id) => candidates.some((candidate) => candidate.id === id);
   const knownExaminer = (id) => EXAMINERS.some((examiner) => examiner.id === id);
+
+  // Session integrity monitoring: while a Candidate or Examiner is actively logged in, track
+  // fullscreen exits and app/tab switching (both real signs someone left the exam interface).
+  // Logged both to the local audit list and pushed server-side via sendSyncEvent, so the Centre
+  // — a separate device on the real portable LAN deployment — can see it in its own audit trail.
+  useEffect(() => {
+    const activeSubject = loggedCandidate
+      ? { kind: "candidate", id: loggedCandidate.id, name: loggedCandidate.name }
+      : loggedExaminer
+        ? { kind: "examiner", id: loggedExaminer.id, name: loggedExaminer.name }
+        : null;
+    if (!activeSubject) return undefined;
+
+    // Best-effort: some browsers (notably iOS Safari) refuse fullscreen without a fresh user
+    // gesture, or don't support it at all. Silent failure is fine — the listeners below still
+    // catch fullscreen entered/exited via any other means (F11, browser chrome, etc.).
+    try { document.documentElement.requestFullscreen?.() || document.documentElement.webkitRequestFullscreen?.(); } catch { /* not fatal */ }
+
+    function logSessionEvent(type, label) {
+      const now = new Date().toISOString();
+      addAudit(label, activeSubject.name, activeSubject.kind === "candidate" ? "Candidate" : "Examiner");
+      sendSyncEvent({
+        clientEventId: localEventId(`session-${type}-${activeSubject.id}`),
+        type: `session.${type}`,
+        entityType: "session",
+        entityId: activeSubject.id,
+        candidateId: activeSubject.kind === "candidate" ? activeSubject.id : undefined,
+        payload: { subjectKind: activeSubject.kind, subjectId: activeSubject.id, subjectName: activeSubject.name, at: now },
+        createdAt: now,
+      });
+    }
+    function onFullscreenChange() {
+      const inFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      logSessionEvent(inFullscreen ? "fullscreen_entered" : "fullscreen_exited", inFullscreen ? "Entered fullscreen" : "Exited fullscreen");
+    }
+    function onVisibilityChange() {
+      logSessionEvent(document.hidden ? "app_backgrounded" : "app_foregrounded", document.hidden ? "Switched away from app" : "Returned to app");
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedCandidate?.id, loggedExaminer?.id]);
+
+  // Centre runs on its own device from Candidates/Examiners on the real portable LAN
+  // deployment, so its local `audit` state alone never sees their opens/closes/edits/
+  // fullscreen-exits/app-switches. Poll the server's sync-event log (already fed by
+  // sendSyncEvent from every session) and merge it in, so the audit trail reflects activity
+  // across every device while more than one candidate is going through the exam at once.
+  useEffect(() => {
+    if (role !== "Centre") return undefined;
+    let cancelled = false;
+    async function pollRemoteAudit() {
+      try {
+        const response = await fetch("/api/sync/recent?limit=300", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        const events = Array.isArray(data.events) ? data.events : [];
+        if (cancelled || !events.length) return;
+        const remoteEntries = events.map(syncEventToAuditEntry).reverse();
+        setAudit((prev) => {
+          const existingIds = new Set(prev.map((item) => item.id));
+          const fresh = remoteEntries.filter((item) => !existingIds.has(item.id));
+          return fresh.length ? [...fresh, ...prev] : prev;
+        });
+      } catch {
+        // Best-effort; the next poll tick will retry. Dev server / no backend just no-ops here.
+      }
+    }
+    pollRemoteAudit();
+    const intervalId = window.setInterval(pollRemoteAudit, 8000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
+  }, [role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -876,6 +1046,7 @@ function VetBaraPrototype() {
 
     async function openQrSession() {
       const parsed = parseQrPayload(window.location.href);
+      if (parsed.role === "Admin") return;
       if (!parsed.role && !parsed.token) return;
       const access = await resolveAccessWithFallback(parsed, "Direct QR session accepted");
       if (cancelled || !access) return;
@@ -1265,46 +1436,6 @@ function VetBaraPrototype() {
     }
   }
 
-  async function loadEvaluationPreview(candidateId) {
-    if (!activeSessionToken) {
-      setEvaluationError(t("status.evaluation.previewSessionRequired"));
-      return;
-    }
-
-    setEvaluationLoading(true);
-    setEvaluationError("");
-
-    try {
-      const result = await fetchCandidateEvaluation(activeSessionToken, candidateId);
-      setEvaluationPreview(result);
-    } catch (error) {
-      console.error("Evaluation preview failed", error);
-      setEvaluationError(t("status.evaluation.previewUnavailable"));
-    } finally {
-      setEvaluationLoading(false);
-    }
-  }
-
-  async function downloadDraftExport(candidateId) {
-    if (!activeSessionToken) {
-      setExportError(t("status.export.sessionRequired"));
-      return;
-    }
-
-    setExportLoading(true);
-    setExportError("");
-
-    try {
-      const result = await exportCandidateEvaluation(activeSessionToken, candidateId, "xls");
-      downloadBase64File(result);
-    } catch (error) {
-      console.error("Draft export failed", error);
-      setExportError(t("status.export.unavailable"));
-    } finally {
-      setExportLoading(false);
-    }
-  }
-
   async function hydrateCandidateProgress(sessionToken, candidateId) {
     if (!sessionToken || !candidateId) return;
 
@@ -1669,6 +1800,7 @@ function VetBaraPrototype() {
       setCentreSetupSaving(false);
     }
   }
+  centreAutosaveStateRef.current.save = handleSaveCentreSetup;
 
   async function handleDownloadCentreAuditPackage() {
     if (!activeSessionToken) {
@@ -2028,6 +2160,23 @@ function VetBaraPrototype() {
     });
   }
 
+  // Examiner's handwritten sketch for an outdoor item (e.g. a quick tree diagram), stored
+  // alongside the typed note. Kept local/per-candidate like outdoorNotes; travels with the
+  // rest of the outdoor record in the outdoor_assessment.submitted sync event on submit,
+  // rather than its own per-keystroke sync event (a single sketch save is a discrete action,
+  // not a continuous stream like typing).
+  function updateOutdoorNoteDrawing(itemId, dataUrl) {
+    if (!loggedExaminer || selectedMode === "unassigned") return;
+    setOutdoorNoteDrawings((prev) => ({
+      ...prev,
+      [selectedCandidate.id]: {
+        ...(prev[selectedCandidate.id] ?? {}),
+        [itemId]: dataUrl,
+      },
+    }));
+    queue("Outdoor note sketch", `${selectedCandidate.name} / ${itemId}`);
+  }
+
   function outdoorTotal(candidateId, level, section) {
     const values = outdoor[candidateId] ?? {};
     return (effectiveOutdoorItemsForLevel(outdoorItemsByLevel, level)?.[section] ?? []).reduce((sum, item) => sum + Number(values[item.id] ?? 0), 0);
@@ -2072,7 +2221,7 @@ function VetBaraPrototype() {
     saveExaminerResultToLocalServer(outdoorResultRecord);
     setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [selectedCandidate.id]: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id] ?? {}), outdoor: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id]?.outdoor ?? {}), closedAt, closedAtIso: submittedAt } } } }));
     addAudit("Outdoor assessment submitted", selectedCandidate.name, `${total} points / ${closedAt}`);
-    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-submitted-${selectedCandidate.id}-${loggedExaminer.id}`), type: "outdoor_assessment.submitted", entityType: "outdoor_assessment", entityId: `${selectedCandidate.id}:outdoor`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: "outdoor", submittedAt, closedAtLabel: closedAt, total: cappedTotal, max, scores: values, notes: outdoorNotes[selectedCandidate.id] ?? {} }, createdAt: submittedAt });
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-submitted-${selectedCandidate.id}-${loggedExaminer.id}`), type: "outdoor_assessment.submitted", entityType: "outdoor_assessment", entityId: `${selectedCandidate.id}:outdoor`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: "outdoor", submittedAt, closedAtLabel: closedAt, total: cappedTotal, max, scores: values, notes: outdoorNotes[selectedCandidate.id] ?? {}, noteDrawings: outdoorNoteDrawings[selectedCandidate.id] ?? {} }, createdAt: submittedAt });
     setActiveExaminerPage("landing");
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
   }
@@ -2125,8 +2274,6 @@ function VetBaraPrototype() {
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
     }
   }
-  function generateEvaluation() { const s = scoreCandidate(selectedCandidate, activeScoreLimits); setLastEvaluation({ candidate: selectedCandidate.name, level: selectedCandidate.level, total: s.total, max: s.max, percentage: s.percentage, result: s.pass ? "PASS" : "NOT PASSED" }); }
-
   const centreDataMode = centreSetupStatus || centreQrAccess?.candidates?.length || centreQrAccess?.examiners?.length ? "backend" : "demo";
 
   if (runtimeError) return <RuntimeCrashScreen error={runtimeError} />;
@@ -2135,10 +2282,10 @@ function VetBaraPrototype() {
     <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-4"><img src="/brand/vetcert-logo.jpg" alt="VETcert Certified Veteran Tree Specialist" className="h-14 w-14 shrink-0 rounded-full border bg-white object-contain p-1 shadow-sm md:h-16 md:w-16" /><div><div className="mb-2 flex flex-wrap items-center gap-2"><div className="rounded-2xl bg-slate-950 px-3 py-1 text-sm font-semibold text-white">{t("app.title")}</div><StatusPill tone="warn">{t("app.mvpPrototype")}</StatusPill><StatusPill><CloudOff className="mr-1 h-3.5 w-3.5" /> {t("app.offlineFirst")}</StatusPill></div><h1 className="text-3xl font-bold tracking-tight md:text-5xl">{t("app.heroTitle")}</h1><p className="mt-2 max-w-3xl text-slate-600">{t("app.subtitle")}</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-medium text-slate-500">{t("language.label")}<select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)} className="ml-2 rounded-xl border bg-white p-2 text-sm text-slate-950">{uiLanguageChoices.map((lang) => <option key={lang.code} value={lang.code}>{lang.draft ? `${lang.label} - draft` : lang.label}</option>)}</select></label>{lockedPortalRole ? <StatusPill tone="good">{tf("app.dedicatedPortal", { role: roleLabel(lockedPortalRole) })}</StatusPill> : role === "Admin" ? <StatusPill tone="good">Admin</StatusPill> : ROLES.map((r) => <Button key={r} onClick={() => setRole(r)} variant={role === r ? "default" : "outline"} className="rounded-2xl">{roleLabel(r)}</Button>)}</div></header>
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     <div className="grid gap-4 lg:grid-cols-3">
-      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} t={t}  adminPdfPackageStatus={adminPdfPackageStatus} adminPdfPackageError={adminPdfPackageError} adminPdfPackageList={adminPdfPackageList} adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageList={setAdminPdfPackageList} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} scoring={scoring} activeScoreLimits={activeScoreLimits} updateScore={updateScore} generateEvaluation={generateEvaluation} lastEvaluation={lastEvaluation} loadEvaluationPreview={loadEvaluationPreview} evaluationPreview={evaluationPreview} evaluationLoading={evaluationLoading} evaluationError={evaluationError} downloadDraftExport={downloadDraftExport} exportLoading={exportLoading} exportError={exportError} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
       {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
@@ -2373,6 +2520,251 @@ function downloadJsonFile(filename, data) {
   URL.revokeObjectURL(url);
 }
 
+const LANGUAGE_ABBREV_MAP = {
+  english: "EN", czech: "CZ", "čeština": "CZ", cestina: "CZ", polish: "PL", polski: "PL",
+  german: "DE", deutsch: "DE", dutch: "NL", nederlands: "NL",
+};
+function languageAbbrev(language) {
+  const raw = String(language || "").trim();
+  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+  const mapped = LANGUAGE_ABBREV_MAP[raw.toLowerCase()];
+  if (mapped) return mapped;
+  return raw.slice(0, 2).toUpperCase() || "XX";
+}
+
+// yyyy-mm-dd-hh-mm in local wall-clock time, since the filename is for a human to recognize
+// ("today around 4pm"), not for machine sorting across time zones.
+function vetFilenameStamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}-${pad(date.getMinutes())}`;
+}
+
+function slugForFilename(value) {
+  return String(value || "").trim().replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "") || "misto";
+}
+
+// Generic text-document PDF renderer for the Centre archive (Section F) — every archived
+// document (candidate output, examiner grading, audit log) is shaped as {heading, rows:
+// [{label, text}]} sections and rendered through this single layout so the archive doesn't
+// need a bespoke jsPDF layout per document type. Not meant to visually match the HTML/CSS
+// print templates used elsewhere in the app; it only needs to be a readable, real PDF file.
+function buildArchiveSectionsPdfBlob(title, metaLines, sections) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const marginX = 16;
+  const pageHeight = 297;
+  const maxWidth = 210 - marginX * 2;
+  let y = 20;
+
+  function ensureSpace(lineHeight) {
+    if (y + lineHeight > pageHeight - 16) {
+      doc.addPage();
+      y = 20;
+    }
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.splitTextToSize(title, maxWidth).forEach((line) => { ensureSpace(7); doc.text(line, marginX, y); y += 7; });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(90, 100, 95);
+  metaLines.forEach((line) => { ensureSpace(5); doc.text(line, marginX, y); y += 5; });
+  doc.setTextColor(20, 30, 25);
+  y += 4;
+
+  (sections || []).forEach((section) => {
+    if (section.heading) {
+      ensureSpace(8);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.splitTextToSize(section.heading, maxWidth).forEach((line) => { ensureSpace(6); doc.text(line, marginX, y); y += 6; });
+      y += 1;
+    }
+    (section.rows || []).forEach((row) => {
+      if (row.label) {
+        ensureSpace(5);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(String(row.label), marginX, y);
+        y += 4.5;
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.splitTextToSize(String(row.text ?? "-"), maxWidth).forEach((line) => { ensureSpace(5); doc.text(line, marginX, y); y += 5; });
+      y += 3;
+    });
+    y += 2;
+  });
+
+  return doc.output("blob");
+}
+
+function archiveWrittenTestSections(candidate, variants, testBank, testResponses, includeGrading) {
+  const review = computeWrittenTestReview(candidate, variants, testBank, testResponses);
+  return (review.items || []).map((item) => ({
+    heading: `${item.question?.id || "-"}${includeGrading ? ` (${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"} b.)` : ""}`,
+    rows: [
+      { label: "Otázka", text: item.question?.text || "-" },
+      { label: "Odpověď kandidáta", text: item.hasAnswer ? String(item.answer ?? "") : "Bez odpovědi" },
+      ...(includeGrading ? [{ label: "Body", text: `${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"}` }] : []),
+    ],
+  }));
+}
+
+function archiveOutdoorSections(candidate, outdoor, outdoorNotes, outdoorItemsByLevel) {
+  const scores = outdoor?.[candidate.id] ?? {};
+  const notes = outdoorNotes?.[candidate.id] ?? {};
+  const sections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, candidate.level);
+  return sections.flatMap((section) => {
+    const items = effectiveOutdoorItemsForLevel(outdoorItemsByLevel, candidate.level)?.[section] ?? [];
+    return items.map((item) => ({
+      heading: `${item.id} — ${outdoorSectionTitle(section)}`,
+      rows: [
+        { label: "Otázka", text: item.text || "-" },
+        { label: "Body", text: `${scores[item.id] ?? "-"} / ${item.max}` },
+        ...(notes[item.id] ? [{ label: "Poznámka examinera", text: notes[item.id] }] : []),
+      ],
+    }));
+  });
+}
+
+function archiveReportSections(candidate, reportDrafts) {
+  const draft = reportDrafts?.[candidate.id] ?? createReportDraft();
+  return REPORT_TREES.map((treeName) => {
+    const tree = draft[treeName] ?? {};
+    const rows = [{ label: "Terénní poznámky", text: tree.fieldNotes || "-" }];
+    REPORT_SECTIONS.forEach((section) => rows.push({ label: section.title, text: tree.finalSections?.[section.key] || "-" }));
+    return { heading: treeName, rows };
+  });
+}
+
+function archiveAuditSections(audit) {
+  return [{
+    heading: "Auditní stopa",
+    rows: (audit || []).map((entry) => ({
+      label: `${entry.time || "-"} — ${entry.action || "-"}`,
+      text: [entry.target, entry.detail].filter(Boolean).join(" · ") || "-",
+    })),
+  }];
+}
+
+// Every certification document produced during the exam, grouped into the categories the
+// Centre lead reviews before final closure. Each entry knows how to serialize itself both as
+// JSON (machine-readable, embedded in the Centrum.vet manifest) and as a simple PDF (for the
+// human-readable copy in the ZIP) — see buildArchiveSectionsPdfBlob.
+function buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit }) {
+  const docs = [];
+
+  docs.push({
+    id: "admin-package",
+    category: "Vstupní materiály",
+    label: "Admin.vet — aktivní zkušební balíček",
+    jsonFilename: "Admin_balicek.json",
+    pdfTitle: "Admin.vet — aktivní zkušební balíček",
+    getJson: () => activeAdminPackage || {},
+    getPdfSections: () => [{
+      heading: "Balíček",
+      rows: [
+        { label: "Package ID", text: activeAdminPackage?.packageId || "-" },
+        { label: "Verze", text: activeAdminPackage?.version || "-" },
+        { label: "Jazyk", text: activeAdminPackage?.language || "-" },
+      ],
+    }],
+  });
+
+  candidates.forEach((c) => {
+    docs.push({
+      id: `candidate-test-${c.id}`,
+      category: "Výstupy kandidátů",
+      label: `${c.id} — písemný test (odpovědi kandidáta)`,
+      jsonFilename: `${c.id}_test_odpovedi.json`,
+      pdfTitle: `${c.name || c.id} — písemný test`,
+      getJson: () => testResponses?.[c.id] ?? {},
+      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, false),
+    });
+    if (c.level === "Consulting") {
+      docs.push({
+        id: `candidate-report-${c.id}`,
+        category: "Výstupy kandidátů",
+        label: `${c.id} — Consulting report (podklady kandidáta)`,
+        jsonFilename: `${c.id}_report.json`,
+        pdfTitle: `${c.name || c.id} — Consulting report`,
+        getJson: () => reportDrafts?.[c.id] ?? {},
+        getPdfSections: () => archiveReportSections(c, reportDrafts),
+      });
+    }
+  });
+
+  candidates.forEach((c) => {
+    docs.push({
+      id: `examiner-test-${c.id}`,
+      category: "Hodnocení examinerů",
+      label: `${c.id} — hodnocení písemného testu`,
+      jsonFilename: `${c.id}_test_hodnoceni.json`,
+      pdfTitle: `${c.name || c.id} — hodnocení písemného testu`,
+      getJson: () => computeWrittenTestReview(c, variants, testBank, testResponses),
+      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, true),
+    });
+    docs.push({
+      id: `examiner-outdoor-${c.id}`,
+      category: "Hodnocení examinerů",
+      label: `${c.id} — hodnocení outdoor`,
+      jsonFilename: `${c.id}_outdoor_hodnoceni.json`,
+      pdfTitle: `${c.name || c.id} — hodnocení outdoor`,
+      getJson: () => outdoor?.[c.id] ?? {},
+      getPdfSections: () => archiveOutdoorSections(c, outdoor, outdoorNotes, outdoorItemsByLevel),
+    });
+    if (c.level === "Consulting") {
+      docs.push({
+        id: `examiner-report-${c.id}`,
+        category: "Hodnocení examinerů",
+        label: `${c.id} — kontrola Consulting reportu`,
+        jsonFilename: `${c.id}_report_kontrola.json`,
+        pdfTitle: `${c.name || c.id} — kontrola Consulting reportu`,
+        getJson: () => reportDrafts?.[c.id] ?? {},
+        getPdfSections: () => archiveReportSections(c, reportDrafts),
+      });
+    }
+  });
+
+  docs.push({
+    id: "audit-log",
+    category: "Log",
+    label: "Auditní stopa (log)",
+    jsonFilename: "auditni_stopa.json",
+    pdfTitle: "Auditní stopa",
+    getJson: () => audit || [],
+    getPdfSections: () => archiveAuditSections(audit),
+  });
+
+  return docs;
+}
+
+function buildArchiveReadme(docs, vetFilename) {
+  const lines = [
+    "VetBara — archiv certifikační zkoušky",
+    `Vygenerováno: ${new Date().toLocaleString()}`,
+    "",
+    "STRUKTURA ARCHIVU",
+    `- ${vetFilename}: souhrnný soubor se všemi daty zkoušky (centrum, kandidáti, examineři,`,
+    "  všechny dokumenty). Lze znovu načíst v Adminovi, sekce C — Import dat ze zkoušky,",
+    "  pro prohlížení bez možnosti editace.",
+    "- README.txt: tento soubor.",
+    "- Každá kategorie dokumentů má vlastní složku; každý dokument je uložen dvakrát —",
+    "  jako .json (strojově čitelná data) a .pdf (čitelný formulář pro tisk/archiv).",
+    "",
+    "OBSAH",
+  ];
+  const byCategory = {};
+  docs.forEach((d) => { (byCategory[d.category] ||= []).push(d); });
+  Object.entries(byCategory).forEach(([category, items]) => {
+    lines.push(`\n${category}/`);
+    items.forEach((d) => lines.push(`  - ${d.label}\n    (${d.jsonFilename}, ${d.jsonFilename.replace(/\.json$/, ".pdf")})`));
+  });
+  return lines.join("\n");
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -2382,8 +2774,81 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+// Opens print/PDF preview HTML in a new tab via a Blob URL instead of the older
+// window.open("about:blank") + document.write() pattern, then a Blob-URL popup — both still
+// produced a blank *saved PDF* on real devices even though the on-screen preview looked fine:
+// printing a popup window (whether populated by document.write or navigated to a blob: URL)
+// goes through a separate top-level browsing context, and WebKit's "Save as PDF" pipeline for
+// that kind of window has repeatedly proven unreliable on exactly the tablets this app targets.
+// A same-page hidden <iframe> avoids the popup layer entirely — its document is a normal part
+// of the current page's frame tree, so printing it goes through the same, reliably-working
+// print path as printing the page itself.
+function openPrintDocument(html, onBlocked) {
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.setAttribute("aria-hidden", "true");
+    document.body.appendChild(iframe);
+    iframe.addEventListener("load", () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch {
+        onBlocked?.();
+      }
+    });
+    // Keep the iframe around after the dialog opens (Safari can re-enter print from the
+    // in-document button too), then clean it up well after any reasonable print/save flow.
+    setTimeout(() => { iframe.remove(); }, 120000);
+    iframe.srcdoc = html;
+    return iframe;
+  } catch {
+    onBlocked?.();
+    return null;
+  }
+}
+
 function linesToHtml(value) {
   return escapeHtml(value).replace(/\n/g, "<br />");
+}
+
+// Shared page shell for the Examiner's "PDF s hodnocením" exports (written test, Consulting
+// report, outdoor form) — one printable record of a candidate's work plus the examiner's own
+// grading and handwritten notes, for the certification centre's archive.
+function examinerPdfShellHtml({ docTitle, candidate, examinerName, metaLine, bodyHtml }) {
+  return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(docTitle)} - ${escapeHtml(candidate.id)}</title><style>
+    @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
+    header.exam-header{border-bottom:2px solid #102018;padding-bottom:5mm;margin-bottom:6mm}
+    header.exam-header h1{margin:0;font-size:16pt}
+    header.exam-header p{margin:2mm 0 0;font-size:9.5pt;color:#516158}
+    .exam-examiner{margin-top:2mm;font-weight:700;font-size:10pt;color:#0f3d2e}
+    .exam-block{break-inside:avoid;margin-bottom:5mm;padding-bottom:4mm;border-bottom:1px solid #dbe3dd}
+    .exam-block-head{display:flex;flex-wrap:wrap;gap:3mm;align-items:baseline;font-family:ui-monospace,monospace;font-size:8pt;color:#8a978f;margin-bottom:1.5mm}
+    .exam-title{font-weight:700;margin-bottom:2.5mm;font-size:11.5pt}
+    .exam-answer{border-radius:8px;padding:3mm;margin:2mm 0;background:#f6faf7;font-size:10pt;white-space:pre-wrap}
+    .exam-answer.correct{background:#eafaf0;border:1px solid #bfe8cf}
+    .exam-answer.incorrect{background:#fdf1f1;border:1px solid #f3c9c9}
+    .exam-help{font-size:8.5pt;color:#8a978f;margin-top:1.5mm}
+    .exam-score{display:inline-block;border-radius:999px;padding:1.5mm 4mm;font-weight:700;background:#eef5ef;color:#173021}
+    .exam-sketch{max-width:70mm;max-height:45mm;border:1px solid #dbe3dd;border-radius:6px;margin-top:2mm}
+    .exam-total{margin-top:6mm;padding-top:4mm;border-top:2px solid #102018;font-size:12pt;font-weight:700}
+    @media print{.actions{display:none}}
+    .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+  </style></head><body>
+    <div class="actions"><button onclick="window.print()">Tisk / PDF</button></div>
+    <header class="exam-header">
+      <h1>${escapeHtml(docTitle)}</h1>
+      <p>${escapeHtml(candidate.name || candidate.id)} · ${escapeHtml(candidate.id)} · ${escapeHtml(candidate.level || "")}</p>
+      ${metaLine ? `<p>${escapeHtml(metaLine)}</p>` : ""}
+      <div class="exam-examiner">Hodnotil: ${escapeHtml(examinerName || "-")} · ${escapeHtml(new Date().toLocaleString())}</div>
+    </header>
+    <main>${bodyHtml}</main>
+  </body></html>`;
 }
 
 function guidanceToFlowHtml(value) {
@@ -2461,16 +2926,18 @@ function authoringPrintHtml(draft) {
   return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(pkg.packageId)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827}h1{font-size:26px}h2{page-break-before:always;margin-top:32px}.doc:first-of-type h2{page-break-before:auto}h3{margin-top:20px;font-size:15px}.preface,.intro,.meta{border:1px solid #cbd5e1;background:#f8fafc;padding:12px;margin:10px 0 14px}table{border-collapse:collapse;width:100%;font-size:12px;break-inside:auto}tr{break-inside:avoid;break-after:auto}th,td{border:1px solid #111827;padding:8px;vertical-align:top}th{background:#f1f5f9}.q{width:34%}.guidance{width:auto}.marks{width:60px;text-align:right;font-weight:bold}.test-question-table .q{width:44%}.test-question-table .guidance{width:auto;padding-left:6px;padding-right:6px}.test-question-table .marks{width:48px}.choice-section-table .q{width:46%}.test-question-table.choice-section-table .q{width:54%}.choice-section-table .guidance{width:auto}.qid{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:5px}.qid span{border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#475569;font-size:10px;font-weight:700;padding:2px 7px;white-space:nowrap}.question-text{font-weight:600;margin-bottom:8px}.choice-list{margin:8px 0 0 18px;padding:0}.choice-list li{margin:3px 0;padding-left:3px}.choice-row .q{background:#f8fafc}.choice-row .question-text{font-weight:700}.correct-answer{border:1px solid #bbf7d0;background:#f0fdf4;color:#064e3b;border-radius:8px;padding:8px;margin-bottom:8px}.guidance-text{white-space:normal;width:100%;max-width:none;line-height:1.25}.test-question-table .guidance-text{display:block}.guidance-heading{font-weight:700;margin:0 0 3px}.guidance-paragraph{margin:0 0 5px}.guidance-bullet{margin:0 0 2px;padding-left:0.9em;text-indent:-0.9em}.written-row .guidance-text{color:#334155}@media print{button{display:none}body{margin:12mm}}</style></head><body><button onclick="window.print()">Print / Save as PDF</button><h1>${escapeHtml(draft.title || "VETCERT examination package")}</h1><div class="meta"><div>Package ID: ${escapeHtml(pkg.packageId)}</div><div>Version: ${escapeHtml(draft.version || "")}</div><div>Language: ${escapeHtml(draft.language || "English")}</div><div>Generated: ${escapeHtml(pkg.createdAt)}</div></div>${docs}</body></html>`;
 }
 
-function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError }) {
+function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, t }) {
   const [draft, setDraft] = useState(() => createEmptyAuthoringDraft());
+  // The structured editor only models written/outdoor/language content. Package-level fields it
+  // doesn't know about (rulesDocuments, packageKind, ...) must still survive a load -> edit ->
+  // save round trip instead of being silently dropped, so we keep the last loaded raw package
+  // here and merge any of its unknown top-level fields back in before every save.
+  const sourcePackageRef = useRef(null);
   const [activeDocKey, setActiveDocKey] = useState("writtenPracticing");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [draftList, setDraftList] = useState([]);
-  const [selectedDraftId, setSelectedDraftId] = useState("");
   const [activeSectionFilter, setActiveSectionFilter] = useState("__all__");
   const [localStatus, setLocalStatus] = useState("");
   const [localError, setLocalError] = useState("");
-  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
 
   const activeDocMeta = AUTHORING_DOCS.find((doc) => doc.key === activeDocKey) || AUTHORING_DOCS[0];
   const activeDoc = draft.documents[activeDocKey] || {};
@@ -2565,6 +3032,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
 
   function loadFromPackage(pkg) {
     if (!pkg?.kind) return;
+    sourcePackageRef.current = pkg;
     setDraft(authoringDraftFromCertificationPackage(pkg));
     setSelectedIndex(0);
     setActiveSectionFilter("__all__");
@@ -2572,89 +3040,19 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
     setLocalError("");
   }
 
-  function loadDraftIntoEditor(nextDraft, label = "draft") {
-    if (!nextDraft || nextDraft.kind !== "vetbara.structuredAuthoringDraft.v1") {
-      setLocalError("Soubor není VetBara structured authoring draft.");
-      return;
-    }
-    setDraft({
-      ...nextDraft,
-      documents: {
-        writtenPracticing: normalizedAuthoringDocument("writtenPracticing", nextDraft.documents?.writtenPracticing),
-        writtenConsulting: normalizedAuthoringDocument("writtenConsulting", nextDraft.documents?.writtenConsulting),
-        outdoorPracticing: normalizedAuthoringDocument("outdoorPracticing", nextDraft.documents?.outdoorPracticing),
-        outdoorConsulting: normalizedAuthoringDocument("outdoorConsulting", nextDraft.documents?.outdoorConsulting),
-      },
-    });
-    setSelectedIndex(0);
-    setActiveSectionFilter("__all__");
-    setSelectedDraftId(nextDraft.draftId || nextDraft.packageId || "");
-    setLocalStatus(`Načten strukturovaný ${label}: ${nextDraft.title || nextDraft.packageId || nextDraft.draftId || "bez názvu"}`);
-    setLocalError("");
-  }
-
-  async function refreshDraftList() {
-    setLocalStatus("Načítám uložené strukturované drafty...");
-    setLocalError("");
+  // Silent background safety net (no button, no UI): periodically persists the in-progress
+  // draft server-side so a crashed/closed tab doesn't lose everything back to the last time
+  // someone clicked "Vytvořit Admin.vet". Errors are swallowed — this must never surface a
+  // scary message or touch editor state while someone is mid-edit.
+  async function autosaveDraft(currentDraft) {
     try {
-      const response = await fetch("/api/admin/authoring-drafts/list", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      setDraftList(Array.isArray(data.drafts) ? data.drafts : []);
-      setLocalStatus(`Načteno ${data.drafts?.length || 0} uložených draftů.`);
-    } catch (error) {
-      setLocalError(error.message || "Načtení seznamu draftů selhalo.");
-      setLocalStatus("");
-    }
-  }
-
-  async function saveDraftToDatabase() {
-    setLocalStatus("Ukládám strukturovaný draft...");
-    setLocalError("");
-    try {
-      const response = await fetch("/api/admin/authoring-drafts/save", {
+      await fetch("/api/admin/authoring-drafts/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft }),
+        body: JSON.stringify({ draft: currentDraft }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      setDraft(data.draft);
-      setSelectedDraftId(data.draft?.draftId || data.draft?.packageId || "");
-      setDraftList((current) => [data.summary, ...current.filter((item) => item.filename !== data.summary?.filename)]);
-      setLocalStatus(`Draft uložen: ${data.filename}`);
-    } catch (error) {
-      setLocalError(error.message || "Uložení draftu selhalo.");
-      setLocalStatus("");
-    }
-  }
-
-  async function loadLatestDraft() {
-    setLocalStatus("Načítám poslední strukturovaný draft...");
-    setLocalError("");
-    try {
-      const response = await fetch("/api/admin/authoring-drafts/latest", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      loadDraftIntoEditor(data, "draft");
-    } catch (error) {
-      setLocalError(error.message || "Načtení posledního draftu selhalo.");
-      setLocalStatus("");
-    }
-  }
-
-  async function loadSelectedDraft() {
-    if (!selectedDraftId) return;
-    setLocalStatus("Načítám vybraný strukturovaný draft...");
-    setLocalError("");
-    try {
-      const response = await fetch(`/api/admin/authoring-drafts/${encodeURIComponent(selectedDraftId)}`, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      loadDraftIntoEditor(data, "draft");
-    } catch (error) {
-      setLocalError(error.message || "Načtení vybraného draftu selhalo.");
-      setLocalStatus("");
+    } catch {
+      // Best-effort only; the next periodic tick will retry.
     }
   }
 
@@ -2710,11 +3108,40 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
     }
   }
 
+  function handleOpenAdminVetFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setLocalStatus("Načítám Admin.vet ze souboru...");
+    setLocalError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result || ""));
+        if (!packageHasAuthoringContent(data)) throw new Error("Soubor neobsahuje žádné otázky ani outdoor cvičení.");
+        loadFromPackage(data);
+        setLocalStatus(`Načteno ze souboru ${file.name}: ${data.packageId || "bez packageId"}`);
+      } catch (error) {
+        setLocalError(error.message || "Soubor se nepodařilo načíst jako Admin.vet balíček.");
+        setLocalStatus("");
+      }
+    };
+    reader.onerror = () => {
+      setLocalError("Soubor se nepodařilo přečíst.");
+      setLocalStatus("");
+    };
+    reader.readAsText(file);
+  }
+
   async function saveAsPackage() {
     setLocalStatus("Ukládám strukturovaný obsah jako Admin JSON balíček...");
     setLocalError("");
     try {
-      const pkg = certificationPackageFromAuthoringDraft(draft);
+      const builtPkg = certificationPackageFromAuthoringDraft(draft);
+      // Carry forward any package-level field the editor doesn't model (rulesDocuments,
+      // packageKind, ...) from whatever package was last loaded, so it isn't lost on save.
+      const sourcePkg = sourcePackageRef.current || {};
+      const pkg = { ...Object.fromEntries(Object.entries(sourcePkg).filter(([key]) => !(key in builtPkg))), ...builtPkg };
       const response = await fetch("/api/admin/test-package/authoring/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2722,9 +3149,26 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      setAdminPdfPackageLatest?.(data.package);
-      setAdminPdfPackageStatus?.(`Strukturovaný balíček uložen: ${data.filename}`);
-      setLocalStatus(`Uloženo: ${data.filename}`);
+
+      // Saving only writes the draft/"latest" file. Centre and candidates read a separate
+      // "active/approved" file, so without this call the save above would silently never
+      // reach a live exam.
+      setLocalStatus("Schvaluji balíček jako aktivní pro Centre a kandidáty...");
+      const approveResponse = await fetch("/api/admin/test-package/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageId: pkg.packageId, allowRequiresReview: true, reason: "Published from Admin authoring" }),
+      });
+      const approveData = await approveResponse.json();
+      if (!approveResponse.ok) throw new Error(approveData.error || `HTTP ${approveResponse.status}`);
+
+      const savedPackage = approveData.package || data.package || pkg;
+      sourcePackageRef.current = savedPackage;
+      const vetFilename = `Admin_${languageAbbrev(draft.language)}_${vetFilenameStamp()}.vet`;
+      downloadJsonFile(vetFilename, savedPackage);
+      setAdminPdfPackageLatest?.(savedPackage);
+      setAdminPdfPackageStatus?.(`Balíček uložen a schválen jako aktivní: ${vetFilename}`);
+      setLocalStatus(`Uloženo a schváleno jako aktivní: ${vetFilename}`);
     } catch (error) {
       setLocalError(error.message || "Uložení selhalo.");
       setAdminPdfPackageError?.(error.message || "Uložení strukturovaného balíčku selhalo.");
@@ -2733,44 +3177,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
   }
 
   function printPackage() {
-    const win = window.open("", "_blank");
-    if (!win) {
-      setLocalError("Prohlížeč zablokoval nové okno pro tisk.");
-      return;
-    }
-    win.document.open();
-    win.document.write(authoringPrintHtml(draft));
-    win.document.close();
-  }
-
-  function importJson(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(String(reader.result || "{}"));
-        if (data.kind === "vetbara.structuredAuthoringDraft.v1") {
-          loadDraftIntoEditor(data, file.name);
-        } else {
-          loadFromPackage(data);
-        }
-      } catch (error) {
-        setLocalError(error.message || "Import JSON selhal.");
-      } finally {
-        event.target.value = "";
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  function exportDraft() {
-    downloadJsonFile(`${draft.packageId || "vetbara-authoring-draft"}.json`, draft);
-  }
-
-  function exportPackage() {
-    const pkg = certificationPackageFromAuthoringDraft(draft);
-    downloadJsonFile(`${pkg.packageId}.json`, pkg);
+    openPrintDocument(authoringPrintHtml(draft), () => setLocalError("Prohlížeč zablokoval nové okno pro tisk."));
   }
 
   useEffect(() => {
@@ -2785,6 +3192,13 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const draftRef = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
+  useEffect(() => {
+    const intervalId = window.setInterval(() => autosaveDraft(draftRef.current), 120000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   const allSummaries = AUTHORING_DOCS.map((doc) => {
     const data = draft.documents[doc.key] || {};
     const list = doc.kind === "outdoor" ? data.exercises : data.questions;
@@ -2796,62 +3210,23 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
       <CardContent className="p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h3 className="text-lg font-bold">Vytvoření/editace podkladů pro zkoušku</h3>
+            <h3 className="text-lg font-bold">{t("admin.authoring.panelTitle")}</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Upravte čtyři zdrojové dokumenty zkoušky. Z těchto dat se vytváří zkušební balíček pro systém a tisková/PDF verze dokumentů.
+              {t("admin.authoring.panelSubtitle")}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 md:justify-end">
-            <Button onClick={loadActivePackage} variant="outline" className="rounded-2xl">Otevřít aktuální podklady</Button>
-            <Button onClick={loadLatestDraft} variant="outline" className="rounded-2xl">Otevřít pracovní draft</Button>
-            <Button onClick={saveDraftToDatabase} className="rounded-2xl">Uložit draft</Button>
-            <Button onClick={saveAsPackage} className="rounded-2xl">Vytvořit zkušební balíček</Button>
-            <Button onClick={printPackage} variant="outline" className="rounded-2xl">Tisk / PDF</Button>
-            <Button onClick={() => setShowAdvancedTools((value) => !value)} variant="outline" className="rounded-2xl">
-              {showAdvancedTools ? "Skrýt pokročilé" : "Pokročilé nástroje"}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">
+              {t("admin.authoring.openCurrent")}
+              <input type="file" accept=".vet,application/json" className="hidden" onChange={handleOpenAdminVetFile} />
+            </label>
+            <Button onClick={saveAsPackage} className="rounded-2xl">{t("admin.authoring.createPackage")}</Button>
+            <Button onClick={printPackage} variant="outline" className="rounded-2xl">{t("admin.authoring.print")}</Button>
           </div>
         </div>
 
-        {showAdvancedTools && (
-          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Pokročilé / servisní akce</div>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => adminPdfPackageLatest && loadFromPackage(adminPdfPackageLatest)} variant="outline" className="rounded-2xl" disabled={!adminPdfPackageLatest}>Převzít poslední balíček z Admin workflow</Button>
-              <Button onClick={refreshDraftList} variant="outline" className="rounded-2xl">Seznam všech draftů</Button>
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
-                Import JSON
-                <input type="file" accept="application/json,.json" className="hidden" onChange={importJson} />
-              </label>
-              <Button onClick={exportDraft} variant="outline" className="rounded-2xl">Export draft</Button>
-              <Button onClick={exportPackage} variant="outline" className="rounded-2xl">Export package JSON</Button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              Tyto nástroje slouží hlavně pro migraci, zálohy a technickou kontrolu. Pro běžnou přípravu zkoušky stačí hlavní tlačítka nahoře.
-            </p>
-          </div>
-        )}
-
         {localStatus && <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">{localStatus}</div>}
         {localError && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">{localError}</div>}
-
-        {draftList.length > 0 && (
-          <div className="mt-3 rounded-2xl border bg-slate-50 p-3">
-            <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-end">
-              <label className="text-sm font-medium">Uložené strukturované drafty
-                <select value={selectedDraftId} onChange={(e) => setSelectedDraftId(e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2">
-                  <option value="">Vyberte draft...</option>
-                  {draftList.map((item) => (
-                    <option key={item.filename || item.draftId || item.packageId} value={item.draftId || item.packageId || item.filename}>
-                      {(item.title || item.packageId || item.draftId || item.filename)} · {item.version || "bez verze"} · {item.storedAt || item.updatedAt || item.createdAt || "bez data"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <Button onClick={loadSelectedDraft} variant="outline" className="rounded-xl" disabled={!selectedDraftId}>Otevřít draft</Button>
-            </div>
-          </div>
-        )}
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <label className="text-sm font-medium md:col-span-2">Package title
@@ -2869,7 +3244,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
           {allSummaries.map((doc) => (
             <button key={doc.key} onClick={() => { setActiveDocKey(doc.key); setSelectedIndex(0); setActiveSectionFilter("__all__"); }} className={`rounded-xl border p-3 text-left text-sm ${activeDocKey === doc.key ? "border-slate-950 bg-slate-100" : "bg-white hover:bg-slate-50"}`}>
               <div className="font-semibold">{doc.title}</div>
-              <div className="mt-1 text-xs text-slate-600">{doc.count} položek / {doc.max} bodů</div>
+              <div className="mt-1 text-xs text-slate-600">{doc.count} {t("admin.authoring.itemsUnit")} / {doc.max} {t("common.points")}</div>
             </button>
           ))}
         </div>
@@ -2878,24 +3253,24 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
         <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h4 className="font-bold">Manuální kontrola dokumentu</h4>
-              <p className="text-sm text-slate-600">Editujte předmluvu, úvod pro kandidáty, sekce a otázky. Tato struktura je zdrojem pro JSON balíček i tisk/PDF.</p>
+              <h4 className="font-bold">{t("admin.authoring.manualReviewHeading")}</h4>
+              <p className="text-sm text-slate-600">{t("admin.authoring.manualReviewHelper")}</p>
             </div>
-            <label className="text-sm font-medium">Filtrovat sekci
+            <label className="text-sm font-medium">{t("admin.authoring.filterSection")}
               <select value={activeSectionFilter} onChange={(e) => { setActiveSectionFilter(e.target.value); setSelectedIndex(0); }} className="mt-1 w-full rounded-xl border bg-white p-2 md:w-80">
-                <option value="__all__">Všechny sekce</option>
+                <option value="__all__">{t("admin.authoring.allSections")}</option>
                 {sections.map((section) => <option key={section} value={section}>{section}</option>)}
               </select>
             </label>
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="text-sm font-medium md:col-span-2">Název dokumentu
+            <label className="text-sm font-medium md:col-span-2">{t("admin.authoring.documentName")}
               <input value={activeDoc.title || ""} onChange={(e) => setActiveDocumentField("title", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" />
             </label>
-            <label className="text-sm font-medium">Předmluva / poznámky k dokumentu
+            <label className="text-sm font-medium">{t("admin.authoring.prefaceLabel")}
               <textarea value={activeDoc.preface || ""} onChange={(e) => setActiveDocumentField("preface", e.target.value)} rows={5} className="mt-1 w-full rounded-xl border bg-white p-3" />
             </label>
-            <label className="text-sm font-medium">Úvodní text pro kandidáty
+            <label className="text-sm font-medium">{t("admin.authoring.candidateIntroLabel")}
               <textarea value={activeDoc.candidateIntro || ""} onChange={(e) => setActiveDocumentField("candidateIntro", e.target.value)} rows={5} className="mt-1 w-full rounded-xl border bg-white p-3" />
             </label>
           </div>
@@ -2906,33 +3281,33 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
               return (
                 <button key={section} type="button" onClick={() => { setActiveSectionFilter(section); const first = items.findIndex((item) => (String(item.section || item.theme || "Unsectioned").trim() || "Unsectioned") === section); setSelectedIndex(Math.max(0, first)); }} className={`rounded-xl border p-3 text-left text-sm ${activeSectionFilter === section ? "border-slate-950 bg-white" : "bg-white hover:bg-slate-100"}`}>
                   <div className="font-semibold">{section}</div>
-                  <div className="mt-1 text-xs text-slate-600">{sectionSummary.count} otázek / {sectionSummary.max} bodů</div>
+                  <div className="mt-1 text-xs text-slate-600">{sectionSummary.count} {t("admin.authoring.questionsUnit")} / {sectionSummary.max} {t("common.points")}</div>
                 </button>
               );
             })}
-            {!sections.length && <div className="rounded-xl border border-dashed bg-white p-3 text-sm text-slate-500">Sekce se vytvoří podle pole „Sekce“ u jednotlivých otázek.</div>}
+            {!sections.length && <div className="rounded-xl border border-dashed bg-white p-3 text-sm text-slate-500">{t("admin.authoring.noSectionsYet")}</div>}
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[340px_1fr]">
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[340px_1fr]">
           <div className="rounded-2xl border bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-semibold">{activeDocMeta.title}</div>
-                <div className="text-xs text-slate-600">{activeSummary.count} položek / {activeSummary.max} bodů</div>
+                <div className="text-xs text-slate-600">{activeSummary.count} {t("admin.authoring.itemsUnit")} / {activeSummary.max} {t("common.points")}</div>
               </div>
-              <Button onClick={addItem} variant="outline" className="rounded-xl px-3 py-1">+ položka</Button>
+              <Button onClick={addItem} variant="outline" className="rounded-xl px-3 py-1">{t("admin.authoring.addItem")}</Button>
             </div>
             <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
               {visibleItems.map(({ item, index }) => (
                 <button key={`${item.id}-${index}`} onClick={() => setSelectedIndex(index)} className={`w-full rounded-xl border p-2 text-left text-sm ${selectedIndex === index ? "border-slate-950 bg-white" : "bg-white hover:bg-slate-50"}`}>
                   <div className="font-mono text-xs text-slate-500">{item.id || `#${index + 1}`}</div>
                   <div className="line-clamp-2 font-medium">{activeDocMeta.kind === "outdoor" ? item.question : item.text}</div>
-                  <div className="mt-1 text-xs text-slate-500">/{item.max || 0} bodů</div>
+                  <div className="mt-1 text-xs text-slate-500">/{item.max || 0} {t("common.points")}</div>
                 </button>
               ))}
-              {!items.length && <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">Dokument zatím nemá položky.</div>}
-              {items.length > 0 && !visibleItems.length && <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">V této sekci zatím nejsou položky.</div>}
+              {!items.length && <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">{t("admin.authoring.noItemsInDocument")}</div>}
+              {items.length > 0 && !visibleItems.length && <div className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-500">{t("admin.authoring.noItemsInSection")}</div>}
             </div>
           </div>
 
@@ -2940,10 +3315,10 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
             {selectedItem ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-lg font-bold">Editace položky</h4>
+                  <h4 className="text-lg font-bold">{t("admin.authoring.editItem")}</h4>
                   <div className="flex gap-2">
-                    <Button onClick={duplicateItem} variant="outline" className="rounded-xl">Duplikovat</Button>
-                    <Button onClick={removeItem} variant="outline" className="rounded-xl">Smazat</Button>
+                    <Button onClick={duplicateItem} variant="outline" className="rounded-xl">{t("admin.authoring.duplicate")}</Button>
+                    <Button onClick={removeItem} variant="outline" className="rounded-xl">{t("admin.authoring.delete")}</Button>
                   </div>
                 </div>
                 <div className="grid gap-3 md:grid-cols-4">
@@ -2953,7 +3328,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
                   <label className="text-sm font-medium">Number
                     <input value={selectedItem.number || ""} onChange={(e) => updateSelected("number", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" />
                   </label>
-                  <label className="text-sm font-medium">Maximální bodové skóre
+                  <label className="text-sm font-medium">{t("admin.authoring.maxScore")}
                     <input type="number" step="0.5" value={selectedItem.max ?? 0} onChange={(e) => updateSelected("max", normalizeAuthoringNumber(e.target.value, 0))} className="mt-1 w-full rounded-xl border bg-white p-2" />
                   </label>
                   {activeDocMeta.kind === "written" && (
@@ -2969,29 +3344,29 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
                 {activeDocMeta.kind === "outdoor" ? (
                   <>
                     <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-                      <label className="block text-sm font-medium">Sekce
+                      <label className="block text-sm font-medium">{t("admin.authoring.section")}
                         <input value={selectedItem.section || ""} onChange={(e) => setSelectedSection(e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" />
                       </label>
-                      <Button type="button" onClick={() => renameSection(activeSectionFilter, selectedItem.section)} variant="outline" className="rounded-xl" disabled={activeSectionFilter === "__all__" || !selectedItem.section}>Přejmenovat filtrovanou sekci</Button>
+                      <Button type="button" onClick={() => renameSection(activeSectionFilter, selectedItem.section)} variant="outline" className="rounded-xl" disabled={activeSectionFilter === "__all__" || !selectedItem.section}>{t("admin.authoring.renameSection")}</Button>
                     </div>
-                    <label className="block text-sm font-medium">Tělo otázky / text pro kandidáta
+                    <label className="block text-sm font-medium">{t("admin.authoring.questionBodyOutdoor")}
                       <textarea value={selectedItem.question || ""} onChange={(e) => updateSelected("question", e.target.value)} rows={5} className="mt-1 w-full rounded-xl border bg-white p-3" />
                     </label>
-                    <label className="block text-sm font-medium">Pomoc zkoušejícímu / hodnoticí vodítko
+                    <label className="block text-sm font-medium">{t("admin.authoring.examinerGuidance")}
                       <textarea value={selectedItem.examinerGuidance || ""} onChange={(e) => updateSelected("examinerGuidance", e.target.value)} rows={10} className="mt-1 w-full rounded-xl border bg-white p-3" />
                     </label>
                   </>
                 ) : (
                   <>
                     <div className="grid gap-3 md:grid-cols-2">
-                      <label className="block text-sm font-medium">Sekce
+                      <label className="block text-sm font-medium">{t("admin.authoring.section")}
                         <input value={selectedItem.section || ""} onChange={(e) => setSelectedSection(e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" />
                       </label>
-                      <label className="block text-sm font-medium">Téma
+                      <label className="block text-sm font-medium">{t("admin.authoring.theme")}
                         <input value={selectedItem.theme || ""} onChange={(e) => updateSelected("theme", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" />
                       </label>
                     </div>
-                    <label className="block text-sm font-medium">Tělo otázky
+                    <label className="block text-sm font-medium">{t("admin.authoring.questionBody")}
                       <textarea value={selectedItem.text || ""} onChange={(e) => updateSelected("text", e.target.value)} rows={5} className="mt-1 w-full rounded-xl border bg-white p-3" />
                     </label>
                     {selectedItem.type === "multipleChoice" && (
@@ -3004,14 +3379,14 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
                         </label>
                       </>
                     )}
-                    <label className="block text-sm font-medium">Pomoc zkoušejícímu / správná odpověď / hodnoticí vodítko
+                    <label className="block text-sm font-medium">{t("admin.authoring.scoringHelp")}
                       <textarea value={selectedItem.scoringHelp || ""} onChange={(e) => updateSelected("scoringHelp", e.target.value)} rows={10} className="mt-1 w-full rounded-xl border bg-white p-3" />
                     </label>
                   </>
                 )}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed bg-slate-50 p-6 text-sm text-slate-500">Vyber položku vlevo nebo přidej novou.</div>
+              <div className="rounded-xl border border-dashed bg-slate-50 p-6 text-sm text-slate-500">{t("admin.authoring.selectOrAdd")}</div>
             )}
           </div>
         </div>
@@ -3020,247 +3395,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
   );
 }
 
-function AdminPdfPackagePanel({
-  adminPdfPackageStatus,
-  adminPdfPackageError,
-  adminPdfPackageList,
-  adminPdfPackageLatest,
-  setAdminPdfPackageStatus,
-  setAdminPdfPackageError,
-  setAdminPdfPackageList,
-  setAdminPdfPackageLatest,
-}) {
-  const validation = adminPdfPackageLatest?.validation;
-  const variants = adminPdfPackageLatest?.variants;
-
-  async function refreshList() {
-    setAdminPdfPackageError("");
-    setAdminPdfPackageStatus("Načítám lokální JSON balíčky...");
-
-    try {
-      const response = await fetch("/api/admin/test-package/list");
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setAdminPdfPackageList(data.packages || []);
-      setAdminPdfPackageStatus(`Načteno ${data.packages?.length || 0} lokálních JSON balíčků.`);
-    } catch (error) {
-      setAdminPdfPackageError(error.message || "Načtení seznamu selhalo.");
-      setAdminPdfPackageStatus("");
-    }
-  }
-
-  async function loadLatest() {
-    setAdminPdfPackageError("");
-    setAdminPdfPackageStatus("Načítám poslední JSON balíček...");
-
-    try {
-      const response = await fetch("/api/admin/test-package/latest");
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setAdminPdfPackageLatest(data);
-      setAdminPdfPackageStatus(`Načten poslední balíček: ${data.packageId}`);
-    } catch (error) {
-      setAdminPdfPackageError(error.message || "Načtení posledního balíčku selhalo.");
-      setAdminPdfPackageStatus("");
-    }
-  }
-
-  async function convertPdfs(event) {
-    const files = Array.from(event.target.files || []);
-    setAdminPdfPackageError("");
-    setAdminPdfPackageStatus("");
-
-    const findFile = (patterns) => files.find((file) => patterns.every((pattern) => pattern.test(file.name)));
-
-    const practicingWritten = findFile([/pract/i, /answer|answers/i]);
-    const consultingWritten = findFile([/consult/i, /answer|answers/i]);
-    const practicingOutdoor = findFile([/pract/i, /outdoor|outside/i]);
-    const consultingOutdoor = findFile([/consult/i, /outdoor|outside|oudtoor/i]);
-
-    if (!practicingWritten || !consultingWritten || !practicingOutdoor || !consultingOutdoor) {
-      setAdminPdfPackageError("Vyberte 4 PDF: Practicing answers, Consulting answers, Practicing outdoor, Consulting outdoor.");
-      event.target.value = "";
-      return;
-    }
-
-    const form = new FormData();
-    form.append("practicingWritten", practicingWritten);
-    form.append("consultingWritten", consultingWritten);
-    form.append("practicingOutdoor", practicingOutdoor);
-    form.append("consultingOutdoor", consultingOutdoor);
-
-    setAdminPdfPackageStatus("Převádím PDF na lokální JSON balíček...");
-
-    try {
-      const response = await fetch("/api/admin/test-package/convert", {
-        method: "POST",
-        body: form,
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setAdminPdfPackageLatest(data.package);
-      setAdminPdfPackageStatus(`JSON balíček vytvořen: ${data.filename}`);
-      await refreshList();
-    } catch (error) {
-      setAdminPdfPackageError(error.message || "Převod PDF selhal.");
-      setAdminPdfPackageStatus("");
-    } finally {
-      event.target.value = "";
-    }
-  }
-
-  async function approveLatestPackage({ override = false } = {}) {
-    if (!adminPdfPackageLatest?.packageId) {
-      setAdminPdfPackageError("Nejprve načtěte poslední JSON balíček.");
-      return;
-    }
-
-    let reason = "";
-
-    if (adminPdfPackageLatest?.validation?.status !== "valid") {
-      if (!override) {
-        setAdminPdfPackageError("Balíček vyžaduje kontrolu. Pro schválení použijte ruční override s důvodem.");
-        return;
-      }
-
-      reason = window.prompt("Balíček má status requires_review. Zadejte důvod ručního schválení pro Centre:") || "";
-
-      if (!reason.trim()) {
-        setAdminPdfPackageError("Ruční override vyžaduje důvod.");
-        return;
-      }
-    }
-
-    setAdminPdfPackageError("");
-    setAdminPdfPackageStatus("Schvaluji balíček pro Centre...");
-
-    try {
-      const response = await fetch("/api/admin/test-package/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packageId: adminPdfPackageLatest.packageId,
-          allowRequiresReview: override,
-          reason,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setAdminPdfPackageLatest(data.package);
-      setAdminPdfPackageStatus(`Balíček schválen pro Centre: ${data.package.packageId}`);
-      await refreshList();
-    } catch (error) {
-      setAdminPdfPackageError(error.message || "Schválení balíčku selhalo.");
-      setAdminPdfPackageStatus("");
-    }
-  }
-
-  async function loadApprovedPackage() {
-    setAdminPdfPackageError("");
-    setAdminPdfPackageStatus("Načítám aktivní balíček pro Centre...");
-
-    try {
-      const response = await fetch("/api/admin/test-package/approved");
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setAdminPdfPackageLatest(data);
-      setAdminPdfPackageStatus(`Aktivní balíček pro Centre: ${data.packageId}`);
-    } catch (error) {
-      setAdminPdfPackageError(error.message || "Načtení aktivního balíčku selhalo.");
-      setAdminPdfPackageStatus("");
-    }
-  }
-
-  return (
-    <Card className="rounded-2xl shadow-sm lg:col-span-2">
-      <CardContent className="p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h3 className="text-lg font-bold">Admin PDF → VetBara JSON package</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              Certifikační PDF se převádí do lokálního JSON balíčku. Jazyk UX aplikace nemění jazyk ani obsah zkouškových podkladů.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-              Převést 4 PDF
-              <input type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={convertPdfs} />
-            </label>
-            <Button onClick={refreshList} variant="outline" className="rounded-2xl">Načíst seznam</Button>
-            <Button onClick={loadLatest} variant="outline" className="rounded-2xl">Načíst poslední</Button>
-            <Button onClick={loadApprovedPackage} variant="outline" className="rounded-2xl">Načíst aktivní</Button>
-            <Button onClick={() => approveLatestPackage({ override: false })} variant="outline" className="rounded-2xl">Schválit pro Centre</Button>
-            <Button onClick={() => approveLatestPackage({ override: true })} variant="outline" className="rounded-2xl">Override schválení</Button>
-          </div>
-        </div>
-
-        {adminPdfPackageStatus && <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">{adminPdfPackageStatus}</div>}
-        {adminPdfPackageError && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">{adminPdfPackageError}</div>}
-
-        {adminPdfPackageLatest && (
-          <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-sm">
-            <div className="font-semibold">Poslední balíček: {adminPdfPackageLatest.packageId}</div>
-            <div className="mt-1 text-slate-600">Vytvořeno: {adminPdfPackageLatest.createdAt}</div>
-            {adminPdfPackageLatest.approval && (
-              <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-emerald-950">
-                Schváleno pro Centre: {adminPdfPackageLatest.approval.approvedAt}
-                {adminPdfPackageLatest.approval.reason && <div className="mt-1 text-xs">Důvod override: {adminPdfPackageLatest.approval.reason}</div>}
-              </div>
-            )}
-
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {["Practicing", "Consulting"].map((level) => (
-                <div key={level} className="rounded-xl border bg-white p-3">
-                  <div className="font-semibold">{level}</div>
-                  <div className="mt-1 text-xs text-slate-600">Written: {variants?.[level]?.writtenQuestionCount ?? "-"} otázek / {variants?.[level]?.writtenMax ?? "-"} bodů</div>
-                  <div className="mt-1 text-xs text-slate-600">Outdoor: {variants?.[level]?.outdoorItemCount ?? "-"} položek / {variants?.[level]?.outdoorMax ?? "-"} bodů</div>
-                </div>
-              ))}
-            </div>
-
-            {validation && (
-              <div className={`mt-3 rounded-xl border p-3 ${validation.status === "valid" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
-                <div className="font-semibold">Validace: {validation.status}</div>
-                {validation.issues?.length > 0 && (
-                  <ul className="mt-2 list-disc pl-5">
-                    {validation.issues.map((issue, index) => <li key={index}>{issue}</li>)}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {adminPdfPackageList.length > 0 && (
-          <div className="mt-4 rounded-xl border bg-white p-3 text-sm">
-            <div className="font-semibold">Lokální JSON balíčky: {adminPdfPackageList.length}</div>
-            <div className="mt-2 space-y-2">
-              {adminPdfPackageList.slice(0, 5).map((pkg) => (
-                <div key={pkg.packageId} className="rounded-lg bg-slate-50 p-2">
-                  <div className="font-mono text-xs">{pkg.packageId}</div>
-                  <div className="text-xs text-slate-600">
-                    Practicing {pkg.variants?.Practicing?.writtenQuestionCount ?? "-"} / {pkg.variants?.Practicing?.writtenMax ?? "-"} · Consulting {pkg.variants?.Consulting?.writtenQuestionCount ?? "-"} / {pkg.variants?.Consulting?.writtenMax ?? "-"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function AdminDashboardSection({ id, title, description, activeSection, setActiveSection, children }) {
+function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children }) {
   const isOpen = activeSection === id;
   return (
     <Card className="rounded-2xl shadow-sm lg:col-span-3">
@@ -3270,12 +3405,15 @@ function AdminDashboardSection({ id, title, description, activeSection, setActiv
           onClick={() => setActiveSection(isOpen ? "" : id)}
           className="flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between"
         >
-          <div>
-            <h3 className="text-xl font-bold tracking-tight">{title}</h3>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>
+          <div className="flex items-start gap-3">
+            {Icon && <div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5" /></div>}
+            <div>
+              <h3 className="text-xl font-bold tracking-tight">{title}</h3>
+              <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>
+            </div>
           </div>
           <span className="inline-flex rounded-2xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            {isOpen ? "Zavřít" : "Otevřít"}
+            {isOpen ? t("common.close") : t("common.open")}
           </span>
         </button>
         {isOpen && <div className="mt-5 border-t pt-5">{children}</div>}
@@ -3298,7 +3436,7 @@ function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place
       </div>
       <div className="rounded-2xl border bg-white p-4">
         <h3 className="font-semibold">{t("admin.centreAccess.title")}</h3>
-        <p className="mt-1 text-sm text-slate-600">Vygenerujte odkaz pro centrum až ve chvíli, kdy je balíček připravený a zkouška otevřená.</p>
+        <p className="mt-1 text-sm text-slate-600">{t("admin.centreAccess.helper")}</p>
         <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center">
           <RealQr value={centreQr} />
           <div>
@@ -3316,7 +3454,7 @@ function AdminTranslationPanel({ t }) {
   return (
     <div className="rounded-2xl border bg-white p-4">
       <SectionTitle icon={Languages} title={t("admin.multilingual.title")} subtitle={t("admin.multilingual.subtitle")} />
-      <p className="mb-4 text-sm text-slate-600">Správa překladů se týká pouze prostředí aplikace. Obsah zkoušky se bere z Admin balíčku a jazyk UX jej nemá měnit.</p>
+      <p className="mb-4 text-sm text-slate-600">{t("admin.multilingual.helper")}</p>
       <div className="grid gap-2 text-sm md:grid-cols-2">
         {["exam.start", "exam.submit", "sync.offline", "evaluation.total"].map((key) => (
           <div key={key} className="rounded-xl border bg-white p-3">
@@ -3326,20 +3464,21 @@ function AdminTranslationPanel({ t }) {
           </div>
         ))}
       </div>
-      <Button variant="outline" className="mt-4 rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {t("admin.multilingual.export")}</Button>
     </div>
   );
 }
 
-function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, setScannerMode, centreQr, t, adminPdfPackageStatus, adminPdfPackageError, adminPdfPackageList, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageList, setAdminPdfPackageLatest }) {
+function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, setScannerMode, centreQr, t, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageLatest }) {
   const [activeAdminSection, setActiveAdminSection] = useState("package-authoring");
 
   return (
     <>
       <AdminDashboardSection
         id="package-authoring"
-        title="A - Vytvoření/editace podkladů pro zkoušku"
-        description="Dlouhodobý strukturovaný zdroj čtyř dokumentů. Zde se upravují otázky, sekce, bodování, nápovědy pro zkoušející a následně se ukládá draft nebo finální balíček pro zkušební systém."
+        icon={FileSpreadsheet}
+        t={t}
+        title={t("admin.dashboard.authoring.title")}
+        description={t("admin.dashboard.authoring.description")}
         activeSection={activeAdminSection}
         setActiveSection={setActiveAdminSection}
       >
@@ -3348,13 +3487,16 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
           setAdminPdfPackageLatest={setAdminPdfPackageLatest}
           setAdminPdfPackageStatus={setAdminPdfPackageStatus}
           setAdminPdfPackageError={setAdminPdfPackageError}
+          t={t}
         />
       </AdminDashboardSection>
 
       <AdminDashboardSection
         id="exam-opening"
-        title="B - Otevření zkoušky"
-        description="Nastavení centra, data, místa a jazyka zkoušky. Po přípravě balíčku se zde otevře konkrétní zkouška a odešle se Centre access link / QR."
+        icon={ShieldCheck}
+        t={t}
+        title={t("admin.dashboard.examOpening.title")}
+        description={t("admin.dashboard.examOpening.description")}
         activeSection={activeAdminSection}
         setActiveSection={setActiveAdminSection}
       >
@@ -3377,8 +3519,10 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
 
       <AdminDashboardSection
         id="translation"
-        title="C - Překlad prostředí"
-        description="Správa překladů uživatelského rozhraní aplikace. Nejde o překlad obsahu zkouškových podkladů; ten se řídí balíčkem vytvořeným v první sekci."
+        icon={Languages}
+        t={t}
+        title={t("admin.dashboard.translation.title")}
+        description={t("admin.dashboard.translation.description")}
         activeSection={activeAdminSection}
         setActiveSection={setActiveAdminSection}
       >
@@ -3529,13 +3673,6 @@ function outdoorCentreSubmittedForCandidate(candidateId, storedResults) {
   return Object.values(rows).filter((row) => row?.submittedAt || row?.closedAt);
 }
 
-function countFilledReportSections(reportDraft) {
-  return Object.values(reportDraft ?? {}).reduce((total, tree) => {
-    const finalSections = tree?.finalSections && typeof tree.finalSections === "object" ? tree.finalSections : {};
-    return total + Object.values(finalSections).filter((value) => String(value ?? "").trim()).length;
-  }, 0);
-}
-
 function countReportPhotos(reportDraft) {
   return Object.values(reportDraft ?? {}).reduce((total, tree) => total + (Array.isArray(tree?.photos) ? tree.photos.length : 0), 0);
 }
@@ -3576,17 +3713,6 @@ function computeReportReview(reportDraft) {
 function examinerNameById(examiners, examinerId) {
   return examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId || "-";
 }
-
-function PilotWorkflowDashboard({ candidates, assignments, examiners, centreValidationIssues, testImportSummary, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, centreSetupStatus, dataMode, t }) {
-  const assignmentCount = candidates.reduce((total, candidate) => {
-    const assignment = assignments[candidate.id] ?? {};
-    return total + (assignment.primary ? 1 : 0) + (assignment.secondary ? 1 : 0);
-  }, 0);
-  const hasBackendState = dataMode === "backend";
-
-  return <div className="mt-4 rounded-2xl border bg-white p-4"><div className="mb-3 flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("centre.workflow.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("centre.workflow.helper")}</p><p className="mt-1 text-xs text-slate-500">{t("centre.workflow.syncHelper")}</p></div><div className="flex flex-wrap gap-2"><StatusPill tone={centreValidationIssues.length ? "warn" : "good"}>{centreValidationIssues.length} {t("centre.workflow.setupIssues")}</StatusPill><StatusPill>{candidates.length} {t("centre.workflow.candidates")}</StatusPill><StatusPill>{examiners.length} {t("centre.workflow.examiners")}</StatusPill><StatusPill>{assignmentCount} {t("centre.workflow.assignments")}</StatusPill><StatusPill tone={testImportSummary ? "good" : "warn"}>{testImportSummary ? t("centre.workflow.testPackageImported") : t("centre.workflow.noTestPackage")}</StatusPill><StatusPill tone={hasBackendState ? "good" : "warn"}>{hasBackendState ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill></div></div>{!hasBackendState && <div className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("centre.workflow.demoWarning")}</div>}<div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.assignments.candidate")}</th><th className="py-2 pr-3">{t("centre.assignments.level")}</th><th className="py-2 pr-3">{t("centre.assignments.primary")}</th><th className="py-2 pr-3">{t("centre.assignments.secondary")}</th><th className="py-2 pr-3">{t("centre.workflow.identity")}</th><th className="py-2 pr-3">{t("centre.workflow.writtenTest")}</th><th className="py-2 pr-3">{t("centre.workflow.report")}</th><th className="py-2 pr-3">{t("centre.workflow.responses")}</th><th className="py-2 pr-3">{t("centre.workflow.outdoorScores")}</th></tr></thead><tbody>{candidates.map((candidate) => { const assignment = assignments[candidate.id] ?? {}; const status = candidateStatus[candidate.id] ?? createSectionStatus(candidate.level); const times = candidateTimes[candidate.id] ?? {}; const reportDraft = reportDrafts[candidate.id] ?? {}; const responseCount = Object.keys(testResponses[candidate.id] ?? {}).length; const outdoorScoreCount = Object.values(outdoor[candidate.id] ?? {}).filter((value) => value !== "" && value !== null && value !== undefined).length; const reportPhotoCount = candidate.level === "Consulting" ? countReportPhotos(reportDraft) : 0; const reportSectionCount = candidate.level === "Consulting" ? countFilledReportSections(reportDraft) : 0; return <tr key={candidate.id} className="border-b align-top"><td className="py-2 pr-3"><div className="font-medium">{candidate.id}</div><div className="text-slate-600">{candidate.name}</div></td><td className="py-2 pr-3">{candidate.level}</td><td className="py-2 pr-3">{examinerNameById(examiners, assignment.primary)}</td><td className="py-2 pr-3">{examinerNameById(examiners, assignment.secondary)}</td><td className="py-2 pr-3"><StatusPill tone={candidateConfirmed[candidate.id] ? "good" : "default"}>{candidateConfirmed[candidate.id] ? t("centre.workflow.confirmed") : t("centre.workflow.notConfirmed")}</StatusPill></td><td className="py-2 pr-3"><StatusPill tone={status.test === "closed" ? "good" : status.test === "open" ? "warn" : "default"}>{t(`sectionStatus.${status.test ?? "locked"}`)}</StatusPill><div className="mt-1 text-xs text-slate-500">{t("centre.workflow.closedAt")}: {times.test?.closedAt || "-"}</div></td><td className="py-2 pr-3">{candidate.level === "Consulting" ? <><StatusPill tone={status.report === "closed" ? "good" : status.report === "open" ? "warn" : "default"}>{t(`sectionStatus.${status.report ?? "locked"}`)}</StatusPill><div className="mt-1 text-xs text-slate-500">{reportSectionCount} {t("centre.workflow.sections")} / {reportPhotoCount} {t("centre.workflow.photos")}</div></> : "-"}</td><td className="py-2 pr-3">{responseCount}</td><td className="py-2 pr-3">{outdoorScoreCount}</td></tr>; })}</tbody></table></div></div>;
-}
-
 
 function repairSplitOutdoorQuestion(rawText, rawNotes) {
   const text = String(rawText || "").trim();
@@ -3762,6 +3888,20 @@ function outdoorSectionTitle(section) {
 const FIELD_LEVELS = ["Practicing", "Consulting"];
 const FIELD_TREE_CODES = ["A", "B", "C", "D"];
 const FIELD_REQUIRED_ASSIGNMENTS = FIELD_LEVELS.flatMap((level) => FIELD_TREE_CODES.map((code) => ({ level, code })));
+// Trees A and B can optionally get a second instance (A2/B2) per level — e.g. two candidates
+// working the same exercise on separate trees. Toggled per exam in the tablet's "Přehled stromů"
+// section; off by default so nothing changes unless the field team opts in.
+const FIELD_EXTRA_TREE_TOGGLE_KEYS = ["Practicing-A2", "Practicing-B2", "Consulting-A2", "Consulting-B2"];
+
+function overviewTreeLabel(tree, extraToggles = {}) {
+  const levelPrefix = normalizeFieldLevel(tree.level)[0];
+  const code = String(tree.code || "").toUpperCase();
+  if (code === "A" || code === "B") {
+    const toggleKey = `${normalizeFieldLevel(tree.level)}-${code}2`;
+    if (extraToggles[toggleKey]) return `${levelPrefix}-${code}1`;
+  }
+  return `${levelPrefix}-${code}`;
+}
 
 function normalizeFieldLevel(level) {
   return String(level || "Practicing").toLowerCase() === "consulting" ? "Consulting" : "Practicing";
@@ -3778,60 +3918,105 @@ function fieldTreeLabel(level, code) {
 }
 
 
-const FIELD_TABLET_TRANSLATIONS = {
-  en: {
-    exam: "Exam",
-    site: "Site",
-    online: "Online",
-    offline: "Offline",
-    both: "Both",
-    downloadOffline: "Download offline",
-    sync: "Sync",
-    syncing: "Syncing...",
-    syncDisabledUntilChecked: "Sync is enabled after all required trees are checked.",
-    pdf: "PDF",
-    share: "Share",
-    printPdf: "Print / save PDF",
-    packageMissingTitle: "Package is not on this tablet",
-    packageMissingText: "Before going into the field, download the offline package. The page stores exam data on this device and can then be used without internet access for local editing.",
-    find: "Find",
-    zoomIn: "+",
-    zoomOut: "−",
-    gps: "GPS",
-    cuzk: "CUZK orthophoto",
-    osm: "OSM",
-    examCenter: "Exam centre",
-    selectedTree: "Selected tree",
-    checked: "Checked",
-    treeName: "Tree name",
-    latitude: "Latitude",
-    longitude: "Longitude",
-    assignment: "Assignment",
-    level: "Level",
-    tree: "Tree",
-    labelPosition: "Label position on map",
-    labelOffsetX: "Label offset X px",
-    labelOffsetY: "Label offset Y px",
-    resetOffset: "Reset offset",
-    candidateNote: "Candidate tree note",
-    managementData: "Tree parameters / management data",
-    taxon: "Taxon",
-    heightM: "Height m",
-    stemDiameterCm: "Stem diameter cm",
-    crownSpreadM: "Crown spread m",
-    managementNote: "Management note",
-    interventions: "Intervention technologies",
-    addTechnology: "+ technology",
-    technology: "Technology",
-    description: "Description",
-    removeTechnology: "Remove technology",
-    noTechnologies: "No intervention technologies have been entered yet.",
-    chooseTree: "Select a tree on the map.",
-  },
-};
+// Field tablet text now lives in src/i18n.js under the "fieldTablet.*" namespace (single
+// translation source for the whole app). This stays as a thin lookup so the ~30 existing
+// tt("key") call sites throughout FieldTabletPage don't need to change.
+function fieldTabletText(t, key) {
+  return t(`fieldTablet.${key}`);
+}
 
-function fieldTabletText(locale, key) {
-  return FIELD_TABLET_TRANSLATIONS[locale]?.[key] || FIELD_TABLET_TRANSLATIONS.en[key] || key;
+function formatLatLngPair(lat, lng) {
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return "";
+  return `${latNum}, ${lngNum}`;
+}
+
+function parseLatLngPair(text) {
+  const match = String(text || "").trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+async function copyPlainTextToClipboard(text) {
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy copy path used on http:// LAN addresses.
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    if (ok) return true;
+  } catch {
+    // Some tablet browsers reject programmatic clipboard access on insecure LAN URLs.
+  }
+  return false;
+}
+
+// Top-level (not nested in FieldTabletPage) so it keeps its identity across re-renders and
+// never loses focus mid-edit. Uses defaultValue + onBlur-commit instead of a fully controlled
+// value so typing isn't fought by the parent re-rendering on every keystroke; the `key` prop
+// resyncs the field only when the underlying lat/lng actually changes (drag, GPS, paste-elsewhere).
+function FieldCoordsCopyField({ lat, lng, onApply, onCopyResult, tt }) {
+  const inputRef = useRef(null);
+  const displayValue = formatLatLngPair(lat, lng);
+  const [copyState, setCopyState] = useState("idle");
+
+  function commit(rawValue) {
+    const parsed = parseLatLngPair(rawValue);
+    if (parsed) {
+      onApply(parsed);
+    } else if (inputRef.current) {
+      inputRef.current.value = displayValue;
+    }
+  }
+
+  return (
+    <label className="field-detail-field">
+      <span>{tt("copyCoords")}</span>
+      <div className="field-copy-row">
+        <input
+          ref={inputRef}
+          key={displayValue}
+          defaultValue={displayValue}
+          placeholder="49.1607651629466, 16.37570057063239"
+          onFocus={(event) => event.target.select()}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(event.target.value); } }}
+        />
+        <button type="button" onClick={() => commit(inputRef.current?.value)}>
+          {tt("apply")}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            const ok = await copyPlainTextToClipboard(inputRef.current?.value || displayValue);
+            onCopyResult?.(ok);
+            setCopyState(ok ? "copied" : "failed");
+            window.setTimeout(() => setCopyState("idle"), 1800);
+          }}
+        >
+          {copyState === "copied" ? `✓ ${tt("copy")}` : tt("copy")}
+        </button>
+      </div>
+    </label>
+  );
 }
 
 const FIELD_LABEL_DIRECTIONS = [
@@ -4095,8 +4280,24 @@ function fieldTabletQueueKey() {
   return "vetbara.fieldTablet.syncQueue";
 }
 
+// The portable LAN server (server.cjs) injects window.__VETBARA_PORTABLE__.baseUrl with the
+// LAN IP it detected, regardless of which host (localhost, 127.0.0.1, or the LAN IP) the
+// operator's own browser happens to be on. Preferring it over window.location keeps generated
+// QR links/URLs scannable from other devices even when the operator opened this page via
+// localhost — otherwise the link bakes in "localhost", which on a tablet means the tablet itself.
+function portableLanOrigin() {
+  try {
+    const base = typeof window !== "undefined" && window.__VETBARA_PORTABLE__?.baseUrl;
+    return base ? new URL(base).origin : null;
+  } catch {
+    return null;
+  }
+}
+
 function fieldTabletUrl({ examId, level = "Practicing", token = CENTRE_ACCESS_TOKEN } = {}) {
   const url = new URL(window.location.href);
+  const lanOrigin = portableLanOrigin();
+  if (lanOrigin) url.href = lanOrigin;
   url.search = "";
   url.hash = "";
   url.searchParams.set("mode", "field-tablet");
@@ -4290,6 +4491,49 @@ function CentreFieldPreparationModule({ centreCode, language }) {
       return;
     }
     setError("");
+
+    const previousLat = Number(prep.referenceLatitude);
+    const previousLng = Number(prep.referenceLongitude);
+    const hasMoved = Number.isFinite(previousLat) && Number.isFinite(previousLng) && (previousLat !== parsed.lat || previousLng !== parsed.lng);
+
+    if (hasMoved && window.confirm("Přesunout na tuto lokalitu i zkušební centrum a všechny stromy? Jejich vzájemné rozmístění zůstane zachováno.")) {
+      const deltaLat = parsed.lat - previousLat;
+      const deltaLng = parsed.lng - previousLng;
+      setPrep((current) => {
+        const centerPoint = current.examCenter?.point || {};
+        const centerLat = Number(centerPoint.lat ?? centerPoint.latitude);
+        const centerLng = Number(centerPoint.lng ?? centerPoint.longitude);
+        return {
+          ...current,
+          updatedAt: new Date().toISOString(),
+          referenceLatitude: parsed.lat,
+          referenceLongitude: parsed.lng,
+          examCenter: {
+            ...current.examCenter,
+            point: {
+              ...centerPoint,
+              lat: Number.isFinite(centerLat) ? centerLat + deltaLat : parsed.lat,
+              lng: Number.isFinite(centerLng) ? centerLng + deltaLng : parsed.lng,
+            },
+          },
+          trees: fieldEnsureArray(current.trees).map((tree) => {
+            const point = tree.point || {};
+            const treeLat = Number(point.lat ?? point.latitude);
+            const treeLng = Number(point.lng ?? point.longitude);
+            return {
+              ...tree,
+              point: {
+                ...point,
+                lat: Number.isFinite(treeLat) ? treeLat + deltaLat : parsed.lat,
+                lng: Number.isFinite(treeLng) ? treeLng + deltaLng : parsed.lng,
+              },
+            };
+          }),
+        };
+      });
+      return;
+    }
+
     updatePrep({ referenceLatitude: parsed.lat, referenceLongitude: parsed.lng });
   }
 
@@ -4544,8 +4788,8 @@ function CentreFieldPreparationModule({ centreCode, language }) {
               </div>
               <label className="mt-3 block text-sm font-medium">Poznámka pro kandidáty<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <label className="mt-3 block text-sm font-medium">Interní poznámka<textarea value={selectedTree.internalNote || ""} onChange={(event) => updateTree(selectedTree.id, { internalNote: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              {(selectedTree.assignments || []).some((assignment) => assignment.level === "Practicing" && assignment.code === "A") && <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                <h4 className="font-semibold text-emerald-950">Practicing A · management data</h4>
+              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                <h4 className="font-semibold text-emerald-950">Management data</h4>
                 <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <label className="text-sm font-medium">Výška m<input type="number" value={selectedTree.practicingTreeAData?.heightM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { heightM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
@@ -4556,8 +4800,14 @@ function CentreFieldPreparationModule({ centreCode, language }) {
                 <div className="mt-2 space-y-2">
                   {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder="Technologie" className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder="Popis" rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /></div>)}
                 </div>
-              </div>}
-              <label className="mt-4 block text-sm font-medium">Fotografie<input type="file" multiple accept="image/*" onChange={(event) => handlePhotoUpload(selectedTree.id, event.target.files)} className="mt-1 block w-full text-sm" /></label>
+              </div>
+              <div className="mt-4">
+                <div className="text-sm font-medium">Fotografie</div>
+                <label className="mt-1 inline-flex cursor-pointer items-center justify-center rounded-xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">
+                  + Nahrát fotografie
+                  <input type="file" multiple accept="image/*" onChange={(event) => { handlePhotoUpload(selectedTree.id, event.target.files); event.target.value = ""; }} className="hidden" />
+                </label>
+              </div>
               <div className="mt-2 grid grid-cols-3 gap-2">{(selectedTree.photos || []).map((photo) => <img key={photo.id} src={photo.url} alt={photo.caption || photo.fileName || "photo"} className="h-20 w-full rounded-xl object-cover" />)}</div>
             </div>
           ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">Vyberte strom nebo zkušební centrum v mapě.</div>}
@@ -4640,14 +4890,35 @@ function firstFieldTabletTreeCode(fieldPackage, level = "Practicing") {
   return fieldTreeKey(normalizeFieldTabletTrees(fieldPackage, level)?.[0] || { level, code: "A" });
 }
 
+// Collapsible wrapper for the field tablet detail panel: the panel used to be one long column
+// of always-open sections (assignment, label position, management data, interventions), which
+// meant a lot of scrolling on a tablet screen. Each section now folds shut independently.
+function FieldCollapsibleSection({ title, defaultOpen = true, className = "", children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={className}>
+      <button type="button" className="field-collapsible-header" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <h3>{title}</h3>
+        <ChevronDown className={`h-4 w-4 field-collapsible-chevron ${open ? "open" : ""}`} />
+      </button>
+      {open && <div className="field-collapsible-body">{children}</div>}
+    </section>
+  );
+}
+
 function FieldTabletPage() {
   const query = new URLSearchParams(window.location.search);
   const examId = query.get("examId") || CENTRE_QR_ID;
   const level = query.get("level") || "Practicing";
   const token = query.get("token") || "";
   const normalizedLevel = normalizeFieldLevel(level);
-  const fieldTabletLocale = "en";
-  const tt = (key) => fieldTabletText(fieldTabletLocale, key);
+  const [fieldTabletLocale, setFieldTabletLocale] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "en");
+  const fieldT = makeTranslator(fieldTabletLocale);
+  const tt = (key) => fieldTabletText(fieldT, key);
+  function changeFieldTabletLocale(next) {
+    setFieldTabletLocale(next);
+    try { window.localStorage.setItem("vetbara-field-tablet-lang", next); } catch {}
+  }
   const packageKey = fieldTabletStorageKey("package", examId, normalizedLevel);
   const draftKey = fieldTabletStorageKey("draft", examId, normalizedLevel);
   const [fieldPackage, setFieldPackage] = useState(() => readJsonLocalStorage(packageKey, null));
@@ -4665,6 +4936,34 @@ function FieldTabletPage() {
   const [gpsPosition, setGpsPosition] = useState(null);
   const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18 });
   const treeDragRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
+  const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
+
+  function requestTabletFullscreen() {
+    const element = document.documentElement;
+    const request = element.requestFullscreen || element.webkitRequestFullscreen;
+    try { request?.call(element); } catch { /* Fullscreen not available on this browser/OS. */ }
+  }
+
+  function exitTabletFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    try { exit?.call(document); } catch { /* Ignore. */ }
+  }
+
+  useEffect(() => {
+    // Opening the tablet page happens via a real button click (window.open from Centre), so the
+    // fresh tab still carries that user-activation and this first call is allowed to succeed.
+    // If the browser blocks it (no activation, or no Fullscreen API support, e.g. some iOS
+    // versions), the toolbar button below lets the field operator trigger it manually instead.
+    requestTabletFullscreen();
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -4722,6 +5021,9 @@ function FieldTabletPage() {
       const allTrees = limitFieldTreesToRequiredCodes(normalizeFieldTabletTrees(data, "All"), "All", data?.examCenter || {});
       const firstKey = fieldTreeKey(allTrees[0] || { level: "Practicing", code: "A" });
       setSelectedTreeCode(firstKey);
+      // Show both levels right after downloading so nothing looks like it "disappeared" — the
+      // level toggle otherwise stays on whatever it was before, hiding the other level's trees.
+      setActiveTabletLevel("Both");
       const nextDraft = {
         kind: "vetbara.fieldTabletDraft.v1",
         examId,
@@ -4730,8 +5032,11 @@ function FieldTabletPage() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         treeNotes: Object.fromEntries(allTrees.map((tree) => {
+          // Look up by the fully level-qualified key only — a bare-code fallback (e.g. "A") would
+          // collide between Practicing-A and Consulting-A and could silently overwrite one level's
+          // local notes with the other's.
           const key = fieldTreeKey(tree);
-          return [key, draft?.treeNotes?.[key] || draft?.treeNotes?.[tree.code] || { visited: false, note: "", photos: [], labelDirection: tree.labelDirection || "n", labelOffsetX: Number(tree.labelOffsetX || 0), labelOffsetY: Number(tree.labelOffsetY || 0) }];
+          return [key, draft?.treeNotes?.[key] || { visited: false, note: "", photos: [], labelDirection: tree.labelDirection || "n", labelOffsetX: Number(tree.labelOffsetX || 0), labelOffsetY: Number(tree.labelOffsetY || 0) }];
         })),
         generalNote: draft?.generalNote || "",
       };
@@ -4763,6 +5068,47 @@ function FieldTabletPage() {
     }));
   }
 
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Stored as base64 data URLs (not blob URLs) so photos survive the offline-first
+  // localStorage draft round trip — a blob URL only lives as long as the tab does.
+  async function addTreePhotos(code, files) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    const existing = draft?.treeNotes?.[code]?.photos || [];
+    const uploaded = await Promise.all(list.map(async (file) => ({
+      id: vetbaraUid("field-photo"),
+      fileName: file.name,
+      url: await readFileAsDataUrl(file),
+      caption: "",
+      uploadedAt: new Date().toISOString(),
+    })));
+    updateTreeDraft(code, { photos: [...existing, ...uploaded] });
+  }
+
+  function removeTreePhoto(code, photoId) {
+    const existing = draft?.treeNotes?.[code]?.photos || [];
+    updateTreeDraft(code, { photos: existing.filter((photo) => photo.id !== photoId) });
+  }
+
+  function updateCenterDraft(patch) {
+    updateDraft((current) => ({
+      ...current,
+      examCenter: {
+        ...(fieldPackage?.examCenter || {}),
+        ...(current.examCenter || {}),
+        ...patch,
+      },
+    }));
+  }
+
   function switchTabletLevel(nextLevel) {
     const next = String(nextLevel || "Practicing").toLowerCase() === "both" ? "Both" : normalizeFieldLevel(nextLevel);
     setActiveTabletLevel(next);
@@ -4776,7 +5122,7 @@ function FieldTabletPage() {
     const centreLng = Number(center.longitude ?? center.lng);
     const treesForSnapshot = fieldTrees.map((tree) => {
       const key = fieldTreeKey(tree);
-      const local = draft?.treeNotes?.[key] || draft?.treeNotes?.[tree.code] || {};
+      const local = draft?.treeNotes?.[key] || {};
       const data = local.managementData || tree.managementData || tree.practicingTreeAData || { interventions: [] };
       return {
         id: tree.id || `field-tree-${normalizeFieldLevel(tree.level).toLowerCase()}-${tree.code}`,
@@ -4861,10 +5207,14 @@ function FieldTabletPage() {
   const localCenter = draft?.examCenter || {};
   const center = { ...centerSource, ...localCenter };
   const normalizedTrees = normalizeFieldTabletTrees(fieldPackage, "All");
-  const baseFieldTrees = limitFieldTreesToRequiredCodes(normalizedTrees, "All", center);
-  const fieldTrees = baseFieldTrees.map((tree) => {
+  // Placeholder trees (not yet given their own real coordinates) default to an offset near the
+  // exam centre. That default must stay anchored to the centre's original position (centerSource),
+  // not the live-dragged one (center) — otherwise dragging the centre marker also drags every
+  // still-unplaced tree along with it, which looks like a bug ("some trees move with the centre").
+  const baseFieldTrees = limitFieldTreesToRequiredCodes(normalizedTrees, "All", centerSource);
+  const requiredFieldTrees = baseFieldTrees.map((tree) => {
     const key = fieldTreeKey(tree);
-    const local = draft?.treeNotes?.[key] || draft?.treeNotes?.[tree.code] || {};
+    const local = draft?.treeNotes?.[key] || {};
     const localLatitude = Number(local.latitude);
     const localLongitude = Number(local.longitude);
     return {
@@ -4877,14 +5227,50 @@ function FieldTabletPage() {
       labelOffsetY: Number(local.labelOffsetY ?? tree.labelOffsetY ?? 0),
       latitude: Number.isFinite(localLatitude) ? localLatitude : tree.latitude,
       longitude: Number.isFinite(localLongitude) ? localLongitude : tree.longitude,
+      photos: [...(tree.photos || []), ...(local.photos || [])],
     };
   });
+  const centerLatForExtras = Number(center.latitude);
+  const centerLngForExtras = Number(center.longitude);
+  const extraTreeToggles = draft?.extraTrees || {};
+  const extraFieldTrees = FIELD_EXTRA_TREE_TOGGLE_KEYS.filter((toggleKey) => extraTreeToggles[toggleKey]).map((toggleKey) => {
+    const [level, rawCode] = toggleKey.split("-");
+    const baseCode = rawCode[0];
+    const normalizedLevel = normalizeFieldLevel(level);
+    const key = fieldTreeKey(normalizedLevel, rawCode);
+    const baseTree = requiredFieldTrees.find((tree) => normalizeFieldLevel(tree.level) === normalizedLevel && String(tree.code).toUpperCase() === baseCode);
+    const local = draft?.treeNotes?.[key] || {};
+    const localLatitude = Number(local.latitude);
+    const localLongitude = Number(local.longitude);
+    return {
+      id: `extra-${toggleKey}`,
+      key,
+      level: normalizedLevel,
+      code: rawCode,
+      name: local.treeName || `${normalizedLevel} ${rawCode}`,
+      candidateNote: local.candidateNote ?? "",
+      labelDirection: local.labelDirection || "n",
+      labelOffsetX: Number(local.labelOffsetX ?? 0),
+      labelOffsetY: Number(local.labelOffsetY ?? 0),
+      latitude: Number.isFinite(localLatitude) ? localLatitude : (Number(baseTree?.latitude) || centerLatForExtras || 0) + 0.00006,
+      longitude: Number.isFinite(localLongitude) ? localLongitude : (Number(baseTree?.longitude) || centerLngForExtras || 0) + 0.00006,
+      managementData: local.managementData || {},
+    };
+  });
+  const fieldTrees = [...requiredFieldTrees, ...extraFieldTrees];
   const visibleFieldTrees = activeTabletLevel === "Both" ? fieldTrees : fieldTrees.filter((tree) => normalizeFieldLevel(tree.level) === activeTabletLevel);
   const selectedTree = fieldTrees.find((tree) => fieldTreeKey(tree) === String(selectedTreeCode)) || visibleFieldTrees[0] || fieldTrees[0] || null;
   const readyOffline = Boolean(fieldPackage && draft);
-  const selectedLocal = selectedTree ? (draft?.treeNotes?.[fieldTreeKey(selectedTree)] || draft?.treeNotes?.[selectedTree.code] || {}) : {};
-  const visitedCount = visibleFieldTrees.filter((tree) => Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited || draft?.treeNotes?.[tree.code]?.visited)).length;
-  const allRequiredChecked = fieldTrees.length >= FIELD_REQUIRED_ASSIGNMENTS.length && fieldTrees.every((tree) => Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited || draft?.treeNotes?.[tree.code]?.visited));
+  const selectedLocal = selectedTree ? (draft?.treeNotes?.[fieldTreeKey(selectedTree)] || {}) : {};
+
+  function toggleExtraTree(toggleKey) {
+    updateDraft((current) => ({
+      ...current,
+      extraTrees: { ...(current.extraTrees || {}), [toggleKey]: !(current.extraTrees || {})[toggleKey] },
+    }));
+  }
+  const visitedCount = visibleFieldTrees.filter((tree) => Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited)).length;
+  const allRequiredChecked = requiredFieldTrees.length >= FIELD_REQUIRED_ASSIGNMENTS.length && requiredFieldTrees.every((tree) => Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited));
   const centerLat = Number(center.latitude);
   const centerLng = Number(center.longitude);
 
@@ -5230,24 +5616,62 @@ function FieldTabletPage() {
     })() : "";
     const treeMarkers = trees.map((tree) => {
       const p = point(tree.latitude, tree.longitude);
-      const checked = Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited || draft?.treeNotes?.[tree.code]?.visited);
+      const checked = Boolean(draft?.treeNotes?.[fieldTreeKey(tree)]?.visited);
       return `<div class="pdf-marker tree ${checked ? "checked" : ""}" style="left:calc(50% + ${p.x}px);top:calc(50% + ${p.y}px)"><span class="dot"></span><span class="label">${fieldTreeLabel(tree.level, tree.code)}</span></div>`;
     }).join("");
     return `<section class="pdf-map"><h2>${levelName}</h2><div class="pdf-map-canvas">${tiles.join("")}${centreMarker}${treeMarkers}</div></section>`;
   }
 
+  function managementDataForTree(tree) {
+    if (!tree) return {};
+    const key = fieldTreeKey(tree);
+    const local = draft?.treeNotes?.[key] || {};
+    const base = tree.managementData || tree.practicingTreeAData || {};
+    return { ...base, ...(local.managementData || {}) };
+  }
+
+  function buildTreeDetailHtml(tree) {
+    if (!tree) return "";
+    const key = fieldTreeKey(tree);
+    const local = draft?.treeNotes?.[key] || {};
+    const data = managementDataForTree(tree);
+    const interventions = Array.isArray(data.interventions) ? data.interventions : [];
+    const label = overviewTreeLabel(tree, extraTreeToggles);
+    const name = local.treeName || tree.name || label;
+    const note = local.candidateNote ?? tree.candidateNote ?? "";
+    return `<section class="pdf-tree-detail">
+      <h2>${escapeHtml(label)} · ${escapeHtml(name)}</h2>
+      <p class="pdf-tree-coords">${escapeHtml(formatCoord(tree.latitude))}, ${escapeHtml(formatCoord(tree.longitude))}</p>
+      <div class="pdf-tree-grid">
+        <div><strong>${escapeHtml(tt("taxon"))}</strong><span>${escapeHtml(data.taxon || "-")}</span></div>
+        <div><strong>${escapeHtml(tt("heightM"))}</strong><span>${escapeHtml(String(data.heightM ?? "") || "-")}</span></div>
+        <div><strong>${escapeHtml(tt("stemDiameterCm"))}</strong><span>${escapeHtml(String(data.stemDiameterCm ?? "") || "-")}</span></div>
+        <div><strong>${escapeHtml(tt("crownSpreadM"))}</strong><span>${escapeHtml(String(data.crownSpreadM ?? "") || "-")}</span></div>
+      </div>
+      ${note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("candidateNote"))}</strong><p>${escapeHtml(note)}</p></div>` : ""}
+      ${data.note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("managementNote"))}</strong><p>${escapeHtml(data.note)}</p></div>` : ""}
+      <div class="pdf-tree-interventions">
+        <strong>${escapeHtml(tt("interventions"))}</strong>
+        ${interventions.length ? `<ul>${interventions.map((iv) => `<li><strong>${escapeHtml(iv.technology || "-")}</strong>: ${escapeHtml(iv.description || "-")}</li>`).join("")}</ul>` : `<p class="pdf-muted">${escapeHtml(tt("noTechnologies"))}</p>`}
+      </div>
+    </section>`;
+  }
+
+  function openFieldLevelPdf(levelName) {
+    const treesForLevel = fieldTrees.filter((tree) => normalizeFieldLevel(tree.level) === levelName);
+    const treeADetails = treesForLevel
+      .filter((tree) => String(tree.code || "").toUpperCase().startsWith("A"))
+      .map((tree) => buildTreeDetailHtml(tree))
+      .join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>VetBara ${escapeHtml(levelName)} field map</title><style>
+      @page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018}.actions{position:fixed;top:8px;right:10px;z-index:20;display:flex;gap:8px}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}main{display:block}.pdf-map{break-inside:avoid}.pdf-map h2{margin:0 0 5mm;font-size:16pt}.pdf-map-canvas{position:relative;height:120mm;overflow:hidden;border:2px solid #102018;border-radius:10px;background:#e6efe9}.pdf-map-canvas img{position:absolute;width:256px;height:256px}.pdf-marker{position:absolute;width:0;height:0;z-index:5}.pdf-marker .dot{position:absolute;left:0;top:0;width:12px;height:12px;border-radius:999px;background:white;border:3px solid white;transform:translate(-50%,-50%);box-shadow:0 1px 5px rgba(0,0,0,.35)}.pdf-marker .label{position:absolute;left:16px;top:-17px;white-space:nowrap;border-radius:999px;background:white;border:3px solid white;padding:6px 10px;font-weight:900;box-shadow:0 2px 10px rgba(0,0,0,.25)}.pdf-marker.centre .dot,.pdf-marker.centre .label{background:#e7334d;color:white;border-color:white}.pdf-marker.checked .dot{background:#2d6f36}.pdf-marker.checked .label{border-color:#2d6f36;box-shadow:0 0 0 4px rgba(45,111,54,.22),0 2px 10px rgba(0,0,0,.25)}.pdf-tree-detail{margin-top:8mm;break-inside:avoid}.pdf-tree-detail h2{margin:0 0 2mm;font-size:14pt}.pdf-tree-coords{margin:0 0 4mm;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#597469;font-size:10pt}.pdf-tree-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4mm;margin-bottom:4mm}.pdf-tree-grid div{border:1px solid #d7e1d8;border-radius:8px;padding:3mm}.pdf-tree-grid strong{display:block;font-size:8pt;text-transform:uppercase;letter-spacing:.05em;color:#6b7c72;margin-bottom:1mm}.pdf-tree-note{margin-bottom:4mm}.pdf-tree-note strong{display:block;font-size:9pt;text-transform:uppercase;letter-spacing:.05em;color:#6b7c72;margin-bottom:1mm}.pdf-tree-note p{margin:0;white-space:pre-wrap}.pdf-tree-interventions strong{display:block;font-size:9pt;text-transform:uppercase;letter-spacing:.05em;color:#6b7c72;margin-bottom:2mm}.pdf-tree-interventions ul{margin:0;padding-left:5mm}.pdf-muted{color:#8a978f;margin:0}@media print{.actions{display:none}}
+    </style></head><body><div class="actions"><button onclick="window.print()">${escapeHtml(tt("printPdf"))}</button><button onclick="if(navigator.share){navigator.share({title:'VetBara ${escapeHtml(levelName)} field map',text:'VetBara ${escapeHtml(levelName)} field map for ${escapeHtml(examId)}'})}">${escapeHtml(tt("share"))}</button></div><main>${buildPrintableFieldMap(levelName)}${treeADetails}</main></body></html>`;
+    openPrintDocument(html, () => setError("The PDF window was blocked by the browser."));
+  }
+
   function openFieldMapsPdf() {
-    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>VetBara field maps</title><style>
-      @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018}.actions{position:fixed;top:8px;right:10px;z-index:20;display:flex;gap:8px}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}main{display:grid;grid-template-columns:1fr 1fr;gap:8mm;height:190mm}.pdf-map{break-inside:avoid}.pdf-map h2{margin:0 0 5mm;font-size:16pt}.pdf-map-canvas{position:relative;height:164mm;overflow:hidden;border:2px solid #102018;border-radius:10px;background:#e6efe9}.pdf-map-canvas img{position:absolute;width:256px;height:256px}.pdf-marker{position:absolute;width:0;height:0;z-index:5}.pdf-marker .dot{position:absolute;left:0;top:0;width:12px;height:12px;border-radius:999px;background:white;border:3px solid white;transform:translate(-50%,-50%);box-shadow:0 1px 5px rgba(0,0,0,.35)}.pdf-marker .label{position:absolute;left:16px;top:-17px;white-space:nowrap;border-radius:999px;background:white;border:3px solid white;padding:6px 10px;font-weight:900;box-shadow:0 2px 10px rgba(0,0,0,.25)}.pdf-marker.centre .dot,.pdf-marker.centre .label{background:#e7334d;color:white;border-color:white}.pdf-marker.checked .dot{background:#2d6f36}.pdf-marker.checked .label{border-color:#2d6f36;box-shadow:0 0 0 4px rgba(45,111,54,.22),0 2px 10px rgba(0,0,0,.25)}@media print{.actions{display:none}main{height:auto}}
-    </style></head><body><div class="actions"><button onclick="window.print()">${tt("printPdf")}</button><button onclick="if(navigator.share){navigator.share({title:'VetBara field maps',text:'VetBara field maps for ${examId}'})}">${tt("share")}</button></div><main>${buildPrintableFieldMap("Practicing")}${buildPrintableFieldMap("Consulting")}</main></body></html>`;
-    const win = window.open("about:blank", "_blank");
-    if (!win) {
-      setError("The PDF window was blocked by the browser.");
-      return;
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    openFieldLevelPdf("Practicing");
+    openFieldLevelPdf("Consulting");
   }
 
   const selectedTreeDisplayName = selectedLocal.treeName || selectedTree?.name || "";
@@ -5262,28 +5686,44 @@ function FieldTabletPage() {
             <h2>{tt("packageMissingTitle")}</h2>
             <p>{tt("packageMissingText")}</p>
             <button type="button" onClick={downloadForOffline} className="field-primary-button">{tt("downloadOffline")}</button>
-            {error && <div className="field-tablet-status error">{error}</div>}
+            {error && <div className="field-tablet-status error"><AlertTriangle className="h-4 w-4" />{error}</div>}
           </section>
         ) : (
           <section className="field-tablet-main-grid">
             <div className="field-left-column">
               <div className="field-map-card">
                 <div className="field-map-toolbar field-map-toolbar-above" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
-                    <button type="button" className={activeTabletLevel === "Practicing" ? "active" : ""} onClick={() => switchTabletLevel("Practicing")}>Practicing</button>
-                    <button type="button" className={activeTabletLevel === "Consulting" ? "active" : ""} onClick={() => switchTabletLevel("Consulting")}>Consulting</button>
-                    <button type="button" className={activeTabletLevel === "Both" ? "active" : ""} onClick={() => switchTabletLevel("Both")}>{tt("both")}</button>
-                    <button type="button" onClick={() => setMapCenterOverride(defaultMapCenter)}>{tt("find")}</button>
-                    <button type="button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))}>{tt("zoomIn")}</button>
-                    <button type="button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))}>{tt("zoomOut")}</button>
-                    <button type="button" onClick={locateTablet}>{tt("gps")}</button>
-                    <button type="button" className={mapLayer === "cuzk" ? "active" : ""} onClick={() => setMapLayer("cuzk")}>{tt("cuzk")}</button>
-                    <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")}>{tt("osm")}</button>
-                    <button type="button" onClick={downloadForOffline} className="field-primary-button">{tt("downloadOffline")}</button>
-                    <button type="button" onClick={openFieldMapsPdf} disabled={!readyOffline} className="field-ghost-button">{tt("pdf")}</button>
-                    <button type="button" onClick={syncBack} disabled={syncing || !readyOffline || !allRequiredChecked} title={!allRequiredChecked ? tt("syncDisabledUntilChecked") : (lastSyncOk ? "Last sync succeeded." : "")} className={`field-ghost-button ${lastSyncOk ? "field-sync-ok" : ""}`}>{syncing ? tt("syncing") : tt("sync")}</button>
+                    <div className="field-toolbar-group" role="group" aria-label={tt("level")}>
+                      <button type="button" className={activeTabletLevel === "Practicing" ? "active" : ""} onClick={() => switchTabletLevel("Practicing")}>{tt("levelPracticing")}</button>
+                      <button type="button" className={activeTabletLevel === "Consulting" ? "active" : ""} onClick={() => switchTabletLevel("Consulting")}>{tt("levelConsulting")}</button>
+                      <button type="button" className={activeTabletLevel === "Both" ? "active" : ""} onClick={() => switchTabletLevel("Both")}>{tt("both")}</button>
+                    </div>
+                    <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
+                      <button type="button" className="field-icon-button" onClick={() => setMapCenterOverride(defaultMapCenter)} title={tt("find")} aria-label={tt("find")}><Search className="h-4 w-4" /></button>
+                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
+                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
+                      <button type="button" className="field-icon-button" onClick={locateTablet} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
+                      <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
+                      <button type="button" className={mapLayer === "cuzk" ? "active" : ""} onClick={() => setMapLayer("cuzk")} title={tt("cuzk")}><Layers className="h-3.5 w-3.5" />{tt("cuzk")}</button>
+                      <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")} title={tt("osm")}><Layers className="h-3.5 w-3.5" />{tt("osm")}</button>
+                    </div>
+                    <div className="field-toolbar-group" role="group" aria-label={tt("primaryActions")}>
+                      <button type="button" onClick={downloadForOffline} className="field-primary-button"><CloudOff className="h-4 w-4" />{tt("downloadOffline")}</button>
+                      <button type="button" onClick={openFieldMapsPdf} disabled={!readyOffline} className="field-ghost-button"><FileSpreadsheet className="h-4 w-4" />{tt("pdf")}</button>
+                      <button type="button" onClick={syncBack} disabled={syncing || !readyOffline || !allRequiredChecked} title={!allRequiredChecked ? tt("syncDisabledUntilChecked") : (lastSyncOk ? "Last sync succeeded." : "")} className={`field-ghost-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("syncing") : tt("sync")}</button>
+                    </div>
+                    <div className="field-toolbar-group field-toolbar-lang" role="group" aria-label={tt("language")}>
+                      <button type="button" className="field-icon-button" onClick={isFullscreen ? exitTabletFullscreen : requestTabletFullscreen} title={tt(isFullscreen ? "exitFullscreen" : "fullscreen")} aria-label={tt(isFullscreen ? "exitFullscreen" : "fullscreen")}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>
+                      <button type="button" className={fieldTabletLocale === "en" ? "active" : ""} onClick={() => changeFieldTabletLocale("en")}>EN</button>
+                      <button type="button" className={fieldTabletLocale === "cs" ? "active" : ""} onClick={() => changeFieldTabletLocale("cs")}>CS</button>
+                    </div>
+                    <span className={`field-connectivity-pill ${online ? "online" : "warn"}`}>
+                      {online ? <Wifi className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
+                      {online ? tt("online") : tt("offline")}
+                    </span>
                   </div>
                 <div className="field-real-map" onPointerDown={handleMapPointerDown} onPointerMove={handleMapPointerMove} onPointerUp={handleMapPointerEnd} onPointerCancel={handleMapPointerEnd} onWheel={handleMapWheel}>
-                  {error && <div className="field-map-message error">{error}</div>}
+                  {error && <div className="field-map-message error"><AlertTriangle className="h-4 w-4" />{error}</div>}
                   <div className="field-tile-layer" aria-hidden="true">
                     {mapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
                   </div>
@@ -5309,6 +5749,91 @@ function FieldTabletPage() {
             </div>
 
             <aside className="field-detail-panel">
+              {manualCoordsOpen && (
+                <div className="field-manual-coords">
+                  <div className="field-detail-header">
+                    <div>
+                      <span>{tt("examCenter")}</span>
+                      <h2>{tt("manualCoordsTitle")}</h2>
+                      <p className="field-drag-hint">{tt("manualCoordsHint")}</p>
+                    </div>
+                  </div>
+                  <div className="field-two-cols">
+                    <label className="field-detail-field">
+                      <span>{tt("latitude")}</span>
+                      <input type="number" step="0.000001" value={Number.isFinite(centerLat) ? centerLat : ""} onChange={(event) => updateCenterDraft({ latitude: event.target.value === "" ? "" : Number(event.target.value) })} />
+                    </label>
+                    <label className="field-detail-field">
+                      <span>{tt("longitude")}</span>
+                      <input type="number" step="0.000001" value={Number.isFinite(centerLng) ? centerLng : ""} onChange={(event) => updateCenterDraft({ longitude: event.target.value === "" ? "" : Number(event.target.value) })} />
+                    </label>
+                  </div>
+                  <FieldCoordsCopyField
+                    lat={centerLat}
+                    lng={centerLng}
+                    onApply={({ lat, lng }) => updateCenterDraft({ latitude: lat, longitude: lng })}
+                    onCopyResult={(ok) => setStatus(ok ? tt("coordsCopied") : tt("coordsCopyFailed"))}
+                    tt={tt}
+                  />
+                  {selectedTree && (
+                    <>
+                      <div className="field-detail-header field-manual-coords-tree">
+                        <div>
+                          <span>{tt("selectedTree")}</span>
+                          <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTreeDisplayName}</h2>
+                        </div>
+                      </div>
+                      <div className="field-two-cols">
+                        <label className="field-detail-field">
+                          <span>{tt("latitude")}</span>
+                          <input type="number" step="0.000001" value={Number.isFinite(Number(selectedTree.latitude)) ? Number(selectedTree.latitude) : ""} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { latitude: event.target.value === "" ? "" : Number(event.target.value) })} />
+                        </label>
+                        <label className="field-detail-field">
+                          <span>{tt("longitude")}</span>
+                          <input type="number" step="0.000001" value={Number.isFinite(Number(selectedTree.longitude)) ? Number(selectedTree.longitude) : ""} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { longitude: event.target.value === "" ? "" : Number(event.target.value) })} />
+                        </label>
+                      </div>
+                      <FieldCoordsCopyField
+                        lat={selectedTree.latitude}
+                        lng={selectedTree.longitude}
+                        onApply={({ lat, lng }) => updateTreeDraft(fieldTreeKey(selectedTree), { latitude: lat, longitude: lng })}
+                        onCopyResult={(ok) => setStatus(ok ? tt("coordsCopied") : tt("coordsCopyFailed"))}
+                        tt={tt}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+              <FieldCollapsibleSection title={tt("treeOverviewTitle")} className="field-assignment-box" defaultOpen={false}>
+                <div className="field-extra-tree-toggles">
+                  {FIELD_EXTRA_TREE_TOGGLE_KEYS.map((toggleKey) => {
+                    const [level, rawCode] = toggleKey.split("-");
+                    const baseCode = rawCode[0];
+                    return (
+                      <label key={toggleKey} className="field-extra-tree-toggle">
+                        <input type="checkbox" checked={Boolean(extraTreeToggles[toggleKey])} onChange={() => toggleExtraTree(toggleKey)} />
+                        <span>{tt(level === "Practicing" ? "levelPracticing" : "levelConsulting")} – {tt("secondTree")} {baseCode}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="field-tree-overview-list">
+                  {fieldTrees.map((tree) => {
+                    const key = fieldTreeKey(tree);
+                    const local = draft?.treeNotes?.[key] || {};
+                    const taxon = local.managementData?.taxon || tree.managementData?.taxon || tree.practicingTreeAData?.taxon || "-";
+                    const checked = Boolean(local.visited);
+                    const isSelected = selectedTree && fieldTreeKey(selectedTree) === key;
+                    return (
+                      <button key={key} type="button" className={`field-tree-overview-row ${isSelected ? "selected" : ""}`} onClick={() => { setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>
+                        <span className="field-tree-overview-code">{overviewTreeLabel(tree, extraTreeToggles)}</span>
+                        <span className="field-tree-overview-taxon">{taxon}</span>
+                        <span className={`field-tree-overview-checked ${checked ? "yes" : ""}`}>{checked ? "✓" : "—"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </FieldCollapsibleSection>
               {selectedTree ? (
                 <>
                   <div className="field-detail-header">
@@ -5317,41 +5842,41 @@ function FieldTabletPage() {
                       <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTreeDisplayName}</h2>
                       <p>{formatCoord(selectedTree.latitude)}, {formatCoord(selectedTree.longitude)}</p>
                     </div>
-                    <label className="field-visited-toggle"><input type="checkbox" checked={Boolean(selectedLocal.visited)} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { visited: event.target.checked })} />{tt("checked")}</label>
+                    <label className="field-visited-toggle"><input type="checkbox" checked={Boolean(selectedLocal.visited)} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { visited: event.target.checked })} />{Boolean(selectedLocal.visited) && <Check className="h-3.5 w-3.5" />}{tt("checked")}</label>
                   </div>
                   <label className="field-detail-field">
                     <span>{tt("treeName")}</span>
                     <input value={selectedTreeDisplayName} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { treeName: event.target.value })} />
                   </label>
-                  <div className="field-two-cols">
-                    <label className="field-detail-field"><span>{tt("latitude")}</span><input value={formatCoord(selectedTree.latitude)} readOnly /></label>
-                    <label className="field-detail-field"><span>{tt("longitude")}</span><input value={formatCoord(selectedTree.longitude)} readOnly /></label>
-                  </div>
-                  <div className="field-assignment-box">
-                    <h3>{tt("assignment")}</h3>
+                  <FieldCollapsibleSection title={tt("assignmentSection")} className="field-assignment-box" defaultOpen>
                     <div className="field-assignment-row editable">
                       <label><span>{tt("level")}</span><select value={normalizeFieldLevel(selectedTree.level)} onChange={(event) => { const nextLevel = normalizeFieldLevel(event.target.value); setActiveTabletLevel(nextLevel); setSelectedTreeCode(fieldTreeKey(nextLevel, selectedTree.code)); }}><option>Practicing</option><option>Consulting</option></select></label>
                       <label><span>{tt("tree")}</span><select value={selectedTree.code} onChange={(event) => setSelectedTreeCode(fieldTreeKey(selectedTree.level, event.target.value))}>{FIELD_TREE_CODES.map((code) => <option key={code}>{code}</option>)}</select></label>
                     </div>
-                  </div>
-                  <label className="field-detail-field">
-                    <span>{tt("labelPosition")}</span>
-                    <select value={selectedLocal.labelDirection || selectedTree.labelDirection || "n"} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelDirection: event.target.value })}>
-                      {FIELD_LABEL_DIRECTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
-                  </label>
-                  <div className="field-label-offset-controls">
-                    <label><span>{tt("labelOffsetX")}</span><input type="number" step="2" value={selectedLocal.labelOffsetX ?? selectedTree.labelOffsetX ?? 0} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetX: Number(event.target.value || 0) })} /></label>
-                    <label><span>{tt("labelOffsetY")}</span><input type="number" step="2" value={selectedLocal.labelOffsetY ?? selectedTree.labelOffsetY ?? 0} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetY: Number(event.target.value || 0) })} /></label>
-                    <button type="button" onClick={() => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetX: 0, labelOffsetY: 0 })}>{tt("resetOffset")}</button>
-                  </div>
+                  </FieldCollapsibleSection>
                   <label className="field-detail-field">
                     <span>{tt("candidateNote")}</span>
                     <textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { candidateNote: event.target.value })} rows={3} />
                   </label>
-                  {selectedTree.photos?.length > 0 && <div className="field-photo-grid">{selectedTree.photos.map((photo) => <figure key={photo.id || photo.url}><img src={photo.url} alt={photo.caption || photo.fileName || "Photo"} /><figcaption>{photo.caption || photo.fileName}</figcaption></figure>)}</div>}
-                  {showManagementData && <section className="field-practicing-box">
-                    <h3>{tt("managementData")}</h3>
+                  <div className="field-detail-field">
+                    <span><Camera className="mr-1 inline h-3.5 w-3.5" />{tt("photosSection")}</span>
+                    <label className="field-photo-add-button">
+                      {tt("addPhotos")}
+                      <input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { addTreePhotos(fieldTreeKey(selectedTree), event.target.files); event.target.value = ""; }} className="hidden" />
+                    </label>
+                  </div>
+                  {selectedTree.photos?.length > 0 && (
+                    <div className="field-photo-grid">
+                      {selectedTree.photos.map((photo) => (
+                        <figure key={photo.id || photo.url}>
+                          <img src={photo.url} alt={photo.caption || photo.fileName || "Photo"} />
+                          <figcaption>{photo.caption || photo.fileName}</figcaption>
+                          <button type="button" className="field-photo-remove" onClick={() => removeTreePhoto(fieldTreeKey(selectedTree), photo.id)} aria-label={tt("removePhoto")}>×</button>
+                        </figure>
+                      ))}
+                    </div>
+                  )}
+                  {showManagementData && <FieldCollapsibleSection title={tt("managementSection")} className="field-practicing-box" defaultOpen>
                     <label><span>{tt("taxon")}</span><input value={selectedManagementData.taxon || ""} onChange={(event) => updateSelectedManagementData({ taxon: event.target.value })} /></label>
                     <div className="field-three-cols">
                       <label><span>{tt("heightM")}</span><input value={selectedManagementData.heightM || ""} onChange={(event) => updateSelectedManagementData({ heightM: event.target.value })} /></label>
@@ -5366,7 +5891,21 @@ function FieldTabletPage() {
                       <button type="button" className="field-remove-button" onClick={() => removeSelectedIntervention(index)}>{tt("removeTechnology")}</button>
                     </div>)}
                     {!selectedInterventions().length && <p className="field-muted">{tt("noTechnologies")}</p>}
-                  </section>}
+                  </FieldCollapsibleSection>}
+                  <FieldCollapsibleSection title={tt("labelPosition")} className="field-assignment-box" defaultOpen={false}>
+                    <label className="field-detail-field">
+                      <span>{tt("labelPosition")}</span>
+                      <select value={selectedLocal.labelDirection || selectedTree.labelDirection || "n"} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelDirection: event.target.value })}>
+                        {FIELD_LABEL_DIRECTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <div className="field-label-offset-controls">
+                      <label><span>{tt("labelOffsetX")}</span><input type="number" step="2" value={selectedLocal.labelOffsetX ?? selectedTree.labelOffsetX ?? 0} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetX: Number(event.target.value || 0) })} /></label>
+                      <label><span>{tt("labelOffsetY")}</span><input type="number" step="2" value={selectedLocal.labelOffsetY ?? selectedTree.labelOffsetY ?? 0} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetY: Number(event.target.value || 0) })} /></label>
+                      <button type="button" onClick={() => updateTreeDraft(fieldTreeKey(selectedTree), { labelOffsetX: 0, labelOffsetY: 0 })}>{tt("resetOffset")}</button>
+                    </div>
+                  </FieldCollapsibleSection>
+                  <p className="field-drag-hint"><MapPin className="h-3.5 w-3.5" />{tt("dragHint")}</p>
                 </>
               ) : <p>{tt("chooseTree")}</p>}
             </aside>
@@ -5382,149 +5921,868 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
   const [activePackagePreviewStatus, setActivePackagePreviewStatus] = useState("");
   const [activePackagePreviewError, setActivePackagePreviewError] = useState("");
 
-  async function loadActivePackagePreview() {
+  function applyActivePackageData(data) {
+    setActivePackagePreview(data);
+
+    const practicingCode = data?.variants?.Practicing?.code || "PRACTICING_ADMIN_PACKAGE";
+    const consultingCode = data?.variants?.Consulting?.code || "CONSULTING_ADMIN_PACKAGE";
+    const practicingQuestions = Array.isArray(data?.written?.Practicing?.questions)
+      ? data.written.Practicing.questions
+      : [];
+    const consultingQuestions = Array.isArray(data?.written?.Consulting?.questions)
+      ? data.written.Consulting.questions
+      : [];
+    const variantLanguage = language || "EN";
+
+    setTestBank?.((prev) => ({
+      ...prev,
+      [practicingCode]: practicingQuestions,
+      [consultingCode]: consultingQuestions,
+    }));
+
+    setTestImportSummary?.({
+      variants: 2,
+      questions: practicingQuestions.length + consultingQuestions.length,
+      source: "admin-vet-file",
+      packageId: data.packageId,
+    });
+
+    setAvailableVariants?.((prev) => {
+      const existing = Array.isArray(prev) ? prev : [];
+      const adminCodes = new Set([practicingCode, consultingCode]);
+
+      return [
+        ...existing.filter((variant) => !adminCodes.has(variant.code)),
+        {
+          code: practicingCode,
+          level: "Practicing",
+          language: variantLanguage,
+          status: "Approved",
+          source: "admin-vet-file",
+        },
+        {
+          code: consultingCode,
+          level: "Consulting",
+          language: variantLanguage,
+          status: "Approved",
+          source: "admin-vet-file",
+        },
+      ];
+    });
+
+    setVariants?.((prev) => ({
+      ...prev,
+      Practicing: practicingCode,
+      Consulting: consultingCode,
+    }));
+
+    setOutdoorItemsByLevel?.(normalizeAdminOutdoorPackage(data));
+    setActiveAdminPackageMeta?.(activePackageRuntimeMeta(data));
+
+    setCentreSetupDirty?.(true);
+
+    setActivePackagePreviewStatus(`Admin.vet načten a nastaven pro Centre: ${data.packageId || "bez ID"}`);
+  }
+
+  function handleAdminVetFileSelect(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
     setActivePackagePreviewError("");
-    setActivePackagePreviewStatus("Načítám aktivní Admin JSON balíček...");
+    setActivePackagePreviewStatus(`Načítám ${file.name}...`);
 
-    try {
-      const response = await fetch("/api/centre/test-package/active");
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setActivePackagePreview(data);
-
-      const practicingCode = data?.variants?.Practicing?.code || "PRACTICING_ADMIN_PACKAGE";
-      const consultingCode = data?.variants?.Consulting?.code || "CONSULTING_ADMIN_PACKAGE";
-      const practicingQuestions = Array.isArray(data?.written?.Practicing?.questions)
-        ? data.written.Practicing.questions
-        : [];
-      const consultingQuestions = Array.isArray(data?.written?.Consulting?.questions)
-        ? data.written.Consulting.questions
-        : [];
-      const variantLanguage = language || "EN";
-
-      setTestBank?.((prev) => ({
-        ...prev,
-        [practicingCode]: practicingQuestions,
-        [consultingCode]: consultingQuestions,
-      }));
-
-      setTestImportSummary?.({
-        variants: 2,
-        questions: practicingQuestions.length + consultingQuestions.length,
-        source: "active-admin-json",
-        packageId: data.packageId,
-      });
-
-      setAvailableVariants?.((prev) => {
-        const existing = Array.isArray(prev) ? prev : [];
-        const adminCodes = new Set([practicingCode, consultingCode]);
-
-        return [
-          ...existing.filter((variant) => !adminCodes.has(variant.code)),
-          {
-            code: practicingCode,
-            level: "Practicing",
-            language: variantLanguage,
-            status: "Approved",
-            source: "active-admin-json",
-          },
-          {
-            code: consultingCode,
-            level: "Consulting",
-            language: variantLanguage,
-            status: "Approved",
-            source: "active-admin-json",
-          },
-        ];
-      });
-
-      setVariants?.((prev) => ({
-        ...prev,
-        Practicing: practicingCode,
-        Consulting: consultingCode,
-      }));
-
-      setOutdoorItemsByLevel?.(normalizeAdminOutdoorPackage(data));
-      setActiveAdminPackageMeta?.(activePackageRuntimeMeta(data));
-
-      setCentreSetupDirty?.(true);
-
-      setActivePackagePreviewStatus(`Aktivní balíček načten a nastaven pro Centre: ${data.packageId}`);
-    } catch (error) {
-      setActivePackagePreviewError(error.message || "Načtení aktivního balíčku selhalo.");
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result || ""));
+        if (!data || typeof data !== "object" || (!data.written && !data.outdoor && !data.variants)) {
+          throw new Error("Soubor nevypadá jako platný Admin.vet balíček.");
+        }
+        applyActivePackageData(data);
+      } catch (error) {
+        setActivePackagePreviewError(error.message || "Načtení souboru selhalo.");
+        setActivePackagePreviewStatus("");
+      }
+    };
+    reader.onerror = () => {
+      setActivePackagePreviewError("Soubor se nepodařilo přečíst.");
       setActivePackagePreviewStatus("");
-    }
+    };
+    reader.readAsText(file);
   }
 
   return (
-    <div data-vb-active-admin-package-panel="true" className="mb-4 rounded-2xl border bg-white p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div data-vb-active-admin-package-panel="true" className="mb-4 flex flex-wrap items-center gap-3">
+      <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+        Načíst Admin.vet
+        <input type="file" accept=".vet,application/json" className="hidden" onChange={handleAdminVetFileSelect} />
+      </label>
+      {activePackagePreviewStatus && <span className="text-sm text-emerald-900">{activePackagePreviewStatus}</span>}
+      {activePackagePreviewError && <span className="text-sm text-amber-950">{activePackagePreviewError}</span>}
+    </div>
+  );
+}
+
+function CandidateEditorCard({ candidate, selectedCandidateId, setSelectedCandidateId, removeCandidate, updateCandidate, candidatesCount, t }) {
+  return (
+    <div className={`rounded-2xl border bg-white p-3 text-sm ${selectedCandidateId === candidate.id ? "border-slate-950 bg-slate-50" : ""}`}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-slate-500">{candidate.id}</div>
+        <Button onClick={() => removeCandidate(candidate.id)} disabled={candidatesCount <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{t("centre.candidates.remove")}</Button>
+      </div>
+      <label className="text-xs font-medium text-slate-500">
+        {t("centre.candidateDetails.id")}
+        <input value={candidate.id ?? ""} readOnly onFocus={() => setSelectedCandidateId(candidate.id)} className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" />
+      </label>
+      <label className="mt-2 block text-xs font-medium text-slate-500">
+        {t("centre.candidateDetails.name")}
+        <input value={candidate.name ?? ""} onFocus={() => setSelectedCandidateId(candidate.id)} onChange={(event) => updateCandidate(candidate.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+      </label>
+      <label className="mt-2 block text-xs font-medium text-slate-500">
+        {t("centre.candidateDetails.level")}
+        <select value={candidate.level ?? "Practicing"} onFocus={() => setSelectedCandidateId(candidate.id)} onChange={(event) => updateCandidate(candidate.id, { level: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950">
+          <option value="Practicing">Practicing</option>
+          <option value="Consulting">Consulting</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function ExaminerEditorCard({ examiner, removeExaminer, updateExaminer, examinersCount, t }) {
+  return (
+    <div className="rounded-2xl border bg-white p-3 text-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-slate-500">{examiner.id}</div>
+        <Button onClick={() => removeExaminer(examiner.id)} disabled={examinersCount <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{t("centre.examiners.remove")}</Button>
+      </div>
+      <label className="text-xs font-medium text-slate-500">
+        {t("centre.examinerDetails.id")}
+        <input value={examiner.id ?? ""} onChange={(event) => updateExaminer(examiner.id, { id: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+      </label>
+      <label className="mt-2 block text-xs font-medium text-slate-500">
+        {t("centre.examinerDetails.name")}
+        <input value={examiner.name ?? ""} onChange={(event) => updateExaminer(examiner.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+      </label>
+      <label className="mt-2 block text-xs font-medium text-slate-500">
+        {t("centre.examinerDetails.email")}
+        <input value={examiner.email ?? ""} onChange={(event) => updateExaminer(examiner.id, { email: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+      </label>
+    </div>
+  );
+}
+
+// --- SCAN tool math: 4-corner perspective correction (deskew) without any external CV library ---
+// Solves the 8-unknown planar homography that maps the 4 corners the operator tapped on the
+// photo to the 4 corners of the output document, using Gaussian elimination on the standard
+// 8x8 DLT linear system. h33 is fixed to 1 (standard normalization for a projective 2D homography).
+function solveLinearSystem8(A, b) {
+  const n = 8;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < n; row++) if (Math.abs(M[row][col]) > Math.abs(M[pivot][col])) pivot = row;
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    const pivotVal = M[col][col];
+    if (Math.abs(pivotVal) < 1e-9) continue;
+    for (let row = 0; row < n; row++) {
+      if (row === col) continue;
+      const factor = M[row][col] / pivotVal;
+      for (let c = col; c <= n; c++) M[row][c] -= factor * M[col][c];
+    }
+  }
+  return M.map((row, i) => row[n] / row[i]);
+}
+function computeHomography(srcQuad, dstQuad) {
+  const A = [];
+  const b = [];
+  for (let i = 0; i < 4; i++) {
+    const [sx, sy] = srcQuad[i];
+    const [dx, dy] = dstQuad[i];
+    A.push([sx, sy, 1, 0, 0, 0, -sx * dx, -sy * dx]);
+    b.push(dx);
+    A.push([0, 0, 0, sx, sy, 1, -sx * dy, -sy * dy]);
+    b.push(dy);
+  }
+  const h = solveLinearSystem8(A, b);
+  return [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1];
+}
+function applyHomographyPoint(m, x, y) {
+  const w = m[6] * x + m[7] * y + m[8];
+  return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w];
+}
+// Warps sourceCanvas so the quadrilateral (docCorners, in source pixel coords, order:
+// top-left, top-right, bottom-right, bottom-left) becomes a straight outWidth x outHeight
+// rectangle, using bilinear sampling for quality. This is the "auto-align" step.
+function warpPerspective(sourceCanvas, docCorners, outWidth, outHeight) {
+  const dstQuad = [[0, 0], [outWidth, 0], [outWidth, outHeight], [0, outHeight]];
+  // Map OUTPUT rectangle -> SOURCE image directly, so we can sample per destination pixel.
+  const matrix = computeHomography(dstQuad, docCorners);
+  const srcCtx = sourceCanvas.getContext("2d");
+  const src = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  const out = document.createElement("canvas");
+  out.width = outWidth;
+  out.height = outHeight;
+  const outCtx = out.getContext("2d");
+  const dstImage = outCtx.createImageData(outWidth, outHeight);
+  const sw = sourceCanvas.width;
+  const sh = sourceCanvas.height;
+  for (let y = 0; y < outHeight; y++) {
+    for (let x = 0; x < outWidth; x++) {
+      const [sx, sy] = applyHomographyPoint(matrix, x, y);
+      const di = (y * outWidth + x) * 4;
+      if (sx < 0 || sy < 0 || sx >= sw - 1 || sy >= sh - 1) {
+        dstImage.data[di] = 255; dstImage.data[di + 1] = 255; dstImage.data[di + 2] = 255; dstImage.data[di + 3] = 255;
+        continue;
+      }
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const fx = sx - x0, fy = sy - y0;
+      for (let c = 0; c < 4; c++) {
+        const p00 = src.data[(y0 * sw + x0) * 4 + c];
+        const p10 = src.data[(y0 * sw + x0 + 1) * 4 + c];
+        const p01 = src.data[((y0 + 1) * sw + x0) * 4 + c];
+        const p11 = src.data[((y0 + 1) * sw + x0 + 1) * 4 + c];
+        const top = p00 * (1 - fx) + p10 * fx;
+        const bottom = p01 * (1 - fx) + p11 * fx;
+        dstImage.data[di + c] = top * (1 - fy) + bottom * fy;
+      }
+    }
+  }
+  outCtx.putImageData(dstImage, 0, 0);
+  return out;
+}
+// Auto brightness/contrast: per-channel histogram stretch (clips the darkest/lightest 0.5% of
+// pixels then linearly stretches the rest across the full 0-255 range) — a simple, fast "auto
+// levels" pass that makes a phone-photo of a printed page look closer to a flatbed scan.
+function autoEnhanceCanvas(canvas, clipPercent = 0.005) {
+  const ctx = canvas.getContext("2d");
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const totalPixels = canvas.width * canvas.height;
+  for (let channel = 0; channel < 3; channel++) {
+    const histogram = new Array(256).fill(0);
+    for (let i = channel; i < img.data.length; i += 4) histogram[img.data[i]]++;
+    const clipCount = Math.floor(totalPixels * clipPercent);
+    let lo = 0, hi = 255, seen = 0;
+    for (let v = 0; v < 256; v++) { seen += histogram[v]; if (seen > clipCount) { lo = v; break; } }
+    seen = 0;
+    for (let v = 255; v >= 0; v--) { seen += histogram[v]; if (seen > clipCount) { hi = v; break; } }
+    const range = Math.max(1, hi - lo);
+    for (let i = channel; i < img.data.length; i += 4) {
+      img.data[i] = Math.max(0, Math.min(255, ((img.data[i] - lo) / range) * 255));
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+function imageElementToCanvas(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  canvas.getContext("2d").drawImage(image, 0, 0);
+  return canvas;
+}
+
+// Full-screen capture tool: photograph a filled-in printed test, tap its 4 corners to deskew,
+// auto-enhance contrast, then either save the whole page as a scan or crop-and-assign a region
+// to a specific question so the review modal can show it next to that question's blank lines.
+// Deliberately does not attempt automatic checkbox/handwriting recognition — see project notes.
+function CentreScanModal({ candidate, questions, existingScans, onSaveScan, onAssignToQuestion, onClose, t }) {
+  const [rawImage, setRawImage] = useState(null); // HTMLImageElement
+  const [corners, setCorners] = useState(null); // [[x,y]x4] in displayed-image CSS pixel coords
+  const [correctedCanvas, setCorrectedCanvas] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [assignQuestionId, setAssignQuestionId] = useState("");
+  const [cropRect, setCropRect] = useState(null); // {x,y,w,h} on the corrected canvas, CSS px
+  const imgRef = useRef(null);
+  const dragRef = useRef(null);
+
+  function handleFileSelect(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      setRawImage(image);
+      setCorrectedCanvas(null);
+      setCorners(null);
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  }
+
+  function initCornersFromDisplay() {
+    const el = imgRef.current;
+    if (!el) return;
+    const margin = { x: el.clientWidth * 0.08, y: el.clientHeight * 0.08 };
+    setCorners([
+      [margin.x, margin.y],
+      [el.clientWidth - margin.x, margin.y],
+      [el.clientWidth - margin.x, el.clientHeight - margin.y],
+      [margin.x, el.clientHeight - margin.y],
+    ]);
+  }
+
+  function startDragCorner(index, event) {
+    event.preventDefault();
+    dragRef.current = index;
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", onDragEnd);
+  }
+  function onDragMove(event) {
+    const index = dragRef.current;
+    if (index === null || index === undefined || !imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    setCorners((current) => current.map((point, i) => (i === index ? [x, y] : point)));
+  }
+  function onDragEnd() {
+    dragRef.current = null;
+    window.removeEventListener("pointermove", onDragMove);
+    window.removeEventListener("pointerup", onDragEnd);
+  }
+
+  async function applyCorrection() {
+    if (!rawImage || !corners || !imgRef.current) return;
+    setProcessing(true);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const displayRect = imgRef.current;
+    const scaleX = rawImage.naturalWidth / displayRect.clientWidth;
+    const scaleY = rawImage.naturalHeight / displayRect.clientHeight;
+    const sourceCorners = corners.map(([x, y]) => [x * scaleX, y * scaleY]);
+    const sourceCanvas = imageElementToCanvas(rawImage);
+    const outWidth = 1200;
+    const outHeight = Math.round(outWidth * 1.414); // A4 portrait aspect ratio
+    const warped = warpPerspective(sourceCanvas, sourceCorners, outWidth, outHeight);
+    autoEnhanceCanvas(warped);
+    setCorrectedCanvas(warped);
+    setProcessing(false);
+  }
+
+  function saveWholeScan() {
+    if (!correctedCanvas) return;
+    onSaveScan(candidate.id, correctedCanvas.toDataURL("image/jpeg", 0.9));
+  }
+
+  function startCrop(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const startX = event.clientX - rect.left;
+    const startY = event.clientY - rect.top;
+    setCropRect({ x: startX, y: startY, w: 0, h: 0 });
+    function move(moveEvent) {
+      const x = Math.max(0, Math.min(rect.width, moveEvent.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height, moveEvent.clientY - rect.top));
+      setCropRect({ x: Math.min(startX, x), y: Math.min(startY, y), w: Math.abs(x - startX), h: Math.abs(y - startY) });
+    }
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function assignCroppedRegion() {
+    if (!correctedCanvas || !cropRect || !cropRect.w || !cropRect.h || !assignQuestionId) return;
+    const displayEl = document.getElementById("scan-corrected-preview");
+    if (!displayEl) return;
+    const scaleX = correctedCanvas.width / displayEl.clientWidth;
+    const scaleY = correctedCanvas.height / displayEl.clientHeight;
+    const cropCanvas = document.createElement("canvas");
+    cropCanvas.width = Math.max(1, Math.round(cropRect.w * scaleX));
+    cropCanvas.height = Math.max(1, Math.round(cropRect.h * scaleY));
+    cropCanvas.getContext("2d").drawImage(
+      correctedCanvas,
+      cropRect.x * scaleX, cropRect.y * scaleY, cropRect.w * scaleX, cropRect.h * scaleY,
+      0, 0, cropCanvas.width, cropCanvas.height
+    );
+    onAssignToQuestion(candidate.id, assignQuestionId, cropCanvas.toDataURL("image/jpeg", 0.92));
+    setCropRect(null);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 p-4 text-white">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold">Aktivní Admin JSON balíček</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            Centre načítá otázky, správné odpovědi, hodnoticí pomoc a outdoor exercises ze schváleného Admin JSON balíčku.
-            Jazyk UX nemění obsah zkoušky.
-          </p>
+          <h2 className="text-lg font-bold">{t("centre.scan.title")} · {candidate.name}</h2>
+          <p className="text-sm text-slate-300">{t("centre.scan.helper")}</p>
         </div>
-        <Button onClick={loadActivePackagePreview} variant="outline" className="rounded-2xl">
-          Načíst aktivní balíček
-        </Button>
+        <Button onClick={onClose} variant="outline" className="rounded-2xl bg-white text-slate-950">{t("common.close")}</Button>
       </div>
 
-      {activePackagePreviewStatus && (
-        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          {activePackagePreviewStatus}
+      <div className="mt-4 flex-1 overflow-auto rounded-2xl bg-white p-4 text-slate-950">
+        {!rawImage && (
+          <label className="flex h-64 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-center">
+            <Camera className="h-8 w-8 text-slate-500" />
+            <span className="font-semibold">{t("centre.scan.capture")}</span>
+            <span className="text-xs text-slate-500">{t("centre.scan.captureHelper")}</span>
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+          </label>
+        )}
+
+        {rawImage && !correctedCanvas && (
+          <div>
+            <p className="mb-2 text-sm font-semibold">{t("centre.scan.dragCorners")}</p>
+            <div ref={imgRef} className="relative mx-auto w-full max-w-xl select-none" onLoad={initCornersFromDisplay}>
+              <img src={rawImage.src} alt="scan" className="w-full rounded-xl" onLoad={initCornersFromDisplay} draggable={false} />
+              {corners && (
+                <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                  <polygon points={corners.map((p) => p.join(",")).join(" ")} fill="rgba(45,111,54,0.18)" stroke="#2d6f36" strokeWidth="2" />
+                </svg>
+              )}
+              {corners && corners.map((point, index) => (
+                <div key={index} onPointerDown={(event) => startDragCorner(index, event)} className="absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-white bg-emerald-600" style={{ left: point[0], top: point[1] }} />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={() => { setRawImage(null); setCorners(null); }} variant="outline" className="rounded-2xl">{t("centre.scan.retake")}</Button>
+              <Button onClick={applyCorrection} disabled={!corners || processing} className="rounded-2xl">{processing ? t("centre.scan.processing") : t("centre.scan.applyAlign")}</Button>
+            </div>
+          </div>
+        )}
+
+        {correctedCanvas && (
+          <div>
+            <p className="mb-2 text-sm font-semibold">{t("centre.scan.assignHelper")}</p>
+            <div className="relative mx-auto w-full max-w-xl cursor-crosshair select-none" onPointerDown={startCrop}>
+              <img id="scan-corrected-preview" src={correctedCanvas.toDataURL("image/jpeg", 0.9)} alt="corrected scan" className="w-full rounded-xl border" draggable={false} />
+              {cropRect && <div className="pointer-events-none absolute border-2 border-amber-500 bg-amber-400/20" style={{ left: cropRect.x, top: cropRect.y, width: cropRect.w, height: cropRect.h }} />}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button onClick={() => { setCorrectedCanvas(null); setCorners(null); }} variant="outline" className="rounded-2xl">{t("centre.scan.redoAlign")}</Button>
+              <Button onClick={saveWholeScan} variant="outline" className="rounded-2xl">{t("centre.scan.saveWhole")}</Button>
+              <select value={assignQuestionId} onChange={(event) => setAssignQuestionId(event.target.value)} className="rounded-xl border bg-white p-2 text-sm">
+                <option value="">{t("centre.scan.selectQuestion")}</option>
+                {questions.map((q) => <option key={q.id} value={q.id}>{q.id}</option>)}
+              </select>
+              <Button onClick={assignCroppedRegion} disabled={!cropRect?.w || !assignQuestionId} className="rounded-2xl">{t("centre.scan.assignCrop")}</Button>
+            </div>
+          </div>
+        )}
+
+        {existingScans?.length > 0 && (
+          <div className="mt-6">
+            <p className="mb-2 text-sm font-semibold">{t("centre.scan.savedScans")}</p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {existingScans.map((scan) => <img key={scan.id} src={scan.dataUrl} alt="saved scan" className="rounded-lg border" />)}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Final-review modal: shows every question with the candidate's answer highlighted next to the
+// correct answer / scoring help, any scanned handwriting crops assigned to that question, and
+// (once an Examiner has identified themselves) a "mark as corrected" action.
+function CentreReviewModal({ candidate, section, snapshot, scanAssignments, identifiedExaminer, onRequireIdentify, onMarkCorrected, isCorrected, onClose, t }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
+      <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white">
+        <div className="flex items-center justify-between gap-3 border-b p-4">
+          <div>
+            <h2 className="text-lg font-bold">{candidate.name} · {section.label}</h2>
+            <p className="text-sm text-slate-600">{candidate.id} · {candidate.level}</p>
+          </div>
+          <Button onClick={onClose} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          {section.kind === "written" && (
+            <div className="space-y-4">
+              {snapshot.items.map((item) => {
+                const crop = scanAssignments?.[item.question.id];
+                return (
+                  <div key={item.question.id} className="rounded-2xl border p-3">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-mono">{item.question.id}</span>
+                      <span>{item.pointsAwarded} / {item.question.points ?? "-"} b.</span>
+                    </div>
+                    <div className="mt-1 font-medium">{item.question.text}</div>
+                    <div className={`mt-2 rounded-xl p-2 text-sm ${item.hasCorrectAnswer ? (item.correct ? "bg-emerald-50 text-emerald-950" : "bg-rose-50 text-rose-950") : "bg-slate-50"}`}>
+                      <span className="font-semibold">{t("centre.review.candidateAnswer")}: </span>{item.answer || <em>{t("centre.review.noAnswer")}</em>}
+                    </div>
+                    {item.hasCorrectAnswer && <div className="mt-1 text-xs text-slate-500">{t("centre.review.correctAnswer")}: {item.question.correctAnswer}</div>}
+                    {item.question.scoringHelp && <div className="mt-1 text-xs text-slate-500">{t("centre.review.scoringHelp")}: {item.question.scoringHelp}</div>}
+                    {crop && <img src={crop} alt="handwritten answer scan" className="mt-2 max-h-48 rounded-lg border" />}
+                  </div>
+                );
+              })}
+              {!snapshot.items.length && <p className="text-sm text-slate-500">{t("centre.review.noQuestions")}</p>}
+            </div>
+          )}
+          {section.kind === "outdoor" && (
+            <div className="space-y-2">
+              <div className="rounded-2xl border bg-slate-50 p-3 text-sm font-semibold">{t("centre.review.outdoorTotal")}: {snapshot.total} / {snapshot.max} b.</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {snapshot.entries.map(([itemId, value]) => (
+                  <div key={itemId} className="flex items-center justify-between rounded-xl border p-2 text-sm">
+                    <span className="font-mono text-xs">{itemId}</span>
+                    <span className="font-semibold">{value}</span>
+                  </div>
+                ))}
+              </div>
+              {!snapshot.entries.length && <p className="text-sm text-slate-500">{t("centre.review.noOutdoorScores")}</p>}
+            </div>
+          )}
+          {section.kind === "report" && (
+            <div className="space-y-4">
+              {snapshot.trees.map(([treeKey, tree]) => (
+                <div key={treeKey} className="rounded-2xl border p-3">
+                  <div className="font-semibold">{treeKey}</div>
+                  <div className="mt-1 whitespace-pre-wrap rounded-xl bg-slate-50 p-2 text-sm">{tree.fieldNotes || <em>{t("centre.review.noAnswer")}</em>}</div>
+                  {tree.photos?.length > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {tree.photos.map((photo) => <img key={photo.id} src={photo.url || photo.dataUrl} alt={photo.caption || "photo"} className="h-20 w-full rounded-lg object-cover" />)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border-t p-4">
+          {isCorrected ? (
+            <StatusPill tone="good">{t("centre.review.corrected")}{identifiedExaminer ? ` · ${identifiedExaminer.name}` : ""}</StatusPill>
+          ) : identifiedExaminer ? (
+            <Button onClick={onMarkCorrected} className="rounded-2xl">{t("centre.review.markCorrected")}</Button>
+          ) : (
+            <Button onClick={onRequireIdentify} variant="outline" className="rounded-2xl">{t("centre.review.identifyToScore")}</Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const CENTRE_REVIEW_STATUS_COLORS = { locked: "bg-slate-200 text-slate-500", open: "bg-amber-400 text-amber-950", closed: "bg-rose-500 text-white", corrected: "bg-emerald-500 text-white" };
+
+function CentreReviewCell({ status, onClick, t }) {
+  return (
+    <button type="button" onClick={onClick} className={`w-full rounded-xl px-2 py-2 text-center text-xs font-bold ${CENTRE_REVIEW_STATUS_COLORS[status] || CENTRE_REVIEW_STATUS_COLORS.locked}`}>
+      {t(`centre.review.status.${status}`)}
+    </button>
+  );
+}
+
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel, candidateStatus, t }) {
+  const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
+  const [pendingIdentify, setPendingIdentify] = useState(false);
+  const [correctionStatus, setCorrectionStatus] = useState({});
+  const [scans, setScans] = useState({});
+  const [scanAssignments, setScanAssignments] = useState({});
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [scanTarget, setScanTarget] = useState(null);
+
+  const identifiedExaminer = examiners.find((examiner) => examiner.id === identifiedExaminerId) || null;
+
+  function sectionQuestions(candidate) {
+    const variantCode = variants?.[candidate.level] ?? "";
+    return (testBank?.[variantCode] ?? []);
+  }
+
+  function cellStatus(candidate, sectionKey) {
+    const key = `${candidate.id}:${sectionKey}`;
+    if (correctionStatus[key]) return "corrected";
+    if (sectionKey === "outdoor") {
+      const scores = outdoor?.[candidate.id] || {};
+      const hasAny = Object.values(scores).some((value) => Number(value) > 0);
+      if (candidate.outdoor != null) return "closed";
+      return hasAny ? "open" : "locked";
+    }
+    const status = candidateStatus?.[candidate.id]?.[sectionKey];
+    if (status === "closed") return "closed";
+    if (status === "open") return "open";
+    return "locked";
+  }
+
+  function buildSnapshot(candidate, sectionKey) {
+    if (sectionKey === "test") {
+      const snapshot = computeWrittenTestReview(candidate, variants, testBank, testResponses);
+      return { kind: "written", label: "Test", items: snapshot.items };
+    }
+    if (sectionKey === "outdoor") {
+      const scores = outdoor?.[candidate.id] || {};
+      const entries = Object.entries(scores).filter(([, value]) => value !== "" && value !== null && value !== undefined);
+      const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+      const max = Object.values(outdoorItemsByLevel?.[candidate.level] || {}).flat().reduce((sum, item) => sum + Number(item.max || 0), 0);
+      return { kind: "outdoor", label: "Outdoor", entries, total, max };
+    }
+    const draft = reportDrafts?.[candidate.id] || {};
+    return { kind: "report", label: "Report", trees: Object.entries(draft) };
+  }
+
+  function requireIdentify() { setPendingIdentify(true); }
+
+  function confirmIdentify(examinerId) {
+    setIdentifiedExaminerId(examinerId);
+    setPendingIdentify(false);
+  }
+
+  function markCorrected() {
+    if (!reviewTarget || !identifiedExaminer) return;
+    const key = `${reviewTarget.candidate.id}:${reviewTarget.sectionKey}`;
+    setCorrectionStatus((current) => ({ ...current, [key]: true }));
+  }
+
+  const sections = [
+    { key: "test", label: "Test" },
+    { key: "outdoor", label: "Outdoor" },
+    { key: "report", label: "Report", consultingOnly: true },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-4">
+        <div>
+          <h3 className="font-semibold">{t("centre.review.identifyTitle")}</h3>
+          <p className="mt-1 text-sm text-slate-600">{t("centre.review.identifyHelper")}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {identifiedExaminer ? (
+            <>
+              <StatusPill tone="good">{identifiedExaminer.name}</StatusPill>
+              <Button onClick={() => setIdentifiedExaminerId("")} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>
+            </>
+          ) : (
+            <Button onClick={requireIdentify} className="rounded-2xl">{t("centre.review.identify")}</Button>
+          )}
+        </div>
+      </div>
+
+      {pendingIdentify && (
+        // z-[60]: this must render above CentreReviewModal/CentreScanModal (z-50) — it can be
+        // triggered from inside either of those, and a plain inline block would render behind
+        // the modal overlay and be invisible (the click would "do nothing" from the user's view).
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onClick={() => setPendingIdentify(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">{t("centre.review.selectExaminer")}</p>
+              <Button onClick={() => setPendingIdentify(false)} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {examiners.map((examiner) => (
+                <Button key={examiner.id} onClick={() => confirmIdentify(examiner.id)} variant="outline" className="rounded-2xl">{examiner.name}</Button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      {activePackagePreviewError && (
-        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          {activePackagePreviewError}
-        </div>
+      <div className="overflow-x-auto rounded-2xl border bg-white p-4">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b text-left text-slate-500">
+              <th className="py-2 pr-3">{t("centre.workflow.candidate")}</th>
+              {sections.map((section) => <th key={section.key} className="py-2 pr-3">{section.label}</th>)}
+              <th className="py-2 pr-3">SCAN</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((candidate) => (
+              <tr key={candidate.id} className="border-b align-middle">
+                <td className="py-2 pr-3">
+                  <div className="font-medium">{candidate.id}</div>
+                  <div className="text-xs text-slate-500">{candidate.name} · {candidate.level}</div>
+                </td>
+                {sections.map((section) => {
+                  if (section.consultingOnly && candidate.level !== "Consulting") return <td key={section.key} className="py-2 pr-3 text-center text-slate-300">—</td>;
+                  return (
+                    <td key={section.key} className="py-2 pr-3">
+                      <CentreReviewCell status={cellStatus(candidate, section.key)} t={t} onClick={() => setReviewTarget({ candidate, sectionKey: section.key })} />
+                    </td>
+                  );
+                })}
+                <td className="py-2 pr-3">
+                  <Button onClick={() => setScanTarget(candidate)} variant="outline" className="rounded-2xl">SCAN</Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap gap-4 rounded-2xl border bg-slate-50 p-3 text-xs text-slate-600">
+        <span className="font-semibold">{t("centre.review.legendTitle")}:</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-slate-200" /> {t("centre.review.status.locked")}</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-amber-400" /> {t("centre.review.status.open")}</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-rose-500" /> {t("centre.review.status.closed")}</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-emerald-500" /> {t("centre.review.status.corrected")}</span>
+      </div>
+
+      {reviewTarget && (
+        <CentreReviewModal
+          candidate={reviewTarget.candidate}
+          section={{ ...sections.find((s) => s.key === reviewTarget.sectionKey), kind: reviewTarget.sectionKey === "test" ? "written" : reviewTarget.sectionKey }}
+          snapshot={buildSnapshot(reviewTarget.candidate, reviewTarget.sectionKey)}
+          scanAssignments={scanAssignments[reviewTarget.candidate.id]}
+          identifiedExaminer={identifiedExaminer}
+          onRequireIdentify={requireIdentify}
+          onMarkCorrected={markCorrected}
+          isCorrected={cellStatus(reviewTarget.candidate, reviewTarget.sectionKey) === "corrected"}
+          onClose={() => setReviewTarget(null)}
+          t={t}
+        />
       )}
 
-      {activePackagePreview && (
-        <div className="mt-3 grid gap-2 md:grid-cols-5">
-          <div className="rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-semibold">Package</div>
-            <div className="mt-1 break-all font-mono text-xs">{activePackagePreview.packageId}</div>
-          </div>
-          <div className="rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-semibold">Practicing written</div>
-            <div className="mt-1 text-xs">
-              {activePackagePreview.variants?.Practicing?.writtenQuestionCount ?? "-"} / {activePackagePreview.variants?.Practicing?.writtenMax ?? "-"}
-            </div>
-          </div>
-          <div className="rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-semibold">Consulting written</div>
-            <div className="mt-1 text-xs">
-              {activePackagePreview.variants?.Consulting?.writtenQuestionCount ?? "-"} / {activePackagePreview.variants?.Consulting?.writtenMax ?? "-"}
-            </div>
-          </div>
-          <div className="rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-semibold">Practicing outdoor</div>
-            <div className="mt-1 text-xs">
-              {activePackagePreview.variants?.Practicing?.outdoorItemCount ?? "-"} / {activePackagePreview.variants?.Practicing?.outdoorMax ?? "-"}
-            </div>
-          </div>
-          <div className="rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-semibold">Consulting outdoor</div>
-            <div className="mt-1 text-xs">
-              {activePackagePreview.variants?.Consulting?.outdoorItemCount ?? "-"} / {activePackagePreview.variants?.Consulting?.outdoorMax ?? "-"}
-            </div>
-          </div>
-        </div>
+      {scanTarget && (
+        <CentreScanModal
+          candidate={scanTarget}
+          questions={sectionQuestions(scanTarget)}
+          existingScans={scans[scanTarget.id]}
+          onSaveScan={(candidateId, dataUrl) => setScans((current) => ({ ...current, [candidateId]: [...(current[candidateId] || []), { id: vetbaraUid("scan"), dataUrl, capturedAt: new Date().toISOString() }] }))}
+          onAssignToQuestion={(candidateId, questionId, dataUrl) => setScanAssignments((current) => ({ ...current, [candidateId]: { ...(current[candidateId] || {}), [questionId]: dataUrl } }))}
+          onClose={() => setScanTarget(null)}
+          t={t}
+        />
       )}
     </div>
   );
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+// Section F — Archivace. Lists every document produced during the certification process
+// (input package, candidate outputs, examiner gradings, audit log), lets the Centre lead
+// decide what to include, and on final closure bundles it all into one ZIP: each document as
+// both .json and .pdf, a README, and a Centrum_<místo>_<timestamp>.vet manifest that embeds
+// everything so Admin can later re-import and browse it read-only (see Admin section C).
+function CentreArchiveSection({ candidates, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit, centreCode, examDate, place, t }) {
+  const [activeAdminPackage, setActiveAdminPackage] = useState(null);
+  const [included, setIncluded] = useState({});
+  const [closing, setClosing] = useState(false);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/test-package/approved", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (!cancelled && data && !data.error) setActiveAdminPackage(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const documents = useMemo(
+    () => buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit }),
+    [candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit]
+  );
+
+  useEffect(() => {
+    setIncluded((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      documents.forEach((doc) => {
+        if (!(doc.id in next)) { next[doc.id] = true; changed = true; }
+      });
+      return changed ? next : prev;
+    });
+  }, [documents]);
+
+  const categories = [...new Set(documents.map((doc) => doc.category))];
+
+  function toggleDoc(id) {
+    setIncluded((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  async function finalizeExam() {
+    const selectedDocs = documents.filter((doc) => included[doc.id] ?? true);
+    if (!selectedDocs.length) {
+      window.alert(t("centre.archive.noneSelected"));
+      return;
+    }
+    const ok = window.confirm(t("centre.archive.confirmClose").replace("{count}", selectedDocs.length));
+    if (!ok) return;
+
+    setClosing(true);
+    setStatus(t("centre.archive.generating"));
+    setError("");
+    try {
+      const zip = new JSZip();
+      const stamp = vetFilenameStamp();
+      const placeSlug = slugForFilename(place);
+      const vetFilename = `Centrum_${placeSlug}_${stamp}.vet`;
+
+      const manifest = {
+        kind: "vetbara.centreArchive.v1",
+        centreCode: centreCode || "-",
+        examDate: examDate || "-",
+        place: place || "-",
+        closedAt: new Date().toISOString(),
+        candidates,
+        examiners,
+        documents: [],
+      };
+
+      for (const doc of selectedDocs) {
+        const jsonData = doc.getJson();
+        zip.file(`${doc.category}/${doc.jsonFilename}`, JSON.stringify(jsonData, null, 2));
+        manifest.documents.push({ id: doc.id, category: doc.category, label: doc.label, filename: doc.jsonFilename, data: jsonData });
+        try {
+          const pdfBlob = buildArchiveSectionsPdfBlob(doc.pdfTitle, [`Kategorie: ${doc.category}`, `Vygenerováno: ${new Date().toLocaleString()}`], doc.getPdfSections());
+          zip.file(`${doc.category}/${doc.jsonFilename.replace(/\.json$/, ".pdf")}`, pdfBlob);
+        } catch (pdfError) {
+          console.error("Archive PDF generation failed for", doc.id, pdfError);
+        }
+      }
+
+      zip.file(vetFilename, JSON.stringify(manifest, null, 2));
+      zip.file("README.txt", buildArchiveReadme(selectedDocs, vetFilename));
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Archiv_${placeSlug}_${stamp}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      setStatus(t("centre.archive.done").replace("{filename}", link.download));
+    } catch (err) {
+      setStatus("");
+      setError(err.message || String(err));
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-white p-4">
+        <h3 className="font-semibold">{t("centre.archive.documentsTitle")}</h3>
+        <p className="mt-1 text-sm text-slate-600">{t("centre.archive.documentsHelper")}</p>
+        {categories.map((category) => (
+          <div key={category} className="mt-4">
+            <h4 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{category}</h4>
+            <div className="grid gap-2 md:grid-cols-2">
+              {documents.filter((doc) => doc.category === category).map((doc) => (
+                <label key={doc.id} className="flex items-center gap-3 rounded-xl border bg-white p-3 text-sm">
+                  <input type="checkbox" checked={included[doc.id] ?? true} onChange={() => toggleDoc(doc.id)} />
+                  <span>{doc.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border-2 border-rose-300 bg-rose-50 p-5">
+        <h3 className="text-lg font-bold text-rose-950">{t("centre.archive.finalCloseTitle")}</h3>
+        <p className="mt-1 text-sm text-rose-900">{t("centre.archive.finalCloseHelper")}</p>
+        <Button onClick={finalizeExam} disabled={closing} className="mt-3 rounded-2xl bg-rose-700 text-white hover:bg-rose-800">
+          {closing ? t("centre.archive.generating") : t("centre.archive.finalCloseButton")}
+        </Button>
+        {status && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{status}</div>}
+        {error && <div className="mt-3 rounded-xl border border-rose-200 bg-white p-3 text-sm text-rose-900">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
-  const [showCentreAdvanced, setShowCentreAdvanced] = useState(false);
   // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
   // default; switching to a local base URL is explicit, session-only, and never silently
   // rewrites links unless a validated local URL is set.
@@ -5604,58 +6862,113 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
     setCopiedQr(t("centre.copy.unavailable").replace("{label}", label));
   }
 
-  function CandidateEditorCard({ candidate }) {
-    return (
-      <div className={`rounded-2xl border bg-white p-3 text-sm ${selectedCandidateId === candidate.id ? "border-slate-950 bg-slate-50" : ""}`}>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="text-xs font-semibold text-slate-500">{candidate.id}</div>
-          <Button onClick={() => removeCandidate(candidate.id)} disabled={candidates.length <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">Odstranit</Button>
-        </div>
-        <label className="text-xs font-medium text-slate-500">
-          {t("centre.candidateDetails.id")}
-          <input value={candidate.id ?? ""} readOnly onFocus={() => setSelectedCandidateId(candidate.id)} className="mt-1 w-full rounded-xl border bg-slate-100 p-2 text-sm text-slate-600" />
-        </label>
-        <label className="mt-2 block text-xs font-medium text-slate-500">
-          {t("centre.candidateDetails.name")}
-          <input value={candidate.name ?? ""} onFocus={() => setSelectedCandidateId(candidate.id)} onChange={(event) => updateCandidate(candidate.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
-        </label>
-        <label className="mt-2 block text-xs font-medium text-slate-500">
-          {t("centre.candidateDetails.level")}
-          <select value={candidate.level ?? "Practicing"} onFocus={() => setSelectedCandidateId(candidate.id)} onChange={(event) => updateCandidate(candidate.id, { level: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950">
-            <option value="Practicing">Practicing</option>
-            <option value="Consulting">Consulting</option>
-          </select>
-        </label>
-      </div>
-    );
+  function openPrintWindow(html) {
+    openPrintDocument(html, () => setCopiedQr("Tiskové okno bylo blokováno prohlížečem."));
   }
 
-  function ExaminerEditorCard({ examiner }) {
-    return (
-      <div className="rounded-2xl border bg-white p-3 text-sm">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="text-xs font-semibold text-slate-500">{examiner.id}</div>
-          <Button onClick={() => removeExaminer(examiner.id)} disabled={examiners.length <= 2} variant="outline" className="rounded-2xl px-3 py-1 text-xs">Odstranit</Button>
-        </div>
-        <label className="text-xs font-medium text-slate-500">
-          {t("centre.examinerDetails.id")}
-          <input value={examiner.id ?? ""} onChange={(event) => updateExaminer(examiner.id, { id: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
-        </label>
-        <label className="mt-2 block text-xs font-medium text-slate-500">
-          {t("centre.examinerDetails.name")}
-          <input value={examiner.name ?? ""} onChange={(event) => updateExaminer(examiner.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
-        </label>
-        <label className="mt-2 block text-xs font-medium text-slate-500">
-          {t("centre.examinerDetails.email")}
-          <input value={examiner.email ?? ""} onChange={(event) => updateExaminer(examiner.id, { email: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
-        </label>
-      </div>
-    );
+  // 4-per-page cut-and-distribute sheet: every Candidate and Examiner QR, with their name
+  // printed underneath, laid out 2x2 so a pair of scissors gives one QR card per person.
+  function printAllQrCodes() {
+    const people = [
+      ...candidates.map((c) => ({ id: c.id, name: c.name, role: "Kandidát", url: candidateQrForRewritten(c.id) })),
+      ...examiners.map((ex) => ({ id: ex.id, name: ex.name, role: "Examinátor", url: examinerQrForRewritten(ex.id) })),
+    ];
+    const cells = people.map((person) => `<div class="qr-print-cell">
+      <div class="qr-print-code">${renderQrSvgMarkup(person.url, 220)}</div>
+      <div class="qr-print-name">${escapeHtml(person.name || person.id)}</div>
+      <div class="qr-print-id">${escapeHtml(person.id)} · ${escapeHtml(person.role)}</div>
+    </div>`).join("");
+    openPrintWindow(`<!doctype html><html><head><meta charset="utf-8" /><title>VetBara QR codes</title><style>
+      @page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+      .qr-print-grid{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:135mm}
+      .qr-print-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px dashed #94a89c;padding:8mm;break-inside:avoid}
+      .qr-print-code svg{width:55mm;height:55mm}
+      .qr-print-name{margin-top:6mm;font-size:14pt;font-weight:800;text-align:center}
+      .qr-print-id{margin-top:2mm;font-size:10pt;color:#516158;text-align:center}
+      @media print{.actions{display:none}}
+    </style></head><body><div class="actions"><button onclick="window.print()">Tisk / PDF</button></div><div class="qr-print-grid">${cells}</div></body></html>`);
   }
 
-  const setupMeta = testImportSummary ? "Balíček načten" : "Čeká na balíček";
-  const peopleMeta = `${candidates.length} kandidátů · ${examiners.length} zkoušejících`;
-  const accessMeta = centreValidationIssues.length ? `${centreValidationIssues.length} kontrol` : "Připraveno";
+  // Printable written-test paper: candidate header (with the same access QR, so a scanned page
+  // can be matched back to the right person) plus every question, each carrying a bracketed
+  // reference code — the "control characters" — so answers can be matched back to the right
+  // question during manual/scanned evaluation. Multiple-choice gets checkboxes; written
+  // questions get ruled lines sized roughly to their point value.
+  function printCandidateTest(candidate) {
+    const snapshot = resolveCandidateWrittenSnapshot({ candidate, variants, testBank });
+    const questions = snapshot.questions;
+    const qrMarkup = renderQrSvgMarkup(candidateQrForRewritten(candidate.id), 130);
+    // Each question keeps its own small scan-sort QR (candidate/variant/question encoded) so a
+    // stack of scanned pages can still be matched back to the right digital question even if
+    // pages get shuffled — but questions are no longer forced one-per-page. They flow normally
+    // and only get `break-inside: avoid` so a question and its answer space never split across
+    // a page boundary; this keeps the print compact instead of burning a sheet per question.
+    function scanSortQr(questionId) {
+      const value = `VETSCAN|${candidate.id}|${snapshot.variantCode || ""}|${questionId}`;
+      return renderQrSvgMarkup(value, 60);
+    }
+    const questionsHtml = questions.map((q, index) => {
+      const qid = q.id || `Q${index + 1}`;
+      const optionsHtml = q.type === "single_choice" && q.options.length
+        ? `<div class="pt-options">${q.options.map((opt, i) => `<div class="pt-option"><span class="pt-checkbox"></span>${escapeHtml(String.fromCharCode(65 + i))}. ${escapeHtml(String(opt).replace(/^[A-D][.)]\s*/i, ""))}</div>`).join("")}</div>`
+        : `<div class="pt-lines">${Array.from({ length: Math.max(3, Math.ceil((Number(q.points) || 1) * 1.5)) }).map(() => `<div class="pt-line"></div>`).join("")}</div>`;
+      return `<section class="pt-question">
+        <div class="pt-question-head">
+          <span class="pt-qcode">[[${escapeHtml(qid)}]]</span>
+          <span class="pt-qpoints">/${escapeHtml(String(q.points ?? "-"))} b.</span>
+          <span class="pt-corner-qr">${scanSortQr(qid)}</span>
+        </div>
+        <div class="pt-qtext">${linesToHtml(q.text || "")}</div>
+        ${optionsHtml}
+      </section>`;
+    }).join("");
+    // Layout for anything inside a `break-inside: avoid` block deliberately avoids flexbox/grid
+    // here — printing flex/grid content that also needs page-break fragmentation is a known
+    // source of Chromium/WebKit pagination bugs (extra blank trailing pages, content vanishing
+    // near a page boundary). Plain block flow + floats paginate reliably everywhere instead.
+    openPrintWindow(`<!doctype html><html><head><meta charset="utf-8" /><title>VetBara test - ${escapeHtml(candidate.id)}</title><style>
+      @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+      header.pt-header{border-bottom:2px solid #102018;padding-bottom:5mm;margin-bottom:6mm}
+      header.pt-header::after{content:"";display:block;clear:both}
+      .pt-header-info{float:left;max-width:70%}
+      .pt-header-info h1{margin:0;font-size:15pt}
+      .pt-header-info p{margin:1.5mm 0 0;font-size:9.5pt;color:#516158}
+      .pt-header-code{font-family:ui-monospace,monospace;font-size:8.5pt;margin-top:1.5mm;color:#516158}
+      .pt-qr{float:right}
+      .pt-qr svg{width:24mm;height:24mm}
+      .pt-question{break-inside:avoid;margin-bottom:5mm;padding-bottom:3mm;border-bottom:1px solid #dbe3dd}
+      .pt-question-head{font-family:ui-monospace,monospace;font-size:8pt;color:#8a978f;margin-bottom:1.5mm}
+      .pt-question-head::after{content:"";display:block;clear:both}
+      .pt-qcode{float:left}
+      .pt-qpoints{float:left;margin-left:4mm}
+      .pt-corner-qr{float:right}
+      .pt-corner-qr svg{width:10mm;height:10mm}
+      .pt-qtext{font-weight:700;margin-bottom:2.5mm;font-size:11.5pt;clear:both}
+      .pt-options{margin-top:1mm}
+      .pt-option{margin:1.8mm 0;font-size:10.5pt}
+      .pt-checkbox{display:inline-block;width:4.5mm;height:4.5mm;border:1.5pt solid #102018;border-radius:1mm;margin-right:3mm;vertical-align:middle}
+      .pt-lines{margin-top:2mm}
+      .pt-line{border-bottom:1px solid #b9c3bb;height:1px;margin-bottom:6mm}
+      @media print{.actions{display:none}}
+    </style></head><body>
+      <div class="actions"><button onclick="window.print()">Tisk / PDF</button></div>
+      <header class="pt-header">
+        <div class="pt-header-info">
+          <h1>${escapeHtml(candidate.name || candidate.id)}</h1>
+          <p>${escapeHtml(candidate.id)} · ${escapeHtml(candidateLevel(candidate))} · ${escapeHtml(snapshot.variantCode || "")}</p>
+          <div class="pt-header-code">[[CANDIDATE:${escapeHtml(candidate.id)}]] [[VARIANT:${escapeHtml(snapshot.variantCode || "")}]]</div>
+        </div>
+        <div class="pt-qr">${qrMarkup}</div>
+      </header>
+      <main>${questionsHtml || `<p>Žádné otázky nebyly nalezeny pro tento variant.</p>`}</main>
+    </body></html>`);
+  }
+
+  const setupMeta = testImportSummary ? t("centre.status.packageLoaded") : t("centre.status.awaitingPackage");
+  const peopleMeta = `${candidates.length} ${t("centre.status.candidatesUnit")} · ${examiners.length} ${t("centre.status.examinersUnit")}`;
+  const accessMeta = centreValidationIssues.length ? `${centreValidationIssues.length} ${t("centre.status.issuesUnit")}` : t("centre.status.ready");
 
   return (
     <>
@@ -5677,37 +6990,19 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
       <div className={`lg:col-span-3 space-y-4 ${centreUnlocked ? "" : "pointer-events-none opacity-40"}`}>
         <AdminDashboardSection
           id="setup"
-          title="A - Nastavení zkoušky"
-          description="Načtení aktivního balíčku, výběr úrovní a uložení konfigurace centra. Tuto sekci použijte jako první před zahájením práce s kandidáty."
+          icon={ShieldCheck}
+          t={t}
+          title={t("centre.dashboard.setup.title")}
+          description={t("centre.dashboard.setup.description")}
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
           <div className="space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <h3 className="font-semibold">Nastavení zkoušky</h3>
-                <p className="mt-1 text-sm text-slate-600">Načtěte aktivní Admin balíček a uložte konfiguraci centra. Běžně stačí použít první dvě tlačítka a poté načíst aktivní balíček.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handleLoadCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreSetupLoading ? "Načítám..." : "Otevřít uložené nastavení"}</Button>
-                <Button onClick={handleSaveCentreSetup} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} className="rounded-2xl">{centreSetupSaving ? "Ukládám..." : "Uložit nastavení"}</Button>
-                <Button onClick={() => setShowCentreAdvanced((value) => !value)} variant="outline" className="rounded-2xl">Pokročilé nástroje</Button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill tone={testImportSummary ? "good" : "warn"}>{setupMeta}</StatusPill>
-              <StatusPill tone={centreSetupDirty ? "warn" : "good"}>{centreSetupDirty ? t("centre.setupPersistence.unsaved") : t("centre.setupPersistence.saved")}</StatusPill>
-              <StatusPill tone={dataMode === "backend" ? "good" : "warn"}>{dataMode === "backend" ? t("centre.dataMode.backend") : t("centre.dataMode.demo")}</StatusPill>
-            </div>
-            {centreSetupStatus && <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{centreSetupStatus}</div>}
-            {centreSetupError && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreSetupError}</div>}
-
             <CentreActivePackagePanel setVariants={setVariants} setAvailableVariants={setAvailableVariants} setTestBank={setTestBank} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} setTestImportSummary={setTestImportSummary} setCentreSetupDirty={setCentreSetupDirty} language={language} />
 
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border bg-white p-4">
-                <h3 className="mb-3 font-semibold">Úrovně zkoušky</h3>
+                <h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>
                 {EXAM_LEVELS.map((level) => (
                   <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm">
                     <input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} />
@@ -5716,8 +7011,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
                 ))}
               </div>
               <div className="rounded-2xl border bg-white p-4 lg:col-span-2">
-                <h3 className="font-semibold">Varianty zkoušky</h3>
-                <p className="mt-1 text-sm text-slate-600">Po načtení Admin balíčku se varianty nastaví automaticky. Ruční změna je jen pro kontrolní nebo migrační situace.</p>
+                <h3 className="font-semibold">{t("centre.dashboard.examVariants")}</h3>
+                <p className="mt-1 text-sm text-slate-600">{t("centre.dashboard.examVariantsHelper")}</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {EXAM_LEVELS.map((level) => {
                     const vars = availableVariants.filter((variant) => variant.level === level && variant.language === language);
@@ -5737,35 +7032,15 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
               </div>
             </div>
 
-            {showCentreAdvanced && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="font-semibold">Pokročilé nástroje</h3>
-                <p className="mt-1 text-sm text-slate-600">Servisní volby pro audit, ruční import starších balíčků a provozní kontroly. Běžný průchod zkouškou je obvykle nepotřebuje.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
-                    {t("centre.variants.import")}
-                    <input type="file" accept=".csv,.json,application/json,text/csv" onChange={importTestPackage} className="hidden" />
-                  </label>
-                  <Button onClick={handleDownloadCentreAuditPackage} disabled={centreSetupLoading || centreSetupSaving || centreAuditExportLoading} variant="outline" className="rounded-2xl">{centreAuditExportLoading ? t("centre.setupPersistence.exporting") : t("centre.setupPersistence.auditExport")}</Button>
-                </div>
-                {centreAuditExportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{centreAuditExportError}</div>}
-                <div className="mt-4 space-y-4">
-                  <VetCertRulesReference />
-                  <PilotReadinessGuardrails centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} />
-                  <PilotRunSummary centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} testImportSummary={testImportSummary} dataMode={dataMode} StatusPill={StatusPill} t={t} />
-                  <CentreNetworkReadinessChecklist StatusPill={StatusPill} t={t} />
-                  <PilotSmokeTestChecklist StatusPill={StatusPill} t={t} />
-                  <PilotReleaseNotesPanel StatusPill={StatusPill} t={t} />
-                </div>
-              </div>
-            )}
           </div>
         </AdminDashboardSection>
 
         <AdminDashboardSection
           id="field-preparation"
-          title="B - Příprava stanoviště"
-          description="Příprava terénní části zkoušky: zkušební centrum, fyzické stromy, přiřazení Practicing/Consulting A-D, data pro Practicing A, validace a kandidátské exporty."
+          icon={MapPin}
+          t={t}
+          title={t("centre.dashboard.fieldPrep.title")}
+          description={t("centre.dashboard.fieldPrep.description")}
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
@@ -5774,8 +7049,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
 
         <AdminDashboardSection
           id="people"
-          title="C - Kandidáti a zkoušející"
-          description="Správa kandidátů, zkoušejících a přiřazení primary/secondary examinerů. Seznam kandidátů i zkoušejících používá stejný typ editačních karet."
+          icon={Users}
+          t={t}
+          title={t("centre.dashboard.people.title")}
+          description={t("centre.dashboard.people.description")}
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
@@ -5783,31 +7060,31 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
             <div className="rounded-2xl border bg-white p-4">
               <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h3 className="font-semibold">Seznam kandidátů</h3>
-                  <p className="mt-1 text-sm text-slate-600">Zadejte kandidáty a jejich úroveň zkoušky.</p>
+                  <h3 className="font-semibold">{t("centre.candidates.title")}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{t("centre.candidates.helper")}</p>
                 </div>
                 <Button onClick={addCandidate} variant="outline" className="rounded-2xl">{t("centre.candidates.add")}</Button>
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {candidates.map((candidate) => <CandidateEditorCard key={candidate.id} candidate={candidate} />)}
+                {candidates.map((candidate) => <CandidateEditorCard key={candidate.id} candidate={candidate} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} removeCandidate={removeCandidate} updateCandidate={updateCandidate} candidatesCount={candidates.length} t={t} />)}
               </div>
             </div>
 
             <div className="rounded-2xl border bg-white p-4">
               <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h3 className="font-semibold">Seznam zkoušejících</h3>
-                  <p className="mt-1 text-sm text-slate-600">Přidejte nebo upravte zkoušející, kteří budou přiřazeni kandidátům.</p>
+                  <h3 className="font-semibold">{t("centre.examiners.title")}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{t("centre.examiners.helper")}</p>
                 </div>
-                <Button onClick={addExaminer} variant="outline" className="rounded-2xl">+ zkoušející</Button>
+                <Button onClick={addExaminer} variant="outline" className="rounded-2xl">{t("centre.examiners.add")}</Button>
               </div>
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {examiners.map((examiner) => <ExaminerEditorCard key={examiner.id} examiner={examiner} />)}
+                {examiners.map((examiner) => <ExaminerEditorCard key={examiner.id} examiner={examiner} removeExaminer={removeExaminer} updateExaminer={updateExaminer} examinersCount={examiners.length} t={t} />)}
               </div>
             </div>
 
             <div className="rounded-2xl border bg-white p-4">
-              <h3 className="mb-3 font-semibold">{t("centre.assignments.title")}</h3>
+              <div className="mb-3 flex items-center gap-1.5"><h3 className="font-semibold">{t("centre.assignments.title")}</h3><InfoTooltip text={t("centre.assignments.primarySecondaryHelp")} /></div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead><tr className="border-b text-left text-slate-500"><th className="py-2 pr-3">{t("centre.workflow.candidate")}</th><th className="py-2 pr-3">{t("centre.workflow.level")}</th><th className="py-2 pr-3">{t("centre.workflow.primaryExaminer")}</th><th className="py-2 pr-3">{t("centre.workflow.secondaryExaminer")}</th></tr></thead>
@@ -5834,8 +7111,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
 
         <AdminDashboardSection
           id="access"
-          title="D - Přístup a kontrola"
-          description="QR odkazy pro kandidáty a zkoušející, kontrola připravenosti a provozní přehled zkoušky."
+          icon={QrCodeIcon}
+          t={t}
+          title={t("centre.dashboard.access.title")}
+          description={t("centre.dashboard.access.description")}
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
@@ -5844,36 +7123,59 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
               <StatusPill tone={centreValidationIssues.length ? "warn" : "good"}>{accessMeta}</StatusPill>
               <StatusPill>{peopleMeta}</StatusPill>
             </div>
-            <CentreValidationSummary issues={centreValidationIssues} StatusPill={StatusPill} t={t} />
+            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintCandidateTest={printCandidateTest} />
             <CentreCandidateResultsOverview candidates={candidates} assignments={assignments} examiners={examiners} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorItemsByLevel={outdoorItemsByLevel} t={t} />
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">QR base URL</div>
-                  <p className="mt-1 text-sm text-slate-600">Production QR je výchozí a bezpečný. Local LAN QR použijte jen pro dočasné testování v místní síti.</p>
-                </div>
-                <StatusPill tone={qrBaseUrlMode === "local" ? "warn" : "good"}>
-                  {qrBaseUrlMode === "local" ? "Local LAN QR" : "Production QR"}
-                </StatusPill>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button onClick={() => setQrBaseUrlMode("production")} variant={qrBaseUrlMode === "production" ? "default" : "outline"} className="rounded-2xl">Production QR</Button>
-                <Button onClick={() => setQrBaseUrlMode("local")} variant={qrBaseUrlMode === "local" ? "default" : "outline"} className="rounded-2xl">Local LAN QR</Button>
-              </div>
-              {qrBaseUrlMode === "local" && (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                  <p className="text-xs text-amber-950">Local LAN linky fungují jen na stejné síti jako tento počítač a mohou se rozbít po změně Wi-Fi/routeru. Před distribucí kandidátům/examinerům zkontrolujte náhled odkazu níže.</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <input value={localQrBaseUrlInput} onChange={(e) => setLocalQrBaseUrlInput(e.target.value)} placeholder="http://192.168.0.186:3010" className="min-w-64 flex-1 rounded-xl border bg-white p-2 font-mono text-sm" />
-                    <Button onClick={applyLocalQrBaseUrl} className="rounded-2xl">Použít adresu</Button>
-                  </div>
-                  {localQrBaseUrlError && <p className="mt-2 text-sm font-medium text-rose-900">{localQrBaseUrlError}</p>}
-                  {localQrBaseUrl && !localQrBaseUrlError && <p className="mt-2 text-xs text-emerald-800">Aktivní Local LAN base URL: {localQrBaseUrl}</p>}
-                </div>
-              )}
-            </div>
-            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} />
           </div>
+        </AdminDashboardSection>
+
+        <AdminDashboardSection
+          id="review"
+          icon={ShieldCheck}
+          t={t}
+          title={t("centre.dashboard.review.title")}
+          description={t("centre.dashboard.review.description")}
+          activeSection={activeCentreSection}
+          setActiveSection={setActiveCentreSection}
+        >
+          <CentreReviewSection
+            candidates={candidates}
+            examiners={examiners}
+            variants={variants}
+            testBank={testBank}
+            testResponses={testResponses}
+            reportDrafts={reportDrafts}
+            outdoor={outdoor}
+            outdoorItemsByLevel={outdoorItemsByLevel}
+            candidateStatus={candidateStatus}
+            t={t}
+          />
+        </AdminDashboardSection>
+
+        <AdminDashboardSection
+          id="archive"
+          icon={FileSpreadsheet}
+          t={t}
+          title={t("centre.dashboard.archive.title")}
+          description={t("centre.dashboard.archive.description")}
+          activeSection={activeCentreSection}
+          setActiveSection={setActiveCentreSection}
+        >
+          <CentreArchiveSection
+            candidates={candidates}
+            examiners={examiners}
+            variants={variants}
+            testBank={testBank}
+            testResponses={testResponses}
+            reportDrafts={reportDrafts}
+            outdoor={outdoor}
+            outdoorNotes={outdoorNotes}
+            outdoorItemsByLevel={outdoorItemsByLevel}
+            audit={audit}
+            centreCode={centreCode}
+            examDate={examDate}
+            place={place}
+            t={t}
+          />
         </AdminDashboardSection>
       </div>
     </>
@@ -6011,7 +7313,7 @@ function candidateTreePreparationNote(preparationDraft, tree) {
 }
 
 function candidateTreeCharacteristics(tree) {
-  const data = tree?.managementData || tree?.practicingData || tree?.treeData || tree || {};
+  const data = tree?.managementData || tree?.practicingTreeAData || tree?.practicingData || tree?.treeData || tree || {};
   const textValue = (...keys) => keys.map((key) => data?.[key] ?? tree?.[key]).find((value) => value !== undefined && value !== null && String(value).trim() !== "") || "-";
   return [
     ["Taxon", textValue("taxon", "species", "treeSpecies")],
@@ -6058,6 +7360,7 @@ async function fetchCandidateFieldPackage(candidate) {
 }
 
 function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const resolvedWrittenSnapshot = loggedCandidate ? resolveCandidateWrittenSnapshot({ candidate: loggedCandidate, variants, testBank }) : { variantCode: "", questions: [] };
   const selectedVariantCode = resolvedWrittenSnapshot.variantCode || (loggedCandidate ? variants[loggedCandidate.level] : "");
   const candidateQuestionSnapshot = resolvedWrittenSnapshot.questions;
@@ -6177,13 +7480,13 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     if (!fullPackage) return;
 
     if (!Array.isArray(fullPackage.testQuestionsSnapshot) || !fullPackage.testQuestionsSnapshot.length) {
-      setLanPackageStatus("Balíček nelze uložit: chybí snapshot testových otázek z aktivního Admin/Centre balíčku. Nejprve v Centre načtěte aktuální test package a otevřete test znovu.");
+      setLanPackageStatus(t("candidate.offlineHandoff.missingSnapshot"));
       return;
     }
 
     setLanPackageSaving(true);
     setLanPackageSaved(false);
-    setLanPackageStatus("Ukládám balíček na lokální server...");
+    setLanPackageStatus(t("candidate.offlineHandoff.saving"));
 
     try {
       const response = await fetch("/api/local-exchange/packages", {
@@ -6199,10 +7502,10 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
       }
 
       setLanPackageSaved(true);
-      setLanPackageStatus(`Balíček uložen na lokální server: ${result.packageId}`);
+      setLanPackageStatus(tf("candidate.offlineHandoff.savedStatus", { packageId: result.packageId }));
     } catch (error) {
       console.error("LAN package save failed", error);
-      setLanPackageStatus(`Uložení na lokální server selhalo: ${error.message || "neznámá chyba"}. Použijte záložní JSON export.`);
+      setLanPackageStatus(tf("candidate.offlineHandoff.saveFailed", { message: error.message || "unknown error" }));
     } finally {
       setLanPackageSaving(false);
     }
@@ -6213,7 +7516,7 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">Předat uzavřený test a report zkoušejícímu</h4><p className="mt-1 text-sm text-slate-600">QR přenos mezi Candidate a Examiner je vypnutý. Balíček se uloží na lokální Vite server v rámci LAN a Examiner si jej načte ze svého portálu.</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={saveOfflineCandidatePackageToLan} disabled={lanPackageSaving || lanPackageSaved} className="rounded-2xl">{lanPackageSaving ? "Ukládám..." : lanPackageSaved ? "Uloženo na lokální server" : "Uložit balíček na lokální server"}</Button><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">Záložně stáhnout JSON balíček</Button></div>{lanPackageStatus && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{lanPackageStatus}</div>}<p className="mt-2 text-xs text-slate-500">Balíček obsahuje testové odpovědi, report, fotografie označené pro použití v reportu a snapshot testových otázek ({candidateQuestionSnapshot.length}).</p></div>}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{t("candidate.offlineHandoff.title")}</h4><p className="mt-1 text-sm text-slate-600">{t("candidate.offlineHandoff.qrDisabled")}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={saveOfflineCandidatePackageToLan} disabled={lanPackageSaving || lanPackageSaved} className="rounded-2xl">{lanPackageSaving ? t("candidate.offlineHandoff.saving") : lanPackageSaved ? t("candidate.offlineHandoff.saved") : t("candidate.offlineHandoff.saveToLan")}</Button><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">{t("candidate.offlineHandoff.downloadBackup")}</Button></div>{lanPackageStatus && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{lanPackageStatus}</div>}<p className="mt-2 text-xs text-slate-500">{tf("candidate.offlineHandoff.packageContains", { count: candidateQuestionSnapshot.length })}</p></div>}</div>}</div></div></CardContent></Card>;
 }
 
 function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition, heightClass = "h-[430px]", allowPan = true, minZoom = 17, maxZoom = 20, title = "Orientace na ploše", showHeader = true }) {
@@ -6490,7 +7793,7 @@ function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, st
     return t("candidate.section.locked");
   }
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">Candidate ID</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{!confirmed && [[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{confirmed && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-medium">{candidate.name}</div><div className="text-xs text-slate-500">{candidate.level}</div></div>}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{section.title}</h4><p className="mt-1 text-sm text-slate-600">{section.description}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? section.title : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{!confirmed && [[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{confirmed && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-medium">{candidate.name}</div><div className="text-xs text-slate-500">{candidate.level}</div></div>}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{section.title}</h4><p className="mt-1 text-sm text-slate-600">{section.description}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? section.title : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
 }
 
 
@@ -6804,8 +8107,6 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const galleryInputRef = useRef(null);
   const [fieldNotesDraft, setFieldNotesDraft] = useState(tree.fieldNotes ?? "");
   const [photoDescriptionDrafts, setPhotoDescriptionDrafts] = useState({});
-  const handwritingCanvasRef = useRef(null);
-  const handwritingDrawingRef = useRef(false);
   const [handwritingOpen, setHandwritingOpen] = useState(false);
 
   const label = (key, fallback) => {
@@ -6890,7 +8191,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
         loaded += 1;
         if (loaded + failed === files.length) {
-          setPhotoStatus(loaded === 1 ? t("report.photoAdded") : `Přidáno fotografií: ${loaded}`);
+          setPhotoStatus(loaded === 1 ? t("report.photoAdded") : t("report.photosAddedCount").replace("{count}", loaded));
           input.value = "";
         }
       };
@@ -6908,120 +8209,24 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   }
 
   function handleSubmitReport() {
-    const confirmed = window.confirm(
-      "Kontrola před odesláním reportu\n\nJe vyplněný report pro oba dva stromy (A+B)?\n\nJsou anotované fotografie k použití v reportu?\n\nPo potvrzení bude report odeslán a uzavřen."
-    );
+    const confirmed = window.confirm(t("report.submitConfirmation"));
     if (!confirmed) return;
     submitReport();
   }
 
-  function canvasPoint(event) {
-    const canvas = handwritingCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
-      y: ((event.clientY - rect.top) / rect.height) * canvas.height,
-    };
-  }
-
-  function startHandwriting(event) {
-    if (event.pointerType && event.pointerType !== "pen") return;
-    const canvas = handwritingCanvasRef.current;
-    if (!canvas) return;
-
-    event.preventDefault();
-    handwritingDrawingRef.current = true;
-    canvas.setPointerCapture?.(event.pointerId);
-
-    const ctx = canvas.getContext("2d");
-    const point = canvasPoint(event);
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(point.x, point.y);
-  }
-
-  function drawHandwriting(event) {
-    if (!handwritingDrawingRef.current) return;
-    if (event.pointerType && event.pointerType !== "pen") return;
-
-    event.preventDefault();
-    const canvas = handwritingCanvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    const point = canvasPoint(event);
-    ctx.lineTo(point.x, point.y);
-    ctx.stroke();
-  }
-
-  function stopHandwriting(event) {
-    handwritingDrawingRef.current = false;
-    handwritingCanvasRef.current?.releasePointerCapture?.(event.pointerId);
-  }
-
-  function clearHandwriting() {
-    const canvas = handwritingCanvasRef.current;
-    if (!canvas) return;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-  }
-
-  function saveHandwritingAsPhoto() {
-    const canvas = handwritingCanvasRef.current;
-    if (!canvas) return;
-
+  function saveHandwritingAsPhoto(dataUrl) {
     addReportPhoto(activeReportTree, {
       name: `handwriting-${activeReportTree}-${Date.now()}.png`,
       type: "image/png",
       size: 0,
-      dataUrl: canvas.toDataURL("image/png"),
-      description: "Rukopisná terénní poznámka",
+      dataUrl,
+      description: t("report.handwritingPhotoDescription"),
       useInReport: false,
       createdAt: new Date().toISOString(),
     });
 
-    setPhotoStatus("Rukopisná poznámka byla uložena mezi fotografie.");
+    setPhotoStatus(t("report.handwritingSaved"));
     setHandwritingOpen(false);
-  }
-
-  function HandwritingPad() {
-    return (
-      <div className={`${handwritingOpen ? "fixed inset-0 z-50 overflow-auto bg-white p-4" : "rounded-2xl border bg-white p-4"}`}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h4 className="text-lg font-semibold">Rukopisné poznámky</h4>
-            <p className="mt-1 text-sm text-slate-600">
-              Pište stylusem. Po uložení se rukopis uloží jako pracovní fotografie, standardně nezařazená do reportu.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => setHandwritingOpen((value) => !value)} variant="outline" className="rounded-2xl">
-              {handwritingOpen ? "Zavřít celou obrazovku" : "Otevřít na celou obrazovku"}
-            </Button>
-            <Button type="button" onClick={clearHandwriting} variant="outline" className="rounded-2xl">
-              Smazat rukopis
-            </Button>
-            <Button type="button" onClick={saveHandwritingAsPhoto} className="rounded-2xl">
-              Uložit rukopis mezi fotografie
-            </Button>
-          </div>
-        </div>
-        <canvas
-          ref={handwritingCanvasRef}
-          width={1600}
-          height={900}
-          onPointerDown={startHandwriting}
-          onPointerMove={drawHandwriting}
-          onPointerUp={stopHandwriting}
-          onPointerCancel={stopHandwriting}
-          className="h-[420px] w-full rounded-2xl border bg-white"
-          style={{ touchAction: "none" }}
-        />
-      </div>
-    );
   }
 
   function TreeTabs() {
@@ -7040,7 +8245,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
           >
             {treeName}
             <div className={`mt-1 text-sm font-normal ${activeReportTree === treeName ? "text-slate-200" : "text-slate-500"}`}>
-              Fotografie: {(draft[treeName]?.photos ?? []).length} · poznámky: {String(draft[treeName]?.fieldNotes ?? "").trim() ? "ano" : "ne"}
+              {t("report.photosCountLabel")}: {(draft[treeName]?.photos ?? []).length} · {t("report.fieldNotes")}: {String(draft[treeName]?.fieldNotes ?? "").trim() ? t("report.notesShortStatusYes") : t("report.notesShortStatusNo")}
             </div>
           </button>
         ))}
@@ -7072,13 +8277,13 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               </button>
 
               <label className="mt-3 block text-xs font-medium text-slate-600">
-                Popis fotografie
+                {t("report.photoDescription")}
                 <input
                   value={description}
                   maxLength={100}
                   onChange={(e) => setPhotoDescriptionDrafts((prev) => ({ ...prev, [photo.id]: e.target.value.slice(0, 100) }))}
                   onBlur={() => updateReportPhoto(activeReportTree, photo.id, { description })}
-                  placeholder="Krátký popis, max. 100 znaků"
+                  placeholder={t("report.photoDescriptionPlaceholder")}
                   className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
                 />
                 <span className="mt-1 block text-right text-[11px] text-slate-500">{description.length}/100</span>
@@ -7090,7 +8295,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                   checked={useInReport}
                   onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { useInReport: e.target.checked })}
                 />
-                Použít v reportu
+                {t("report.photoUseInReport")}
               </label>
             </div>
           );
@@ -7102,9 +8307,9 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   function FieldCollectionStep() {
     return (
       <div className="rounded-2xl border bg-white p-4">
-        <h3 className="text-2xl font-bold">Krok 1: Terénní sběr dat</h3>
+        <h3 className="text-2xl font-bold">{t("candidate.report.fieldCollection.title")}</h3>
         <p className="mt-1 text-sm text-slate-600">
-          Sbírejte pouze fotografie a terénní poznámky. Data se průběžně ukládají lokálně do tohoto zařízení.
+          {t("candidate.report.fieldCollection.helper")}
         </p>
 
         {TreeTabs()}
@@ -7112,15 +8317,15 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         <div className="mt-4 rounded-2xl bg-slate-100 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-lg font-semibold">Fotografie: {(tree.photos ?? []).length}</div>
-              <p className="mt-1 text-sm text-slate-600">Fotografie se ukládají lokálně do návrhu reportu.</p>
+              <div className="text-lg font-semibold">{t("report.photosCountLabel")}: {(tree.photos ?? []).length}</div>
+              <p className="mt-1 text-sm text-slate-600">{t("report.photosSavedLocallyHelper")}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" onClick={() => cameraInputRef.current?.click()} variant="outline" className="rounded-2xl">
-                Vyfotit fotografii
+                {t("report.takePhoto")}
               </Button>
               <Button type="button" onClick={() => galleryInputRef.current?.click()} variant="outline" className="rounded-2xl">
-                Vybrat z galerie
+                {t("report.selectFromGallery")}
               </Button>
               <input ref={cameraInputRef} type="file" accept="image/*,.heic,.heif" capture="environment" onChange={handlePhotoInputChange} className="hidden" />
               <input ref={galleryInputRef} type="file" accept="image/*,.heic,.heif" multiple onChange={handlePhotoInputChange} className="hidden" />
@@ -7132,13 +8337,13 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         </div>
 
         <div className="mt-4 rounded-2xl border bg-white p-4">
-          <h4 className="text-lg font-semibold">Terénní poznámky (nevstupují do reportu)</h4>
-          <p className="mt-1 text-sm text-slate-600">Tyto poznámky slouží jako pracovní podklad pro druhý krok.</p>
+          <h4 className="text-lg font-semibold">{t("report.fieldNotesPrivate")}</h4>
+          <p className="mt-1 text-sm text-slate-600">{t("report.fieldNotesPrivateHelper")}</p>
           <textarea
             value={fieldNotesDraft}
             onChange={(e) => setFieldNotesDraft(e.target.value)}
             onBlur={() => updateReport(activeReportTree, "fieldNotes", fieldNotesDraft, "fieldNotes")}
-            placeholder="Terénní pozorování a pracovní poznámky..."
+            placeholder={t("report.fieldPlaceholder")}
             className="mt-3 min-h-72 w-full rounded-xl border bg-white p-4 text-base"
             style={{ resize: "vertical" }}
             autoCapitalize="sentences"
@@ -7147,16 +8352,37 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
           />
         </div>
 
-        <div className="mt-4">
-          {HandwritingPad()}
+        <div className="mt-4 rounded-2xl border bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h4 className="text-lg font-semibold">{t("report.handwriting.title")}</h4>
+              <p className="mt-1 text-sm text-slate-600">{t("report.handwriting.helper")}</p>
+            </div>
+            <Button type="button" onClick={() => setHandwritingOpen(true)} className="rounded-2xl">
+              <Pencil className="mr-1 h-4 w-4" />{t("report.handwriting.open")}
+            </Button>
+          </div>
         </div>
+        {handwritingOpen && (
+          <HandwritingPad
+            onClose={() => setHandwritingOpen(false)}
+            onSave={saveHandwritingAsPhoto}
+            title={t("report.handwriting.title")}
+            helperText={t("report.handwriting.padHelper")}
+            t={t}
+            Button={Button}
+            CloseIcon={X}
+            EraserIcon={Eraser}
+            UndoIcon={Undo}
+          />
+        )}
 
         <div className="mt-4 flex flex-wrap gap-3">
           <Button onClick={saveFieldDataLocally} variant="outline" className="rounded-2xl">
-            Ulož lokálně pro pozdější zpracování
+            {t("report.saveFieldDataLocally")}
           </Button>
           <Button onClick={() => setReportStep("write")} className="rounded-2xl">
-            Pokračovat psaním reportu
+            {t("report.continueWriting")}
           </Button>
         </div>
       </div>
@@ -7170,15 +8396,15 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
           <div className="sticky top-0 z-10 mb-4 rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-2xl font-bold">Krok 2: Psaní Consulting reportu</h3>
+                <h3 className="text-2xl font-bold">{t("report.writingStepTitle")}</h3>
                 <p className="mt-1 text-sm text-slate-600">{candidate.name} · {activeReportTree}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => setReportStep("field")} variant="outline" className="rounded-2xl">
-                  Zpět do terénních dat
+                  {t("report.backToFieldData")}
                 </Button>
                 <Button onClick={handleSubmitReport} className="rounded-2xl">
-                  <Lock className="mr-2 h-4 w-4" /> Odeslat a uzavřít report
+                  <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
                 </Button>
               </div>
             </div>
@@ -7188,12 +8414,12 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <div className="rounded-2xl border bg-slate-50 p-4">
-              <h4 className="font-semibold">Terénní poznámky</h4>
+              <h4 className="font-semibold">{t("report.fieldNotes")}</h4>
               <div className="mt-2 max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-white p-3 text-sm">
                 {String(fieldNotesDraft ?? tree.fieldNotes ?? "").trim() || "-"}
               </div>
 
-              <h4 className="mt-4 font-semibold">Fotografie pro report</h4>
+              <h4 className="mt-4 font-semibold">{t("report.photosForReport")}</h4>
               <div className="mt-2 space-y-3">
                 {(tree.photos ?? []).map((photo) => {
                   const description = photoDescriptionDrafts[photo.id] ?? photo.description ?? "";
@@ -7212,13 +8438,13 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                       </button>
 
                       <label className="mt-3 block text-xs font-medium text-slate-600">
-                        Popis fotografie
+                        {t("report.photoDescription")}
                         <input
                           value={description}
                           maxLength={100}
                           onChange={(e) => setPhotoDescriptionDrafts((prev) => ({ ...prev, [photo.id]: e.target.value.slice(0, 100) }))}
                           onBlur={() => updateReportPhoto(activeReportTree, photo.id, { description })}
-                          placeholder="Krátký popis, max. 100 znaků"
+                          placeholder={t("report.photoDescriptionPlaceholder")}
                           className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950"
                         />
                         <span className="mt-1 block text-right text-[11px] text-slate-500">{description.length}/100</span>
@@ -7230,7 +8456,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                           checked={useInReport}
                           onChange={(e) => updateReportPhoto(activeReportTree, photo.id, { useInReport: e.target.checked })}
                         />
-                        Použít v reportu
+                        {t("report.photoUseInReport")}
                       </label>
                     </div>
                   );
@@ -7304,27 +8530,19 @@ function ExaminerView({
   setActiveOutdoorSection,
   outdoor,
   outdoorNotes,
+  outdoorNoteDrawings,
   outdoorItemsByLevel,
   setOutdoorItemsByLevel,
   updateOutdoor,
   updateOutdoorNote,
+  updateOutdoorNoteDrawing,
   outdoorTotal,
   outdoorMax,
   submitOutdoor,
   archivePlan,
   practicingArchive,
-  scoring,
   activeScoreLimits,
   updateScore,
-  generateEvaluation,
-  lastEvaluation,
-  loadEvaluationPreview,
-  evaluationPreview,
-  evaluationLoading,
-  evaluationError,
-  downloadDraftExport,
-  exportLoading,
-  exportError,
   variants,
   testBank,
   testResponses,
@@ -7345,7 +8563,7 @@ function ExaminerView({
             title={t("examiner.view.title")}
             subtitle={t("examiner.view.subtitle")}
           />
-          <VetCertRulesReference />
+          <VetCertRulesReference t={t} />
           <ExaminerQuickHelp t={t} />
           {loggedExaminer && (
             <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
@@ -7425,6 +8643,7 @@ function ExaminerView({
                   scoringLimits={activeScoreLimits}
                   updateScore={updateScore}
                   setActivePage={setActivePage}
+                  examinerName={loggedExaminer?.name}
                   t={t}
                 />
               ) : activePage === "reportReview" ? (
@@ -7433,6 +8652,7 @@ function ExaminerView({
                   reportDrafts={reportDrafts}
                   openWrittenReview={openWrittenReview}
                   setActivePage={setActivePage}
+                  examinerName={loggedExaminer?.name}
                   t={t}
                 />
               ) : (
@@ -7443,16 +8663,19 @@ function ExaminerView({
                   setActiveOutdoorSection={setActiveOutdoorSection}
                   outdoor={outdoor}
                   outdoorNotes={outdoorNotes}
+                  outdoorNoteDrawings={outdoorNoteDrawings}
                   outdoorItemsByLevel={outdoorItemsByLevel}
                   setOutdoorItemsByLevel={setOutdoorItemsByLevel}
                   updateOutdoor={updateOutdoor}
                   updateOutdoorNote={updateOutdoorNote}
+                  updateOutdoorNoteDrawing={updateOutdoorNoteDrawing}
                   outdoorTotal={outdoorTotal}
                   outdoorMax={outdoorMax}
                   submitOutdoor={submitOutdoor}
                   archivePlan={archivePlan}
                   practicingArchive={practicingArchive}
                   setActivePage={setActivePage}
+                  examinerName={loggedExaminer?.name}
                   time={examinerTimes[selectedCandidate.id]?.outdoor}
                   t={t}
                 />
@@ -7462,26 +8685,6 @@ function ExaminerView({
         </CardContent>
       </Card>
 
-      {activePage === "scoring" && <ScoringCard
-        selectedCandidate={selectedCandidate}
-        assignment={assignments[selectedCandidate.id]}
-        scoring={scoring}
-        updateScore={updateScore}
-        generateEvaluation={generateEvaluation}
-        lastEvaluation={lastEvaluation}
-        loadEvaluationPreview={loadEvaluationPreview}
-        evaluationPreview={evaluationPreview}
-        evaluationLoading={evaluationLoading}
-        evaluationError={evaluationError}
-        downloadDraftExport={downloadDraftExport}
-        exportLoading={exportLoading}
-        exportError={exportError}
-        variants={variants}
-        testBank={testBank}
-        testResponses={testResponses}
-        reportDrafts={reportDrafts}
-        t={t}
-      />}
     </>
   );
 }
@@ -8436,18 +9639,23 @@ function examinerChoiceAutoScore(question, candidate, index, value) {
   return fullyCorrect ? writtenQuestionMax(question) : 0;
 }
 
-function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResponses, importedCandidatePackages, scoringLimits, updateScore, setActivePage, t }) {
+function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResponses, importedCandidatePackages, scoringLimits, updateScore, setActivePage, examinerName, t }) {
   const [showExamInfo, setShowExamInfo] = useState(false);
   const [questionScores, setQuestionScores] = useState({});
+  // Manual scores only live in local state until the examiner clicks the final "submit and
+  // close" button — there's no per-question save request to confirm. Flash a brief "Uloženo"
+  // next to a question right after its score changes, so entering a number visibly registers.
+  const [justSavedScoreId, setJustSavedScoreId] = useState(null);
+  const savedScoreTimeoutRef = useRef(null);
 
   if (!selectedCandidate) {
     return (
       <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
         <Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">
-          Zpět na seznam kandidátů
+          {t("examiner.candidates.backToList")}
         </Button>
         <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
-          Není vybraný kandidát pro opravu testu.
+          {t("examiner.writtenReview.noCandidateSelected")}
         </div>
       </div>
     );
@@ -8541,59 +9749,102 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
       ...prev,
       [question.id]: score,
     }));
+
+    setJustSavedScoreId(question.id);
+    clearTimeout(savedScoreTimeoutRef.current);
+    savedScoreTimeoutRef.current = setTimeout(() => setJustSavedScoreId(null), 1500);
   }
 
   function applyManualWrittenScore() {
-    const ok = window.confirm(`Odeslat a uzavřít TEST pro ${selectedCandidate.name}?\n\nVýsledek: ${manualTotal} / ${manualMax || writtenMax} bodů.`);
+    const ok = window.confirm(t("examiner.writtenReview.submitConfirmation").replace("{name}", selectedCandidate.name).replace("{total}", manualTotal).replace("{max}", manualMax || writtenMax));
     if (!ok) return;
     updateScore("written", manualTotal, { closed: true });
+  }
+
+  function printWrittenReviewPdf() {
+    const bodyHtml = reviewItems.map((item, index) => {
+      const question = item.question;
+      const isChoice = Array.isArray(question.options) && question.options.length > 0;
+      const value = item.answer ?? responses[question.id];
+      const answered = item.hasAnswer || (value !== undefined && value !== null && String(value).trim() !== "");
+      const max = writtenQuestionMax(question);
+      const autoChoiceScore = examinerChoiceAnswerIsFullyCorrect(question, selectedCandidate, index, value) ? writtenQuestionMax(question) : 0;
+      const manualDisplayedScore = questionScores[question.id] ?? review.scores?.[question.id] ?? 0;
+      const pointsAwarded = autoChoiceScore || manualDisplayedScore;
+      const help = writtenScoringHelp(question, selectedCandidate, index);
+      const optionsHtml = isChoice
+        ? `<div>${question.options.map((opt, i) => {
+            const optionLabel = String.fromCharCode(65 + i);
+            const selected = selectedOptionIndexes(question, value).includes(i);
+            return `<div class="exam-answer${selected ? (autoChoiceScore ? " correct" : " incorrect") : ""}">${selected ? "☑" : "☐"} ${escapeHtml(optionLabel)}. ${escapeHtml(String(opt).replace(/^[A-D][.)]\s*/i, ""))}</div>`;
+          }).join("")}</div>`
+        : `<div class="exam-answer">${answered ? linesToHtml(String(value ?? "")) : `<em>${escapeHtml(t("centre.review.noAnswer") || "Bez odpovědi")}</em>`}</div>`;
+      return `<section class="exam-block">
+        <div class="exam-block-head"><span>[[${escapeHtml(question.id)}]]</span><span>${index + 1}. ${escapeHtml(question.section || "-")}</span></div>
+        <div class="exam-title">${escapeHtml(question.text || "")}</div>
+        ${optionsHtml}
+        ${help ? `<div class="exam-help">${escapeHtml(help)}</div>` : ""}
+        <div style="margin-top:2mm"><span class="exam-score">${pointsAwarded} / ${max} b.</span></div>
+      </section>`;
+    }).join("");
+    const totalHtml = `<div class="exam-total">Celkem: ${manualTotal} / ${manualMax || writtenMax} b.</div>`;
+    openPrintDocument(examinerPdfShellHtml({
+      docTitle: "Kontrola písemného testu",
+      candidate: selectedCandidate,
+      examinerName,
+      metaLine: `Varianta: ${review.variantCode || "-"} · Odpovězeno: ${answeredCount} / ${questions.length}`,
+      bodyHtml: bodyHtml + totalHtml,
+    }));
   }
 
   return (
     <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-bold">Oprava písemného testu</h3>
+          <h3 className="text-2xl font-bold">{t("examiner.writtenReview.title")}</h3>
           <p className="mt-1 text-sm text-slate-600">
             {selectedCandidate.name} · {selectedCandidate.id} · {selectedCandidate.level}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Varianta: {review.variantCode || "-"} · Odpovězeno: {answeredCount} / {questions.length}
+            {t("examiner.writtenReview.variant")}: {review.variantCode || "-"} · {t("examiner.writtenReview.answered")}: {answeredCount} / {questions.length}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setShowExamInfo((value) => !value)} variant="outline" className="rounded-2xl">
-            Info k hodnocení
+            {t("examiner.writtenReview.scoringInfo")}
           </Button>
           {selectedCandidate.level === "Consulting" && (
             <Button onClick={() => setActivePage("reportReview")} variant="outline" className="rounded-2xl">
-              Přejít na kontrolu reportu
+              {t("examiner.writtenReview.goToReportReview")}
             </Button>
           )}
           <Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl">
-            Zpět na seznam kandidátů
+            {t("examiner.candidates.backToList")}
+          </Button>
+          <Button onClick={printWrittenReviewPdf} variant="outline" className="rounded-2xl">
+            {t("examiner.pdfWithGrading")}
           </Button>
           <Button onClick={applyManualWrittenScore} className="rounded-2xl">
-            Odeslat a uzavřít TEST
+            {t("examiner.writtenReview.submitAndClose")}
           </Button>
         </div>
       </div>
 
       {importedPackage && (
         <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-          <div className="font-semibold">Importovaný kandidátský balíček</div>
+          <div className="font-semibold">{t("examiner.writtenReview.importedPackageLabel")}</div>
           <div className="mt-1 grid gap-1 md:grid-cols-2">
-            <div>Varianta: <strong>{importedPackage.variantCode || "-"}</strong></div>
-            <div>Vytvořeno: <strong>{importedPackage.createdAt ? new Date(importedPackage.createdAt).toLocaleString() : "-"}</strong></div>
+            <div>{t("examiner.writtenReview.variant")}: <strong>{importedPackage.variantCode || "-"}</strong></div>
+            <div>{t("examiner.writtenReview.createdLabel")}: <strong>{importedPackage.createdAt ? new Date(importedPackage.createdAt).toLocaleString() : "-"}</strong></div>
             <div>Admin package: <strong>{importedPackage.activeAdminPackage?.packageId || "-"}</strong></div>
-            <div>Snapshot otázek: <strong>{Array.isArray(importedQuestions) ? importedQuestions.length : 0}</strong></div>
+            <div>{t("examiner.writtenReview.questionSnapshot")}: <strong>{Array.isArray(importedQuestions) ? importedQuestions.length : 0}</strong></div>
           </div>
         </div>
       )}
 
       {showExamInfo && (
         <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
-          <div className="mb-2 font-semibold">Celkové informace k hodnocení písemné části</div>
+          <div className="mb-2 font-semibold">{t("examiner.writtenReview.scoringInfoHeading")}</div>
           <div className="whitespace-pre-wrap">{writtenExamInfo(selectedCandidate.level)}</div>
         </div>
       )}
@@ -8618,33 +9869,30 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
       </div>
 
       <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        Hodnoticí nápověda je určena pouze pro Examinera. Candidate ji nikdy nevidí. Správné odpovědi ani answer key se v Candidate rozhraní nezobrazují.
+        {t("examiner.writtenReview.examinerOnlyNotice")}
       </div>
 
       {variantLanguageFromCode(review.variantCode) && variantLanguageFromCode(review.variantCode) !== variantLanguageFromCode(importedPackage?.variantCode || review.variantCode) && (
         <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">
-          Jazyk testové varianty neodpovídá jazyku kandidátského balíčku. Hodnocení musí používat přesný snapshot z Admin/Centre balíčku.
+          {t("examiner.writtenReview.languageMismatchWarning")}
         </div>
       )}
 
       {Boolean(importedPackage) && reviewQuestions.length === 0 && (
         <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">
-          Tento importovaný kandidátský balíček neobsahuje snapshot testových otázek z Centre/Admin balíčku.
-          Examiner proto může vidět lokální fallback variantu, která nemusí odpovídat jazyku ani obsahu reálné zkoušky.
-          Po této opravě je nutné kandidátský balíček vytvořit znovu.
+          {t("examiner.writtenReview.missingQuestionSnapshotWarning")}
         </div>
       )}
 
       <div className="space-y-3">
         {!hasStrictQuestions && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-950">
-            Tato testová varianta nemá načtené otázky z Admin/Centre balíčku: {effectiveVariantCode}.
-            Test se nesmí automaticky přepnout na jiný jazyk nebo lokální fallback.
+            {t("examiner.writtenReview.noQuestionsLoadedWarning").replace("{variant}", effectiveVariantCode)}
           </div>
         )}
         {questions.length === 0 ? (
           <div className="rounded-xl border bg-amber-50 p-3 text-sm text-amber-950">
-            Pro vybranou variantu testu nejsou dostupné otázky nebo nebyl načten test bank pro tuto variantu.
+            {t("examiner.writtenReview.noQuestionsAvailable")}
           </div>
         ) : reviewItems.map((item, index) => {
           const question = item.question;
@@ -8666,7 +9914,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
           return (
             <div key={question.id} className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-[130px_1fr]">
               <div className="rounded-2xl border bg-slate-50 p-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Body</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("common.pointsLabel")}</div>
                 <input
                   type="number"
                   min="0"
@@ -8678,12 +9926,17 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                 />
                 <div className="mt-1 text-xs text-slate-500">max. {max}</div>
                 <StatusPill tone={answered ? "good" : "warn"}>{answered ? "Answered" : "Unanswered"}</StatusPill>
+                {justSavedScoreId === question.id && (
+                  <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                    <Check className="h-3.5 w-3.5" /> {t("examiner.writtenReview.scoreSaved")}
+                  </div>
+                )}
               </div>
 
               <div>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="font-mono text-xs text-slate-500">
-                    {index + 1}. {question.id} · {question.section || "-"} · {max} bodů
+                    {index + 1}. {question.id} · {question.section || "-"} · {max} {t("common.points")}
                   </div>
                 </div>
 
@@ -8691,7 +9944,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
 
                 {isSectionAChoice && isChoice ? (
                   <div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm">
-                    <div className="mb-2 font-semibold">Možnosti odpovědi</div>
+                    <div className="mb-2 font-semibold">{t("examiner.writtenReview.answerOptions")}</div>
                     <div className="space-y-2">
                       {question.options.map((option, optionIndex) => {
                         const letter = optionLetter(option, optionIndex);
@@ -8712,8 +9965,8 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                                 <span className="font-bold">{letter}.</span> {String(option).replace(/^[A-D][\).:\s-]*/i, "")}
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {selected && <StatusPill tone={correct ? "good" : "bad"}>odpověď kandidáta</StatusPill>}
-                                {correct && <StatusPill tone="good">správná odpověď</StatusPill>}
+                                {selected && <StatusPill tone={correct ? "good" : "bad"}>{t("examiner.writtenReview.candidateAnswer")}</StatusPill>}
+                                {correct && <StatusPill tone="good">{t("examiner.writtenReview.correctAnswer")}</StatusPill>}
                               </div>
                             </div>
                           </div>
@@ -8721,14 +9974,14 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                       })}
                     </div>
                     <div className="mt-3 rounded-xl bg-white p-3 text-sm">
-                      Automaticky předvyplněné body: <strong>{autoChoiceScore}</strong> / {max}
+                      {t("examiner.writtenReview.autoPrefilledPoints")}: <strong>{autoChoiceScore}</strong> / {max}
                     </div>
                   </div>
                 ) : (
                   <>
                     {isChoice && (
                       <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
-                        <div className="mb-2 font-semibold">Možnosti odpovědi</div>
+                        <div className="mb-2 font-semibold">{t("examiner.writtenReview.answerOptions")}</div>
                         <div className="space-y-2">
                           {question.options.map((option, optionIndex) => {
                             const letter = optionLetter(option, optionIndex);
@@ -8751,8 +10004,8 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                                     <span className="font-bold">{letter}.</span> {String(option).replace(/^[A-D][\).:\s-]*/i, "")}
                                   </div>
                                   <div className="flex flex-wrap gap-2">
-                                    {selected && <StatusPill tone={correct ? "good" : "bad"}>odpověď kandidáta</StatusPill>}
-                                    {correct && <StatusPill tone="good">správná odpověď</StatusPill>}
+                                    {selected && <StatusPill tone={correct ? "good" : "bad"}>{t("examiner.writtenReview.candidateAnswer")}</StatusPill>}
+                                    {correct && <StatusPill tone="good">{t("examiner.writtenReview.correctAnswer")}</StatusPill>}
                                   </div>
                                 </div>
                               </div>
@@ -8764,7 +10017,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
 
                     <div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm">
                       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Odpověď kandidáta
+                        {t("examiner.writtenReview.candidateAnswer")}
                       </div>
                       <div className="whitespace-pre-wrap text-slate-900">
                         {answered ? String(value) : "-"}
@@ -8773,7 +10026,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
 
                     <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
                       <div className="whitespace-pre-wrap">
-                        {help || "Hodnoticí pomoc není v aktuálně načteném admin balíčku dostupná."}
+                        {help || t("examiner.writtenReview.noScoringHelpAvailable")}
                       </div>
                     </div>
                   </>
@@ -8787,125 +10040,15 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
   );
 }
 
-function ExaminerLocalPackageExchange({ importOfflineCandidatePackageData, setActivePage, setSelectedCandidateId, setImportedCandidatePackages, testBank }) {
-  const [packages, setPackages] = useState([]);
-  const [status, setStatus] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function loadPackages() {
-    setLoading(true);
-    setStatus("Načítám balíčky z lokálního serveru...");
-
-    try {
-      const response = await fetch("/api/local-exchange/packages");
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-
-      setPackages(data.packages ?? []);
-      setStatus(`Načteno balíčků: ${(data.packages ?? []).length}`);
-    } catch (error) {
-      console.error("LAN package list failed", error);
-      setStatus(`Načtení balíčků selhalo: ${error.message || "neznámá chyba"}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function importPackage(packageId) {
-    setLoading(true);
-    setStatus(`Importuji balíček ${packageId}...`);
-
-    try {
-      const response = await fetch(`/api/local-exchange/packages/${encodeURIComponent(packageId)}`);
-      const raw = await response.text();
-
-      let data = null;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(`Server nevrátil JSON. HTTP ${response.status}. Začátek odpovědi: ${raw.slice(0, 160)}`);
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
-      }
-
-      if (!data?.candidateId) {
-        throw new Error(`Balíček neobsahuje candidateId. Klíče: ${Object.keys(data || {}).join(", ")}`);
-      }
-
-      if (data?.kind !== "vetbara.offlineCandidatePackage.v1") {
-        throw new Error(`Neplatný typ balíčku: ${data?.kind || "chybí kind"}`);
-      }
-
-      const normalizedImportedPackage = normalizeOfflineCandidatePackageForImport(data, testBank);
-      const imported = importOfflineCandidatePackageData(normalizedImportedPackage);
-
-      if (imported === false) {
-        throw new Error("importOfflineCandidatePackageData vrátil false.");
-      }
-
-      setImportedCandidatePackages?.((prev) => ({
-        ...prev,
-        [data.candidateId]: normalizedImportedPackage,
-      }));
-
-      setSelectedCandidateId?.(data.candidateId);
-      setStatus(`Balíček importován: ${data.candidateName || data.candidateId} (${data.level || "-"})`);
-      setActivePage("writtenReview");
-    } catch (error) {
-      console.error("LAN package import failed", error);
-      setStatus(`Import balíčku selhal: ${error.message || "neznámá chyba"}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="font-semibold">LAN balíčky kandidátů</h3>
-          <p className="mt-1 text-sm text-slate-600">
-            Načtení uzavřeného testu a reportu uloženého kandidátem na lokální Vite server.
-          </p>
-        </div>
-        <Button onClick={loadPackages} disabled={loading} variant="outline" className="rounded-2xl">
-          {loading ? "Načítám..." : "Načíst balíčky ze serveru"}
-        </Button>
-      </div>
-
-      {status && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{status}</div>}
-
-      {packages.length > 0 && (
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {packages.map((pkg) => (
-            <div key={pkg.packageId} className="rounded-xl border bg-white p-3 text-sm">
-              <div className="font-semibold">{pkg.candidateName || pkg.candidateId}</div>
-              <div className="text-xs text-slate-500">{pkg.candidateId} · {pkg.level} · {pkg.variantCode || "-"}</div>
-              <div className="mt-1 text-xs text-slate-500">Uloženo: {pkg.storedAt || pkg.createdAt || "-"}</div>
-              <div className="mt-1 text-xs text-slate-500">Fotografie: {pkg.reportPhotoCount ?? 0}</div>
-              <Button onClick={() => importPackage(pkg.packageId)} disabled={loading} className="mt-3 rounded-2xl">
-                Importovat balíček
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, t }) {
+function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, t }) {
   if (!selectedCandidate) {
     return (
       <div className="rounded-2xl border bg-white p-4">
         <Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">
-          Zpět na seznam kandidátů
+          {t("examiner.candidates.backToList")}
         </Button>
         <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
-          Není vybraný kandidát pro kontrolu reportu.
+          {t("examiner.reportReview.noCandidateSelected")}
         </div>
       </div>
     );
@@ -8925,28 +10068,56 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
     };
   });
 
+  function printReportReviewPdf() {
+    const bodyHtml = treeSummaries.map(({ treeName, tree, reportPhotos, completedSections }) => {
+      const photosHtml = reportPhotos.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:3mm;margin:2mm 0">${reportPhotos.map((photo) => photo.dataUrl ? `<img src="${photo.dataUrl}" alt="" style="width:38mm;height:28mm;object-fit:cover;border-radius:6px;border:1px solid #dbe3dd" />` : "").join("")}</div>`
+        : `<p class="exam-help">${escapeHtml(t("examiner.reportReview.noPhotos"))}</p>`;
+      const sectionsHtml = REPORT_SECTIONS.map((section) => {
+        const value = String(tree.finalSections?.[section.key] ?? "").trim();
+        return `<div style="margin-top:2mm"><div class="exam-block-head" style="margin-bottom:0.5mm">${escapeHtml(section.title)}</div><div class="exam-answer">${value ? linesToHtml(value) : `<em>${escapeHtml(t("examiner.reportReview.missing"))}</em>`}</div></div>`;
+      }).join("");
+      return `<section class="exam-block">
+        <div class="exam-title">${escapeHtml(treeName)} <span class="exam-score">${completedSections} / ${REPORT_SECTIONS.length}</span></div>
+        <div class="exam-block-head">${escapeHtml(t("examiner.reportReview.fieldNotesLabel"))}</div>
+        <div class="exam-answer">${String(tree.fieldNotes ?? "").trim() ? linesToHtml(tree.fieldNotes) : "-"}</div>
+        ${photosHtml}
+        ${sectionsHtml}
+      </section>`;
+    }).join("");
+    openPrintDocument(examinerPdfShellHtml({
+      docTitle: "Kontrola Consulting reportu",
+      candidate: selectedCandidate,
+      examinerName,
+      bodyHtml,
+    }));
+  }
+
   return (
     <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-bold">Kontrola Consulting reportu</h3>
+          <h3 className="text-2xl font-bold">{t("examiner.reportReview.title")}</h3>
           <p className="mt-1 text-sm text-slate-600">
             {selectedCandidate.name} · {selectedCandidate.id} · {selectedCandidate.level}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => openWrittenReview?.(selectedCandidate.id)} variant="outline" className="rounded-2xl">
-            Přejít na opravu testu
+            {t("examiner.reportReview.goToWrittenReview")}
           </Button>
           <Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl">
-            Zpět na seznam kandidátů
+            {t("examiner.candidates.backToList")}
+          </Button>
+          <Button onClick={printReportReviewPdf} variant="outline" className="rounded-2xl">
+            {t("examiner.pdfWithGrading")}
           </Button>
         </div>
       </div>
 
       {selectedCandidate.level !== "Consulting" && (
         <div className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">
-          Tento kandidát není Consulting. Report review je určený pouze pro Consulting level.
+          {t("examiner.reportReview.consultingOnlyWarning")}
         </div>
       )}
 
@@ -8957,18 +10128,18 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
               <div>
                 <h4 className="text-xl font-bold">{treeName}</h4>
                 <p className="text-sm text-slate-600">
-                  Vyplněno sekcí: {completedSections} / {REPORT_SECTIONS.length}
+                  {t("examiner.reportReview.completedSectionsLabel")}: {completedSections} / {REPORT_SECTIONS.length}
                 </p>
               </div>
               <StatusPill tone={completedSections === REPORT_SECTIONS.length ? "good" : "warn"}>
-                {completedSections === REPORT_SECTIONS.length ? "Kompletní" : "Neúplné"}
+                {completedSections === REPORT_SECTIONS.length ? t("examiner.reportReview.complete") : t("examiner.reportReview.incomplete")}
               </StatusPill>
             </div>
 
             <div className="rounded-xl border bg-white p-3">
-              <h5 className="font-semibold">Fotografie použité v reportu</h5>
+              <h5 className="font-semibold">{t("examiner.reportReview.photosLabel")}</h5>
               {reportPhotos.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">Žádné fotografie označené pro report.</p>
+                <p className="mt-2 text-sm text-slate-500">{t("examiner.reportReview.noPhotos")}</p>
               ) : (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {reportPhotos.map((photo) => (
@@ -8982,7 +10153,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
                           <img src={photo.dataUrl} alt={photo.description || photo.name || photo.id} className="h-full w-full object-cover" />
                         ) : (
                           <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                            Bez obrazových dat
+                            {t("report.photoNoImageData")}
                           </div>
                         )}
                       </div>
@@ -8995,9 +10166,9 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
             </div>
 
             <div className="mt-3 rounded-xl border bg-white p-3">
-              <h5 className="font-semibold">Terénní poznámky kandidáta</h5>
+              <h5 className="font-semibold">{t("examiner.reportReview.fieldNotesLabel")}</h5>
               <p className="mt-1 text-xs text-slate-500">
-                Pracovní podklad kandidáta. Nevstupuje do finálního reportu.
+                {t("examiner.reportReview.fieldNotesHelper")}
               </p>
               <div className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-100 p-3 text-sm">
                 {String(tree.fieldNotes ?? "").trim() || "-"}
@@ -9012,7 +10183,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
                   <div key={section.key} className="rounded-xl border bg-white p-3">
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                       <h5 className="font-semibold">{section.title}</h5>
-                      <StatusPill tone={value ? "good" : "warn"}>{value ? "Vyplněno" : "Chybí"}</StatusPill>
+                      <StatusPill tone={value ? "good" : "warn"}>{value ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill>
                     </div>
                     <div className="whitespace-pre-wrap text-sm text-slate-700">
                       {value || "-"}
@@ -9066,25 +10237,6 @@ function examinerReportSummary(candidate, reportDrafts) {
     photos: review.photos,
     complete: review.totalSections > 0 && review.filledSections >= review.totalSections,
   };
-}
-
-function ResultActionButton({ disabled, tone = "default", onClick, children, title }) {
-  const toneClass = tone === "good"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-    : tone === "warn"
-      ? "border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100"
-      : "border-slate-200 bg-white text-slate-950 hover:bg-slate-50";
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full rounded-xl border px-3 py-2 text-left text-sm font-medium transition ${toneClass} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
-    >
-      {children}
-    </button>
-  );
 }
 
 function CentreCandidateResultsOverview({ candidates, assignments, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel }) {
@@ -9363,7 +10515,8 @@ function ExaminerLanding({
   );
 }
 
-function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, setActivePage, time, t }) {
+function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorNoteDrawings, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, updateOutdoorNoteDrawing, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, setActivePage, examinerName, time, t }) {
+  const [drawingItemId, setDrawingItemId] = useState(null);
   const outdoorSections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, selectedCandidate.level);
   const effectiveActiveOutdoorSection = outdoorSections.includes(activeOutdoorSection)
     ? activeOutdoorSection
@@ -9409,14 +10562,37 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
   const total = outdoorSections.reduce((sum, section) => sum + outdoorTotal(selectedCandidate.id, selectedCandidate.level, section), 0);
   const max = outdoorSections.reduce((sum, section) => sum + outdoorMax(selectedCandidate.level, section), 0) || scoreLimits(selectedCandidate.level).outdoorMax;
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className={isOutdoorFallback ? "text-amber-700" : "text-emerald-700"}>{isOutdoorFallback ? "Outdoor source: demo fallback" : "Outdoor source: active Admin package"}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><Button onClick={archivePlan} variant="outline" className="mt-3 w-full rounded-2xl">{t("outdoor.paperArchive.button")}</Button><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div></div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /></div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div>;
-}
+  function printOutdoorPdf() {
+    const scores = outdoor[selectedCandidate.id] ?? {};
+    const notes = outdoorNotes[selectedCandidate.id] ?? {};
+    const drawings = outdoorNoteDrawings[selectedCandidate.id] ?? {};
+    const bodyHtml = outdoorSections.map((section) => {
+      const items = effectiveOutdoorItemsForLevel(outdoorItemsByLevel, selectedCandidate.level)?.[section] ?? [];
+      const itemsHtml = items.map((item) => {
+        const score = scores[item.id];
+        const note = notes[item.id];
+        const drawing = drawings[item.id];
+        return `<section class="exam-block">
+          <div class="exam-block-head"><span>[[${escapeHtml(item.id)}]]</span></div>
+          <div class="exam-title">${linesToHtml(item.text || "")}</div>
+          <div style="margin-top:2mm"><span class="exam-score">${score !== undefined && score !== "" ? score : "-"} / ${item.max} b.</span></div>
+          ${note ? `<div class="exam-block-head" style="margin-top:2mm">Poznámka examinera</div><div class="exam-answer">${linesToHtml(note)}</div>` : ""}
+          ${drawing ? `<img class="exam-sketch" src="${drawing}" alt="Poznámka examinera - náčrt" />` : ""}
+        </section>`;
+      }).join("");
+      return `<h2 style="font-size:12.5pt;margin:4mm 0 2mm">${escapeHtml(outdoorSectionTitle(section))}</h2>${itemsHtml}`;
+    }).join("");
+    const totalHtml = `<div class="exam-total">Celkem: ${total} / ${max} b.</div>`;
+    openPrintDocument(examinerPdfShellHtml({
+      docTitle: "Kontrola outdoor formuláře",
+      candidate: selectedCandidate,
+      examinerName,
+      metaLine: `${t("common.opened")}: ${time?.openedAt || "-"} · ${t("common.closed")}: ${time?.closedAt || "-"}`,
+      bodyHtml: bodyHtml + totalHtml,
+    }));
+  }
 
-function ScoringCard({ selectedCandidate, assignment, scoring, updateScore, generateEvaluation, lastEvaluation, loadEvaluationPreview, evaluationPreview, evaluationLoading, evaluationError, downloadDraftExport, exportLoading, exportError, variants, testBank, testResponses, reportDrafts, t }) {
-  const writtenReview = computeWrittenTestReview(selectedCandidate, variants, testBank, testResponses);
-  const reportReview = computeReportReview(reportDrafts?.[selectedCandidate.id] ?? createReportDraft());
-
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={BadgeCheck} title={t("scoring.title")} subtitle={t("scoring.subtitle")} /><div className="grid gap-4"><div className="rounded-2xl border bg-white p-4"><div className="grid gap-3 md:grid-cols-3"><label className="text-sm font-medium">{t("scoring.written")} / {scoring.writtenMax}<input type="number" value={selectedCandidate.written ?? ""} onChange={(e) => updateScore("written", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label><label className="text-sm font-medium">{t("scoring.outdoor")} / {scoring.outdoorMax}<input type="number" value={selectedCandidate.outdoor ?? ""} onChange={(e) => updateScore("outdoor", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>{selectedCandidate.level === "Consulting" && <label className="text-sm font-medium">{t("scoring.report")} / {scoring.reportMax}<input type="number" value={selectedCandidate.report ?? ""} onChange={(e) => updateScore("report", e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>}</div><div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.writtenReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.writtenReview.variant")}: {writtenReview.variantCode || "-"}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{writtenReview.correctCount} {t("examiner.writtenReview.correct")}</StatusPill><StatusPill>{writtenReview.unansweredCount} {t("examiner.writtenReview.unanswered")}</StatusPill><StatusPill>{writtenReview.computedScore} / {writtenReview.computedMax} {t("common.points")}</StatusPill></div></div><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><strong>{t("examiner.writtenReview.computedScore")}:</strong> {writtenReview.computedScore} / {writtenReview.computedMax}<p className="mt-1 text-xs text-slate-500">{t("examiner.writtenReview.helper")}</p><Button onClick={() => updateScore("written", writtenReview.computedScore)} disabled={writtenReview.computedMax === 0} variant="outline" className="mt-3 rounded-2xl">{t("examiner.writtenReview.apply")}</Button></div><div className="mt-3 space-y-3">{writtenReview.items.map((item, index) => <div key={item.question.id} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-start justify-between gap-2"><div><div className="text-xs text-slate-500">{t("test.question")} {index + 1} / {item.question.points} {t("common.points")}</div><div className="mt-1 font-medium">{item.question.text}</div></div><StatusPill tone={!item.hasAnswer ? "warn" : item.hasCorrectAnswer ? item.correct ? "good" : "bad" : "default"}>{!item.hasAnswer ? t("examiner.writtenReview.unanswered") : item.hasCorrectAnswer ? item.correct ? t("examiner.writtenReview.correct") : t("examiner.writtenReview.incorrect") : t("examiner.writtenReview.manual")}</StatusPill></div><div className="mt-2 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("examiner.writtenReview.candidateAnswer")}</div><div className="mt-1 whitespace-pre-wrap">{item.hasAnswer ? item.answer : "-"}</div></div>{item.hasCorrectAnswer && <div className="mt-2 rounded-lg bg-emerald-50 p-2"><div className="text-xs font-semibold text-emerald-800">{t("examiner.writtenReview.correctAnswer")}</div><div className="mt-1 whitespace-pre-wrap text-emerald-950">{item.question.correctAnswer}</div></div>}</div>)}</div></div>{selectedCandidate.level === "Consulting" && <div className="mt-4 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{t("examiner.reportReview.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("examiner.reportReview.helper")}</p></div><div className="flex flex-wrap gap-2"><StatusPill>{reportReview.filledSections} / {reportReview.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{reportReview.photos} {t("examiner.reportReview.photos")}</StatusPill><StatusPill>{reportReview.completeness}% {t("examiner.reportReview.complete")}</StatusPill></div></div><div className="mt-3 space-y-4">{reportReview.trees.map((tree) => <div key={tree.treeName} className="rounded-xl border bg-white p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{tree.treeName}</h4><div className="flex flex-wrap gap-2"><StatusPill>{tree.filledSections} / {tree.totalSections} {t("examiner.reportReview.sections")}</StatusPill><StatusPill>{tree.photos.length} {t("examiner.reportReview.photos")}</StatusPill></div></div><div className="mt-3 rounded-lg bg-slate-50 p-2"><div className="text-xs font-semibold text-slate-500">{t("report.fieldNotes")}</div><div className="mt-1 whitespace-pre-wrap">{String(tree.fieldNotes).trim() || "-"}</div></div>{tree.photos.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3">{tree.photos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border bg-white p-2"><div className="h-16 w-16 overflow-hidden rounded-lg bg-slate-200">{photo.dataUrl ? <img src={photo.dataUrl} alt={photo.name || photo.caption || photo.id} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">{photo.id}</div>}</div><div className="min-w-0 text-xs"><div className="truncate font-medium text-slate-900">{photo.name || photo.caption || photo.id}</div><div className="text-slate-500">{photo.type || "image"} · {photo.size ? `${Math.round(photo.size / 1024)} KB` : ""}</div></div></div>)}</div>}<div className="mt-3 grid gap-3 md:grid-cols-2">{tree.finalSections.map((section) => <div key={section.key} className="rounded-lg bg-slate-50 p-2"><div className="flex items-center justify-between gap-2"><div className="text-xs font-semibold text-slate-500">{section.title}</div><StatusPill tone={section.filled ? "good" : "warn"}>{section.filled ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill></div><div className="mt-1 whitespace-pre-wrap">{String(section.value).trim() || "-"}</div></div>)}</div></div>)}</div></div>}<div className="mt-4 grid gap-3 md:grid-cols-5"><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.total")}</div><div className="text-xl font-bold">{scoring.total} / {scoring.max}</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.percentage")}</div><div className="text-xl font-bold">{scoring.percentage}%</div></div><div className="rounded-xl bg-slate-100 p-3"><div className="text-xs text-slate-500">{t("scoring.result")}</div><div className="text-xl font-bold">{scoring.pass ? t("scoring.pass") : t("scoring.notPassed")}</div></div><Button onClick={generateEvaluation} className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {t("scoring.generate")}</Button><Button onClick={() => loadEvaluationPreview(selectedCandidate.id)} disabled={evaluationLoading} variant="outline" className="h-full rounded-2xl">{evaluationLoading ? t("scoring.loading") : t("scoring.loadPreview")}</Button><Button onClick={() => downloadDraftExport(selectedCandidate.id)} disabled={exportLoading} variant="outline" className="h-full rounded-2xl"><FileSpreadsheet className="mr-2 h-4 w-4" /> {exportLoading ? t("scoring.exporting") : t("scoring.downloadDraftExport")}</Button></div><p className="mt-3 text-xs text-slate-500">{t("scoring.draftOnly")}</p>{evaluationError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{evaluationError}</div>}{exportError && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{exportError}</div>}{lastEvaluation && <div className="mt-4 rounded-2xl border bg-white p-4 text-sm"><div className="font-semibold">{t("scoring.lastGenerated")}</div><div className="mt-1 text-slate-600">{lastEvaluation.candidate} / {lastEvaluation.level}: {lastEvaluation.total}/{lastEvaluation.max} ({lastEvaluation.percentage}%) - {lastEvaluation.result}</div></div>}<EvaluationPreviewCard preview={evaluationPreview} t={t} assignment={assignment} /></div></div></CardContent></Card>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className={isOutdoorFallback ? "text-amber-700" : "text-emerald-700"}>{isOutdoorFallback ? "Outdoor source: demo fallback" : "Outdoor source: active Admin package"}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><Button onClick={archivePlan} variant="outline" className="mt-3 w-full rounded-2xl">{t("outdoor.paperArchive.button")}</Button><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div></div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div>;
 }
 
 export default function VetBaraApp() {

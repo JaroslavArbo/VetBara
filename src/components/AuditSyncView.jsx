@@ -35,7 +35,8 @@ export function AuditSyncView({ sync, setSync, audit, CloudOff, SectionTitle, St
                       <div className="font-medium">{item.type}</div>
                       <StatusPill tone={item.status === "Synced" ? "good" : "warn"}>{item.status}</StatusPill>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">{item.time}</div>
+                    {item.detail && <div className="mt-1 text-xs text-slate-500">{item.detail}</div>}
+                    {item.time && <div className="mt-1 text-xs text-slate-500">{item.time}</div>}
                   </div>
                 ))
               )}
@@ -48,9 +49,10 @@ export function AuditSyncView({ sync, setSync, audit, CloudOff, SectionTitle, St
               {audit.length === 0 ? (
                 <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-600">{tr(t, "auditSync.emptyAudit", "No audit entries yet.")}</div>
               ) : (
-                audit.slice(0, 12).map((item) => (
+                audit.slice(0, 50).map((item) => (
                   <div key={item.id} className="rounded-xl bg-slate-100 p-3 text-sm">
-                    <div className="font-medium">{item.type}</div>
+                    <div className="font-medium">{item.action}{item.target ? ` · ${item.target}` : ""}</div>
+                    {item.detail && <div className="mt-1 text-xs text-slate-600">{item.detail}</div>}
                     <div className="mt-1 text-xs text-slate-500">{item.time}</div>
                   </div>
                 ))

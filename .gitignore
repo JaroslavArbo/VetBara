@@ -28,3 +28,23 @@ dist
 .env
 .env.local
 .vercel
+
+# Portable LAN server: runtime data only. app/server.cjs and the launcher scripts are real
+# source and should be tracked; everything under app/data/ is live exam data (candidate
+# answers, examiner scores, the operator token) generated on whoever's machine runs the
+# server, and app/dist/ is a build artifact (npm run build -> copy into app/dist).
+app/data/
+app/dist/
+Archive.zip
+
+# Private key / certificate material must never be committed, wherever it turns up (found real
+# ones in app/certs-disabled/ during this cleanup, not just the expected app/certs/).
+*.pem
+*.key
+
+# Vite dev-server mock/local API storage (testPackageAdminPlugin, fieldPreparationPlugin) —
+# fake data for local `npm run dev` testing only, never real exam data.
+.vetbara-local/
+
+# Claude Code local tool config (preview server launch settings) — machine-specific.
+.claude/

@@ -85,7 +85,7 @@
 .field-primary-button, .field-export-actions button { background: #14352d; color: white; }
 .field-ghost-button, .field-map-toolbar button { border: 1px solid #c7d5ca; background: white; color: #24342c; }
 .field-ghost-button:disabled, .field-export-actions button:disabled { opacity: .45; cursor: not-allowed; }
-.field-tablet-status { margin: 12px 0; border-radius: 14px; padding: 11px 14px; font-weight: 800; }
+.field-tablet-status { margin: 12px 0; border-radius: 14px; padding: 11px 14px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
 .field-tablet-status.info { border: 1px solid #bddcef; background: #ecf8ff; color: #16415b; }
 .field-tablet-status.error { border: 1px solid #ffd37d; background: #fff8e8; color: #764700; }
 .field-empty-package { padding: 22px; color: #764700; background: #fff8e8; border-color: #ffd37d; }
@@ -245,6 +245,21 @@
 .field-detail-header h2 { margin: 4px 0; font-size: 26px; line-height: 1.1; color: #183126; }
 .field-detail-header p { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #597469; font-size: 13px; }
 .field-visited-toggle { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; background: #edf5ec; border: 1px solid #c8dbc4; color: #2d6f36; padding: 9px 12px; font-weight: 900; white-space: nowrap; }
+.field-manual-coords { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid #dce7df; }
+.field-manual-coords-tree { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #dce7df; }
+.field-extra-tree-toggles { display: grid; gap: 8px; margin-bottom: 12px; }
+.field-extra-tree-toggle { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 13px; }
+.field-tree-overview-list { display: grid; gap: 6px; }
+.field-tree-overview-row { display: grid; grid-template-columns: 56px 1fr 28px; align-items: center; gap: 8px; border: 1px solid #d7e1d8; border-radius: 12px; padding: 8px 10px; background: #fff; text-align: left; cursor: pointer; }
+.field-tree-overview-row.selected { border-color: #2d6f36; background: #eef5ef; }
+.field-tree-overview-code { font-weight: 950; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.field-tree-overview-taxon { font-size: 13px; color: #32423a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-tree-overview-checked { text-align: center; font-weight: 950; color: #9aa79f; }
+.field-tree-overview-checked.yes { color: #2d6f36; }
+.field-copy-row { display: flex; gap: 8px; }
+.field-copy-row input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.field-copy-row button { flex-shrink: 0; border: 1px solid #c7d5ca; border-radius: 12px; padding: 0 14px; font-weight: 900; background: #eef5ef; color: #173021; cursor: pointer; }
+.field-copy-row button:hover { background: #dcebde; }
 .field-two-cols, .field-three-cols { display: grid; gap: 10px; margin: 12px 0; }
 .field-two-cols { grid-template-columns: 1fr 1fr; }
 .field-three-cols { grid-template-columns: repeat(3, 1fr); }
@@ -258,11 +273,40 @@
 .field-candidate-note { background: #f0f8ff; border: 1px solid #cbe4f7; color: #17415c; }
 .field-candidate-note p { margin: 6px 0 0; }
 .field-photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.field-photo-grid figure { position: relative; margin: 0; }
 .field-photo-grid img { width: 100%; height: 130px; object-fit: cover; border-radius: 12px; border: 1px solid #d9e2da; }
 .field-photo-grid figcaption { font-size: 12px; color: #65736a; margin-top: 4px; }
+.field-photo-remove { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 999px; border: 0; background: rgba(15,23,42,.72); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.field-photo-add-button { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; border: 1px solid #c7d5ca; border-radius: 999px; padding: 8px 14px; font-weight: 900; font-size: 13px; background: #eef5ef; color: #173021; cursor: pointer; }
 .field-practicing-box { border: 1px solid #cbdcce; background: #f3f8f2; }
-.field-practicing-box h3 { margin: 0 0 12px; color: #14352d; }
+.field-practicing-box h3 { margin: 0; color: #14352d; }
 .field-practicing-box h4 { margin: 14px 0 8px; }
+/* Collapsible detail-panel sections: same header pattern (title + chevron) everywhere so the
+   panel reads as a few foldable decisions instead of one long scroll. */
+.field-collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.field-collapsible-header h3 { margin: 0; }
+.field-collapsible-chevron { transition: transform .15s ease; color: #5f7167; flex-shrink: 0; }
+.field-collapsible-chevron.open { transform: rotate(180deg); }
+.field-collapsible-body { margin-top: 12px; }
+.field-drag-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5f7167;
+}
 .field-intervention { background: white; border: 1px solid #d8e2d9; border-radius: 12px; padding: 10px; margin-bottom: 10px; }
 .field-intervention p { margin: 5px 0; color: #42544a; }
 .field-intervention small { color: #65736a; }
@@ -293,49 +337,55 @@
 .field-label-offset-controls button { border: 0; border-radius: 12px; padding: 11px 14px; font-weight: 950; background: #eef5ef; color: #173021; }
 @media (max-width: 820px) { .field-label-offset-controls { grid-template-columns: 1fr; } }
 
-/* Field tablet full-screen map layout: map stays fixed, only the detail panel scrolls. */
-.field-tablet-shell {
-  height: 100vh;
-  min-height: 100vh;
-  overflow: hidden;
-}
-.field-tablet-workspace {
-  width: 100%;
-  max-width: none;
-  height: 100vh;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-.field-tablet-main-grid {
-  height: 100vh;
-  grid-template-columns: minmax(0, 1fr) minmax(390px, 460px);
-  gap: 0;
-  align-items: stretch;
-}
-.field-left-column,
-.field-map-card {
-  height: 100vh;
-  min-height: 0;
-  display: block;
-}
-.field-map-card {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: hidden;
-}
-.field-real-map {
-  height: 100vh;
-  min-height: 100vh;
-}
-.field-detail-panel {
-  height: 100vh;
-  max-height: 100vh;
-  overflow-y: auto;
-  border-radius: 0;
-  border-width: 0 0 0 1px;
-  box-shadow: -8px 0 26px rgba(20, 50, 30, .08);
+/* Field tablet full-screen map layout: map stays fixed, only the detail panel scrolls.
+   Restricted to wide screens (min-width: 1101px) so it never fights the @media(max-width:1100px)
+   stacked layout below — on narrower tablets the map must not claim the full 100vh height with
+   overflow:hidden, or the text-field panel becomes unreachable behind the map's own touch-action:none
+   gesture handling (native scroll gets swallowed by the map instead of revealing the panel). */
+@media (min-width: 1101px) {
+  .field-tablet-shell {
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .field-tablet-workspace {
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  .field-tablet-main-grid {
+    height: 100vh;
+    grid-template-columns: minmax(0, 1fr) minmax(390px, 460px);
+    gap: 0;
+    align-items: stretch;
+  }
+  .field-left-column,
+  .field-map-card {
+    height: 100vh;
+    min-height: 0;
+    display: block;
+  }
+  .field-map-card {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .field-real-map {
+    height: 100vh;
+    min-height: 100vh;
+  }
+  .field-detail-panel {
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    border-radius: 0;
+    border-width: 0 0 0 1px;
+    box-shadow: -8px 0 26px rgba(20, 50, 30, .08);
+  }
 }
 .field-map-toolbar-overlay {
   position: absolute;
@@ -383,6 +433,9 @@
   border-radius: 14px;
   padding: 10px 14px;
   font-weight: 850;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   box-shadow: 0 8px 20px rgba(20,50,30,.12);
 }
 .field-map-message.error {
@@ -421,10 +474,14 @@
 
 /* Field tablet: toolbar outside the interactive map so controls never steal marker/map gestures. */
 .field-map-card {
-  height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+}
+@media (min-width: 1101px) {
+  .field-map-card {
+    height: 100vh;
+    overflow: hidden;
+  }
 }
 .field-map-toolbar-above {
   position: relative;
@@ -446,7 +503,35 @@
   padding: 7px 11px;
   font-size: 12px;
   font-weight: 950;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
+/* Toolbar buttons are grouped into visually separated clusters (level / map controls /
+   actions / language) instead of one flat row, so the 12+ controls read as a few decisions
+   instead of a wall of buttons. */
+.field-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .55);
+}
+.field-icon-button {
+  min-width: 34px;
+  padding-left: 7px !important;
+  padding-right: 7px !important;
+}
+.field-toolbar-lang button {
+  min-width: 32px;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+.field-connectivity-pill { background: #f0f5f1; color: #51655a; }
+.field-connectivity-pill.online { background: #e9f7eb; color: #2d6f36; }
+.field-connectivity-pill.warn { background: #fff3cd; color: #7a4d00; }
 .field-map-card .field-real-map {
   flex: 1 1 auto;
   height: auto;

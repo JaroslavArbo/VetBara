@@ -1216,7 +1216,7 @@ function fieldPreparationPlugin() {
                 longitude: Number(tree.point?.lng),
                 candidateNote: tree.candidateNote || "",
                 photos: (tree.photos || []).map((photo) => ({ id: photo.id, fileName: photo.fileName || photo.name, url: photo.url, thumbnailUrl: photo.thumbnailUrl, caption: photo.caption || "" })),
-                practicingTreeAData: normalizedLevel === "Practicing" && assignment.code === "A" ? tree.practicingTreeAData : undefined,
+                practicingTreeAData: tree.practicingTreeAData,
               })));
             return {
               packageType: "vetbara-field-exam",
