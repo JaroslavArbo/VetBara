@@ -5243,8 +5243,6 @@ function CentreFieldPreparationModule({ centreCode, language, t }) {
       ${interventionsHtml}
       <h3>${escapeHtml(t("fieldPrep.candidateNote"))}</h3>
       <div class="print-note">${tree.candidateNote ? linesToHtml(tree.candidateNote) : `<span class="print-empty">-</span>`}</div>
-      <h3>${escapeHtml(t("fieldPrep.internalNote"))}</h3>
-      <div class="print-note">${tree.internalNote ? linesToHtml(tree.internalNote) : `<span class="print-empty">-</span>`}</div>
       <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
       ${photosHtml}
     </section>`;
