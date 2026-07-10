@@ -2363,7 +2363,7 @@ function VetBaraPrototype() {
     <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-4"><img src="/brand/vetcert-logo.jpg" alt="VETcert Certified Veteran Tree Specialist" className="h-14 w-14 shrink-0 rounded-full border bg-white object-contain p-1 shadow-sm md:h-16 md:w-16" /><div><div className="mb-2 flex flex-wrap items-center gap-2"><div className="rounded-2xl bg-slate-950 px-3 py-1 text-sm font-semibold text-white">{t("app.title")}</div><StatusPill tone="warn">{t("app.mvpPrototype")}</StatusPill><StatusPill><CloudOff className="mr-1 h-3.5 w-3.5" /> {t("app.offlineFirst")}</StatusPill></div><h1 className="text-3xl font-bold tracking-tight md:text-5xl">{t("app.heroTitle")}</h1><p className="mt-2 max-w-3xl text-slate-600">{t("app.subtitle")}</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-medium text-slate-500">{t("language.label")}<select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)} className="ml-2 rounded-xl border bg-white p-2 text-sm text-slate-950">{uiLanguageChoices.map((lang) => <option key={lang.code} value={lang.code}>{lang.draft ? `${lang.label} - draft` : lang.label}</option>)}</select></label>{lockedPortalRole ? <StatusPill tone="good">{tf("app.dedicatedPortal", { role: roleLabel(lockedPortalRole) })}</StatusPill> : role === "Admin" ? <StatusPill tone="good">Admin</StatusPill> : ROLES.map((r) => <Button key={r} onClick={() => setRole(r)} variant={role === r ? "default" : "outline"} className="rounded-2xl">{roleLabel(r)}</Button>)}</div></header>
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     <div className="grid gap-4 lg:grid-cols-3">
-      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
+      {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
@@ -3680,7 +3680,58 @@ export function AdminDashboardSection({ id, icon: Icon, title, description, acti
   );
 }
 
-export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, centreQr, setStatus, addAudit, setScannerMode, t }) {
+// Builds a Centre access URL carrying a token unique to this one (place, examDate) opening — see
+// generateCentreAccessLink below. tokenAccess() server-side derives role/id purely from the URL's
+// own query params (this is a portable-LAN pilot, not a hosted auth service), so the token isn't
+// a security boundary; its value being unique per exam is what lets Admin tell generated links
+// apart in the history list and know which one went to which centre/date.
+function centreAccessLinkFor(place, examDate, centre) {
+  const idSlug = `${slugForFilename(place)}-${examDate || "date"}`;
+  const token = `CENTRE-${slugForFilename(place).toUpperCase()}-${examDate || "DATE"}-${vetbaraUid("").toUpperCase()}`;
+  // Always the networked app's own root, never the current page's path — this link needs to
+  // reach the Centre entry point (index.html) regardless of whether it was generated from the
+  // standalone admin.html or the networked app's own Admin role view.
+  const url = new URL("/", portableLanOrigin() || window.location.origin);
+  url.searchParams.set("role", "Centre");
+  url.searchParams.set("id", idSlug);
+  url.searchParams.set("token", token);
+  return { id: idSlug, token, url: url.toString(), place, examDate, centre };
+}
+
+export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, setStatus, addAudit, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const [links, setLinks] = useState([]);
+  const [linksLoading, setLinksLoading] = useState(false);
+  const [latestLink, setLatestLink] = useState(null);
+
+  async function loadCentreLinks() {
+    setLinksLoading(true);
+    try {
+      const response = await fetch("/api/admin/centre-links/list", { cache: "no-store" });
+      const data = await response.json();
+      setLinks(Array.isArray(data.links) ? data.links : []);
+    } catch {
+      // Best-effort; leave the previous list in place.
+    } finally {
+      setLinksLoading(false);
+    }
+  }
+
+  useEffect(() => { loadCentreLinks(); }, []);
+
+  function generateCentreAccessLink() {
+    const entry = centreAccessLinkFor(place, examDate, centre);
+    setLatestLink(entry);
+    setLinks((prev) => [{ ...entry, createdAt: new Date().toISOString() }, ...prev]);
+    setStatus(tf("status.centreAccessGenerated", { place, date: examDate }));
+    addAudit(t("audit.centreAccessGenerated"), centre, entry.url);
+    fetch("/api/admin/centre-links/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    }).catch(() => {});
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-2xl border bg-white p-4">
@@ -3695,13 +3746,52 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
       <div className="rounded-2xl border bg-white p-4">
         <h3 className="font-semibold">{t("admin.centreAccess.title")}</h3>
         <p className="mt-1 text-sm text-slate-600">{t("admin.centreAccess.helper")}</p>
-        <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center">
-          <RealQr value={centreQr} />
-          <div>
-            <div className="break-all font-mono text-xs text-slate-500">{centreQr}</div>
-            <Button onClick={() => { setStatus(t("status.openedForCentre")); addAudit(t("audit.centreAccessSent"), centre, CENTRE_ACCESS_TOKEN); }} className="mt-3 rounded-2xl">{t("admin.centreAccess.send")}</Button>
-            <Button onClick={() => setScannerMode("Centre")} variant="outline" className="ml-2 mt-3 rounded-2xl">{t("admin.centreAccess.scan")}</Button>
+        <Button onClick={generateCentreAccessLink} className="mt-3 rounded-2xl">{t("admin.centreAccess.generate")}</Button>
+        {latestLink && (
+          <div className="mt-4 flex flex-col gap-4 rounded-xl bg-slate-50 p-3 md:flex-row md:items-center">
+            <RealQr value={latestLink.url} />
+            <div>
+              <div className="text-xs font-semibold text-slate-500">{tf("admin.centreAccess.generatedFor", { place: latestLink.place || "-", date: latestLink.examDate || "-" })}</div>
+              <div className="mt-1 break-all font-mono text-xs text-slate-600">{latestLink.url}</div>
+            </div>
           </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4 lg:col-span-2">
+        <h3 className="font-semibold">{t("admin.centreAccess.historyTitle")}</h3>
+        <p className="mt-1 text-sm text-slate-600">{t("admin.centreAccess.historyHelper")}</p>
+        <div className="mt-3 overflow-x-auto">
+          {linksLoading ? (
+            <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-600">{t("admin.centreAccess.historyLoading")}</div>
+          ) : links.length === 0 ? (
+            <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-600">{t("admin.centreAccess.historyEmpty")}</div>
+          ) : (
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-slate-500">
+                  <th className="py-2 pr-3">{t("admin.centreAccess.columnDate")}</th>
+                  <th className="py-2 pr-3">{t("admin.centreAccess.columnPlace")}</th>
+                  <th className="py-2 pr-3">CC</th>
+                  <th className="py-2 pr-3">{t("admin.centreAccess.columnLink")}</th>
+                  <th className="py-2 pr-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {links.map((link) => (
+                  <tr key={link.id + link.createdAt} className="border-b align-top">
+                    <td className="py-2 pr-3 whitespace-nowrap">{link.examDate || "-"}</td>
+                    <td className="py-2 pr-3">{link.place || "-"}</td>
+                    <td className="py-2 pr-3">{link.centre || "-"}</td>
+                    <td className="py-2 pr-3 break-all font-mono text-xs text-slate-600">{link.url}</td>
+                    <td className="py-2 pr-3">
+                      <Button onClick={() => navigator.clipboard?.writeText(link.url)} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centreAccess.copyLink")}</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
@@ -3801,16 +3891,18 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
                 {row.missing && savedKey !== row.key && <StatusPill tone="warn">{t("admin.multilingual.needsReview")}</StatusPill>}
               </div>
             </div>
-            <div className="mt-1 text-sm text-slate-700">{row.en}</div>
-            <input
-              defaultValue={row.value}
-              key={`${row.key}-${refreshTick}`}
-              disabled={savingKey === row.key}
-              onBlur={(e) => { if (e.target.value !== row.value) saveTranslation(row.key, e.target.value); }}
-              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
-              placeholder={t("admin.multilingual.targetPlaceholder")}
-              className="mt-2 w-full rounded-xl border bg-white p-2"
-            />
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg bg-slate-50 p-2 text-sm text-slate-700">{row.en}</div>
+              <input
+                defaultValue={row.value}
+                key={`${row.key}-${refreshTick}`}
+                disabled={savingKey === row.key}
+                onBlur={(e) => { if (e.target.value !== row.value) saveTranslation(row.key, e.target.value); }}
+                onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+                placeholder={t("admin.multilingual.targetPlaceholder")}
+                className="w-full rounded-xl border bg-white p-2"
+              />
+            </div>
           </div>
         ))}
         {!filteredRows.length && <div className="rounded-xl border border-dashed bg-slate-50 p-4 text-sm text-slate-500">{t("admin.multilingual.noResults")}</div>}
@@ -3819,7 +3911,7 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
   );
 }
 
-function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, setScannerMode, centreQr, uiLanguage, t, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageLatest }) {
+function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, uiLanguage, t, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageLatest }) {
   const [activeAdminSection, setActiveAdminSection] = useState("package-authoring");
 
   return (
@@ -3862,10 +3954,8 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
           setPlace={setPlace}
           language={language}
           setLanguage={setLanguage}
-          centreQr={centreQr}
           setStatus={setStatus}
           addAudit={addAudit}
-          setScannerMode={setScannerMode}
           t={t}
         />
       </AdminDashboardSection>

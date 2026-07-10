@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   VetBaraErrorBoundary,
   Button,
@@ -7,9 +7,6 @@ import {
   FileSpreadsheet,
   ShieldCheck,
   Languages,
-  portableLanOrigin,
-  CENTRE_ACCESS_TOKEN,
-  CENTRE_QR_ID,
   AdminDashboardSection,
   AdminStructuredPackagePanel,
   AdminExamOpeningPanel,
@@ -27,19 +24,6 @@ function FolderSearch({ className }) {
       <path d="M19 19l2.5 2.5" />
     </svg>
   );
-}
-
-function centreAccessUrl() {
-  try {
-    const origin = portableLanOrigin() || window.location.origin;
-    const url = new URL("/", origin);
-    url.searchParams.set("role", "Centre");
-    url.searchParams.set("id", CENTRE_QR_ID);
-    url.searchParams.set("token", CENTRE_ACCESS_TOKEN);
-    return url.toString();
-  } catch {
-    return "";
-  }
 }
 
 function AdminCentreImportViewer({ t }) {
@@ -201,12 +185,6 @@ export default function AdminApp() {
   const [status, setStatus] = useState("");
   const [activeSection, setActiveSection] = useState("package-authoring");
 
-  const centreQr = useMemo(() => centreAccessUrl(), []);
-
-  function handleScanRequest() {
-    setStatus(t("admin.importViewer.scanUnavailable"));
-  }
-
   return (
     <VetBaraErrorBoundary>
       <main className="mx-auto max-w-6xl p-4 md:p-8">
@@ -239,7 +217,7 @@ export default function AdminApp() {
           </AdminDashboardSection>
 
           <AdminDashboardSection id="exam-opening" icon={ShieldCheck} t={t} title={t("admin.dashboard.examOpening.title")} description={t("admin.dashboard.examOpening.description")} activeSection={activeSection} setActiveSection={setActiveSection}>
-            <AdminExamOpeningPanel centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={examLanguage} setLanguage={setExamLanguage} centreQr={centreQr} setStatus={setStatus} addAudit={() => {}} setScannerMode={handleScanRequest} t={t} />
+            <AdminExamOpeningPanel centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={examLanguage} setLanguage={setExamLanguage} setStatus={setStatus} addAudit={() => {}} t={t} />
           </AdminDashboardSection>
 
           <AdminDashboardSection id="import-viewer" icon={FolderSearch} t={t} title={t("admin.dashboard.importViewer.title")} description={t("admin.dashboard.importViewer.description")} activeSection={activeSection} setActiveSection={setActiveSection}>

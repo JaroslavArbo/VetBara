@@ -379,6 +379,29 @@ async function api(req, res, pathname) {
     }
     return reply(200, { ok: true });
   }
+  if (pathname.startsWith('/api/admin/centre-links')) {
+    const centreLinksDir = path.join(dataDir, 'centre-links');
+    ensureDir(centreLinksDir);
+    function listCentreLinkFiles() {
+      try { return fs.readdirSync(centreLinksDir).filter((name) => name.endsWith('.json')).sort().reverse(); } catch { return []; }
+    }
+    const parts = pathname.split('/').filter(Boolean); // ['api','admin','centre-links', ...]
+    const tail = parts.slice(3);
+
+    if (tail.length === 1 && tail[0] === 'list') {
+      const entries = listCentreLinkFiles().map((filename) => readJson(path.join(centreLinksDir, filename), null)).filter(Boolean);
+      return reply(200, { ok: true, links: entries });
+    }
+    if (tail.length === 1 && tail[0] === 'save' && req.method === 'POST') return guarded(async () => {
+      const body = await readBody(req);
+      const now = new Date().toISOString();
+      const id = `link-${Date.now()}`;
+      const entry = { id, createdAt: now, place: body.place || '', examDate: body.examDate || '', centre: body.centre || '', token: body.token || '', url: body.url || '' };
+      writeJson(path.join(centreLinksDir, `${now.replace(/[:.]/g, '-')}-${id}.json`), entry);
+      return reply(200, { ok: true, entry });
+    })();
+    return reply(405, { ok: false, error: 'Method not allowed' });
+  }
   if (pathname === '/api/local-results') { if (req.method === 'POST' || req.method === 'PUT') { const body = await readBody(req); writeJson(localResultsPath, body.results || body); return reply(200, { ok: true, results: readJson(localResultsPath, {}) }); } return reply(200, { ok: true, results: readJson(localResultsPath, {}) }); }
   if (pathname === '/api/local-exchange/packages') return reply(200, { packages: [] });
   if (pathname.startsWith('/api/local-exchange/packages/')) return reply(404, { error: 'No local exchange package found in portable runner.' });

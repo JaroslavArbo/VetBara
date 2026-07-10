@@ -11,6 +11,7 @@ const LOCAL_EXCHANGE_DIR = path.resolve(".vetbara-local/packages");
 const LOCAL_TEST_PACKAGES_DIR = path.resolve(".vetbara-local/test-packages");
 const LOCAL_AUTHORING_DRAFTS_DIR = path.resolve(".vetbara-local/authoring-drafts");
 const LOCAL_PACKAGE_HISTORY_DIR = path.resolve(".vetbara-local/package-history");
+const LOCAL_CENTRE_LINKS_DIR = path.resolve(".vetbara-local/centre-links");
 const LOCAL_TRANSLATION_OVERRIDES_FILE = path.resolve(".vetbara-local/translation-overrides.json");
 const ACTIVE_TEST_PACKAGE_FILE = path.resolve(".vetbara-local/active-test-package.json");
 const LOCAL_FIELD_PREPARATIONS_DIR = path.resolve(".vetbara-local/field-preparations");
@@ -768,6 +769,7 @@ function testPackageAdminPlugin() {
             !url.pathname.startsWith("/api/admin/test-package") &&
             !url.pathname.startsWith("/api/admin/authoring-drafts") &&
             !url.pathname.startsWith("/api/admin/package-history") &&
+            !url.pathname.startsWith("/api/admin/centre-links") &&
             !url.pathname.startsWith("/api/translations/overrides") &&
             !url.pathname.startsWith("/api/centre/test-package")
           ) {
@@ -778,6 +780,7 @@ function testPackageAdminPlugin() {
           await fs.mkdir(LOCAL_TEST_PACKAGES_DIR, { recursive: true });
           await fs.mkdir(LOCAL_AUTHORING_DRAFTS_DIR, { recursive: true });
           await fs.mkdir(LOCAL_PACKAGE_HISTORY_DIR, { recursive: true });
+          await fs.mkdir(LOCAL_CENTRE_LINKS_DIR, { recursive: true });
 
           if (req.method === "GET" && url.pathname === "/api/admin/authoring-drafts/list") {
             const drafts = await readLocalAuthoringDrafts();
@@ -1071,6 +1074,32 @@ function testPackageAdminPlugin() {
               return;
             }
             sendJson(res, 200, { ok: true });
+            return;
+          }
+
+          if (url.pathname.startsWith("/api/admin/centre-links")) {
+            const listLinkFiles = async () => (await fs.readdir(LOCAL_CENTRE_LINKS_DIR)).filter((name) => name.endsWith(".json")).sort().reverse();
+            const tail = url.pathname.split("/").filter(Boolean).slice(3);
+
+            if (tail.length === 1 && tail[0] === "list") {
+              const files = await listLinkFiles();
+              const entries = [];
+              for (const file of files) {
+                try { entries.push(JSON.parse(await fs.readFile(path.join(LOCAL_CENTRE_LINKS_DIR, file), "utf8"))); } catch { /* skip corrupt entry */ }
+              }
+              sendJson(res, 200, { ok: true, links: entries });
+              return;
+            }
+            if (tail.length === 1 && tail[0] === "save" && req.method === "POST") {
+              const body = JSON.parse((await readBody(req)) || "{}");
+              const now = new Date().toISOString();
+              const id = `link-${Date.now()}`;
+              const entry = { id, createdAt: now, place: body.place || "", examDate: body.examDate || "", centre: body.centre || "", token: body.token || "", url: body.url || "" };
+              await fs.writeFile(path.join(LOCAL_CENTRE_LINKS_DIR, `${now.replace(/[:.]/g, "-")}-${id}.json`), JSON.stringify(entry, null, 2));
+              sendJson(res, 200, { ok: true, entry });
+              return;
+            }
+            sendJson(res, 405, { ok: false, error: "Method not allowed" });
             return;
           }
 
