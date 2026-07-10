@@ -235,7 +235,7 @@ export default function AdminApp() {
 
         <div className="grid gap-4">
           <AdminDashboardSection id="package-authoring" icon={FileSpreadsheet} t={t} title={t("admin.dashboard.authoring.title")} description={t("admin.dashboard.authoring.description")} activeSection={activeSection} setActiveSection={setActiveSection}>
-            <AdminStructuredPackagePanel adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageLatest={setAdminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} centre={centre} t={t} />
+            <AdminStructuredPackagePanel adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageLatest={setAdminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} centre={centre} uiLanguage={uiLanguage} t={t} />
           </AdminDashboardSection>
 
           <AdminDashboardSection id="exam-opening" icon={ShieldCheck} t={t} title={t("admin.dashboard.examOpening.title")} description={t("admin.dashboard.examOpening.description")} activeSection={activeSection} setActiveSection={setActiveSection}>
@@ -247,7 +247,7 @@ export default function AdminApp() {
           </AdminDashboardSection>
 
           <AdminDashboardSection id="translation" icon={Languages} t={t} title={t("admin.dashboard.translation.title")} description={t("admin.dashboard.translation.description")} activeSection={activeSection} setActiveSection={setActiveSection}>
-            <AdminTranslationPanel t={t} />
+            <AdminTranslationPanel uiLanguage={uiLanguage} t={t} />
           </AdminDashboardSection>
         </div>
       </main>

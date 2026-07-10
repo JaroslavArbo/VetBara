@@ -1159,6 +1159,7 @@ Object.assign(translations.en, {
   "admin.multilingual.saved": "Saved",
   "admin.multilingual.targetPlaceholder": "Enter translation...",
   "admin.multilingual.noResults": "No matching strings.",
+  "admin.multilingual.languageMismatch": "The interface language is set to {ui}, but you're translating into {target}. Is that intentional?",
 
   "admin.authoring.panelTitle": "Create/edit exam materials",
   "admin.authoring.panelSubtitle": "Edit the four source documents of the exam. This data is used to build the system's exam package and the print/PDF version of the documents.",
@@ -1167,6 +1168,7 @@ Object.assign(translations.en, {
   "admin.authoring.saveDraft": "Save draft",
   "admin.authoring.createPackage": "Create Admin.vet",
   "admin.authoring.print": "Print / PDF",
+  "admin.authoring.languageMismatch": "The interface language is set to {ui}, but the materials being edited are marked as \"{content}\". Is that intentional? Either way, the exported .vet file's language always follows the materials, not the interface.",
   "admin.authoring.hideAdvanced": "Hide advanced",
   "admin.authoring.advancedTools": "Advanced tools",
   "admin.authoring.advancedActionsHeading": "Advanced / service actions",
@@ -1248,6 +1250,7 @@ Object.assign(translations.cs, {
   "admin.multilingual.saved": "Uloženo",
   "admin.multilingual.targetPlaceholder": "Zadejte překlad...",
   "admin.multilingual.noResults": "Žádné odpovídající texty.",
+  "admin.multilingual.languageMismatch": "Rozhraní je nastaveno na jazyk {ui}, ale překládáte do jazyka {target}. Je to záměr?",
 
   "admin.authoring.panelTitle": "Vytvoření/editace podkladů pro zkoušku",
   "admin.authoring.panelSubtitle": "Upravte čtyři zdrojové dokumenty zkoušky. Z těchto dat se vytváří zkušební balíček pro systém a tisková/PDF verze dokumentů.",
@@ -1256,6 +1259,7 @@ Object.assign(translations.cs, {
   "admin.authoring.saveDraft": "Uložit draft",
   "admin.authoring.createPackage": "Vytvořit Admin.vet",
   "admin.authoring.print": "Tisk / PDF",
+  "admin.authoring.languageMismatch": "Rozhraní je nastaveno na jazyk {ui}, ale zpracovávané podklady jsou označené jako \"{content}\". Je to záměr? Jazyk výsledného .vet souboru se v každém případě řídí podklady, ne rozhraním.",
   "admin.authoring.hideAdvanced": "Skrýt pokročilé",
   "admin.authoring.advancedTools": "Pokročilé nástroje",
   "admin.authoring.advancedActionsHeading": "Pokročilé / servisní akce",
