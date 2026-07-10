@@ -64,9 +64,19 @@ function strokeHitTest(stroke, point, threshold) {
 // so resting a hand on the tablet while writing doesn't add stray marks. Strokes are kept as
 // vector point data (not baked into the canvas immediately) so color/thickness/eraser/undo
 // all just add or remove entries from `strokes` — the visible ink is only ever a re-render.
-export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, CloseIcon, EraserIcon, UndoIcon }) {
+export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, t, Button, CloseIcon, EraserIcon, UndoIcon }) {
   const svgRef = useRef(null);
   const drawingRef = useRef(false);
+  // Tracks which single pointer (by id) is currently drawing, and whether it was a genuine
+  // pen. Real palm rejection needs this instead of a blanket "pointerType !== pen -> ignore":
+  // plenty of real styluses (especially on Android/Chrome, and some Bluetooth/EMR pens) never
+  // report pointerType "pen" at all, so a hard pen-only gate silently drops every event from
+  // them — the event then falls through unconsumed and the browser pans/scrolls the page
+  // instead of drawing, which is exactly the "draws one dot, then the window just moves" bug.
+  // Instead: accept whichever pointer starts a stroke first (pen, touch, or mouse), always
+  // consume its events so the page can never take over, and only reject a *second* pointer
+  // that shows up while the first one is still down (that's the actual palm-while-writing case).
+  const activePointerIdRef = useRef(null);
   const [strokes, setStrokes] = useState([]);
   const [currentPoints, setCurrentPoints] = useState(null);
   const [color, setColor] = useState(COLORS[0].value);
@@ -106,21 +116,24 @@ export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, 
   }
 
   function handlePointerDown(event) {
-    if (event.pointerType && event.pointerType !== "pen") return;
+    // A second pointer arriving while the first is still drawing is the real palm-rejection
+    // case (e.g. a hand resting on the tablet while the stylus is down) — ignore it, but don't
+    // preventDefault it either, so it doesn't interfere with the pointer that's already active.
+    if (drawingRef.current && activePointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
     // Pointer capture can fail (e.g. the pointer id isn't recognized as active) on some
     // browser/input combinations; that must not stop the stroke from being drawn, it just
     // means a move that leaves the SVG bounds won't keep tracking until pointerup.
     try { svgRef.current?.setPointerCapture?.(event.pointerId); } catch { /* not fatal */ }
     drawingRef.current = true;
+    activePointerIdRef.current = event.pointerId;
     const point = svgPoint(event);
     if (eraserMode) eraseAt(point);
     else setCurrentPoints([point]);
   }
 
   function handlePointerMove(event) {
-    if (!drawingRef.current) return;
-    if (event.pointerType && event.pointerType !== "pen") return;
+    if (!drawingRef.current || event.pointerId !== activePointerIdRef.current) return;
     event.preventDefault();
     const point = svgPoint(event);
     if (eraserMode) eraseAt(point);
@@ -128,7 +141,9 @@ export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, 
   }
 
   function handlePointerUp(event) {
+    if (event.pointerId !== activePointerIdRef.current) return;
     drawingRef.current = false;
+    activePointerIdRef.current = null;
     try { svgRef.current?.releasePointerCapture?.(event.pointerId); } catch { /* not fatal */ }
     if (!eraserMode && currentPoints && currentPoints.length > 1) {
       setStrokes((prev) => [...prev, { points: currentPoints, color, size }]);
@@ -150,22 +165,40 @@ export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, 
 
   async function handleSave() {
     const svg = svgRef.current;
-    const svgString = new XMLSerializer().serializeToString(svg);
+    // Strip the background <image> (existingImage, if any) from the serialized SVG before
+    // rasterizing it — it's drawn separately onto the canvas below via drawImage, using the
+    // original data URL directly, so it doesn't need a second network/decode round trip through
+    // an SVG <image> element (which can also be blocked by canvas tainting in some browsers).
+    const svgClone = svg.cloneNode(true);
+    const bg = svgClone.querySelector("[data-handwriting-bg]");
+    if (bg) bg.remove();
+    const svgString = new XMLSerializer().serializeToString(svgClone);
     const svgUrl = URL.createObjectURL(new Blob([svgString], { type: "image/svg+xml;charset=utf-8" }));
     try {
-      const image = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = svgUrl;
-      });
+      const [background, strokesImage] = await Promise.all([
+        existingImage
+          ? new Promise((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = existingImage;
+            })
+          : Promise.resolve(null),
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = svgUrl;
+        }),
+      ]);
       const canvas = document.createElement("canvas");
       canvas.width = CANVAS_WIDTH;
       canvas.height = CANVAS_HEIGHT;
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.drawImage(image, 0, 0);
+      if (background) ctx.drawImage(background, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(strokesImage, 0, 0);
       onSave(canvas.toDataURL("image/png"));
     } finally {
       URL.revokeObjectURL(svgUrl);
@@ -236,6 +269,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, 
           className={`h-[420px] w-full rounded-2xl border bg-white ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
           style={{ touchAction: "none" }}
         >
+          {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} preserveAspectRatio="xMidYMid meet" />}
           {strokes.map((stroke, index) => (
             <path key={index} d={pathFor(stroke)} fill={stroke.color} />
           ))}
@@ -243,7 +277,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, t, Button, 
         </svg>
 
         <div className="mt-3 flex justify-end">
-          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length}>
+          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length && !existingImage}>
             {tr(t, "handwriting.save", "Save")}
           </Button>
         </div>

@@ -155,6 +155,7 @@ const activePackagePath = path.join(dataDir, 'active-test-package.json');
 const latestPackagePath = path.join(dataDir, 'latest-admin-package.json');
 const centreSetupPath = path.join(dataDir, 'centre-setup.json');
 const localResultsPath = path.join(dataDir, 'examiner-results.json');
+const translationOverridesPath = path.join(dataDir, 'translation-overrides.json');
 const finalDir = path.join(dataDir, 'final');
 function activePackage() { return readJson(activePackagePath, readJson(latestPackagePath, { ok: false, variants: [], questions: [] })); }
 function tokenAccess(tokenOrUrl) { const raw = String(tokenOrUrl || ''); let u = null; try { u = new URL(raw); } catch {} const params = u ? u.searchParams : new URLSearchParams(raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : raw); const role = params.get('role') || (raw.includes('CANDIDATE') ? 'Candidate' : raw.includes('EXAMINER') ? 'Examiner' : raw.includes('CENTRE') ? 'Centre' : ''); const subjectId = params.get('id') || params.get('subjectId') || (raw.match(/C-\d{3}/)?.[0]) || (raw.match(/E-\d{3}/)?.[0]) || (role === 'Centre' ? 'CENTRE-ARBOR' : ''); return { role: role || 'Centre', subjectId, token: params.get('token') || raw, name: params.get('name') || '', level: params.get('level') || '', sessionToken: `local-${role || 'Centre'}-${subjectId || 'session'}-${Date.now()}`, mode: 'portable-lan' }; }
@@ -297,6 +298,84 @@ async function api(req, res, pathname) {
       const draft = match ? readJson(path.join(authoringDraftsDir, match), null) : null;
       if (draft) return reply(200, draft);
       return reply(404, { error: `Draft not found: ${requestedDraftId}` });
+    }
+    return reply(200, { ok: true });
+  }
+  // UI-text translation overrides, applied at runtime on top of the strings baked into the JS
+  // bundle (see src/i18n.js applyTranslationOverrides). Reading is unguarded — every role's page
+  // load (Candidate/Examiner/FieldTablet included) needs this before it can render translated
+  // text — only writing is Admin-only.
+  if (pathname === '/api/translations/overrides' && req.method === 'GET') {
+    return reply(200, { ok: true, overrides: readJson(translationOverridesPath, {}) });
+  }
+  if (pathname === '/api/translations/overrides' && req.method === 'POST') return guarded(async () => {
+    const body = await readBody(req);
+    const lang = String(body.lang || '').trim();
+    const key = String(body.key || '').trim();
+    if (!lang || !key) return reply(400, { ok: false, error: 'lang and key are required' });
+    const overrides = readJson(translationOverridesPath, {});
+    const value = typeof body.value === 'string' ? body.value.trim() : '';
+    if (!overrides[lang]) overrides[lang] = {};
+    if (value) overrides[lang][key] = value;
+    else delete overrides[lang][key];
+    writeJson(translationOverridesPath, overrides);
+    return reply(200, { ok: true, overrides });
+  })();
+  if (pathname.startsWith('/api/admin/package-history')) {
+    const packageHistoryDir = path.join(dataDir, 'package-history');
+    ensureDir(packageHistoryDir);
+    function listHistoryFiles() {
+      try { return fs.readdirSync(packageHistoryDir).filter((name) => name.endsWith('.json')).sort().reverse(); } catch { return []; }
+    }
+    function historySummary(entry) {
+      return { id: entry.id, savedAt: entry.savedAt, language: entry.language || '', centre: entry.centre || '', note: entry.note || '', packageId: entry.packageId || '', vetFilename: entry.vetFilename || '' };
+    }
+    function findHistoryFile(id) {
+      return listHistoryFiles().find((filename) => filename.includes(id));
+    }
+    const parts = pathname.split('/').filter(Boolean); // ['api','admin','package-history', ...]
+    const tail = parts.slice(3);
+
+    if (tail.length === 1 && tail[0] === 'list') {
+      const entries = listHistoryFiles()
+        .map((filename) => readJson(path.join(packageHistoryDir, filename), null))
+        .filter(Boolean)
+        .map(historySummary);
+      return reply(200, { ok: true, history: entries });
+    }
+    if (tail.length === 1 && tail[0] === 'save' && req.method === 'POST') return guarded(async () => {
+      const body = await readBody(req);
+      const now = new Date().toISOString();
+      const id = `hist-${Date.now()}`;
+      const entry = { id, savedAt: now, language: body.language || '', centre: body.centre || '', note: body.note || '', packageId: body.packageId || '', vetFilename: body.vetFilename || '', package: body.package || null };
+      const filename = `${now.replace(/[:.]/g, '-')}-${id}.json`;
+      writeJson(path.join(packageHistoryDir, filename), entry);
+      return reply(200, { ok: true, entry: historySummary(entry) });
+    })();
+    if (tail.length === 2 && tail[1] === 'note' && req.method === 'POST') return guarded(async () => {
+      const id = decodeURIComponent(tail[0]);
+      const match = findHistoryFile(id);
+      if (!match) return reply(404, { ok: false, error: `Package history entry not found: ${id}` });
+      const filePath = path.join(packageHistoryDir, match);
+      const entry = readJson(filePath, null);
+      if (!entry) return reply(404, { ok: false, error: `Package history entry not found: ${id}` });
+      const body = await readBody(req);
+      entry.note = body.note || '';
+      writeJson(filePath, entry);
+      return reply(200, { ok: true, entry: historySummary(entry) });
+    })();
+    if (tail.length === 2 && tail[1] === 'delete' && req.method === 'POST') return guarded(async () => {
+      const id = decodeURIComponent(tail[0]);
+      const match = findHistoryFile(id);
+      if (match) fs.unlinkSync(path.join(packageHistoryDir, match));
+      return reply(200, { ok: true });
+    })();
+    if (tail.length === 1 && req.method === 'GET') {
+      const id = decodeURIComponent(tail[0]);
+      const match = findHistoryFile(id);
+      const entry = match ? readJson(path.join(packageHistoryDir, match), null) : null;
+      if (!entry) return reply(404, { ok: false, error: `Package history entry not found: ${id}` });
+      return reply(200, { ok: true, entry });
     }
     return reply(200, { ok: true });
   }
@@ -553,6 +632,40 @@ async function api(req, res, pathname) {
       return reply(405, { error: 'Method not allowed' });
     }
   }
+  {
+    // A phone/tablet that scans the Centre's "Připojit tablet/telefon" QR (ScanCaptureMobilePage,
+    // ?mode=scan-capture) has no login of its own — it just uploads raw captured photos here,
+    // scoped by examId (same trust boundary as field-tablet-sync above). The Centre browser that
+    // showed the QR polls the list endpoint, runs its own QR-decode/checkbox-detection pipeline
+    // locally (it has the exam's candidate/testBank data; the phone doesn't), then deletes each
+    // item once processed so it isn't picked up twice.
+    const scanInboxListMatch = pathname.match(/^\/api\/exams\/([^/]+)\/scan-inbox$/);
+    const scanInboxItemMatch = pathname.match(/^\/api\/exams\/([^/]+)\/scan-inbox\/([^/]+)$/);
+    if (scanInboxListMatch || scanInboxItemMatch) {
+      const examId = decodeURIComponent((scanInboxListMatch || scanInboxItemMatch)[1]);
+      const safeExamId = examId.replace(/[^a-z0-9_-]/gi, '_');
+      const scanInboxDir = path.join(dataDir, 'scan-inbox', safeExamId);
+      ensureDir(scanInboxDir);
+      if (req.method === 'POST' && scanInboxListMatch) {
+        const body = await readBody(req);
+        if (!body || typeof body.dataUrl !== 'string' || !body.dataUrl) return reply(400, { error: 'Missing dataUrl' });
+        const id = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+        writeJson(path.join(scanInboxDir, `${id}.json`), { id, dataUrl: body.dataUrl, capturedAt: body.capturedAt || new Date().toISOString(), receivedAt: new Date().toISOString() });
+        return reply(200, { ok: true, id });
+      }
+      if (req.method === 'GET' && scanInboxListMatch) {
+        const files = fs.readdirSync(scanInboxDir).filter((name) => name.endsWith('.json')).sort();
+        const items = files.map((name) => readJson(path.join(scanInboxDir, name), null)).filter(Boolean);
+        return reply(200, { items });
+      }
+      if (req.method === 'DELETE' && scanInboxItemMatch) {
+        const id = decodeURIComponent(scanInboxItemMatch[2]).replace(/[^a-zA-Z0-9_-]/g, '');
+        try { fs.unlinkSync(path.join(scanInboxDir, `${id}.json`)); } catch {}
+        return reply(200, { ok: true });
+      }
+      return reply(405, { error: 'Method not allowed' });
+    }
+  }
   return reply(404, { error: `Unknown portable API endpoint: ${pathname}` });
 }
 
@@ -564,14 +677,17 @@ function latestAsset(pattern) {
     return files[0] ? `/assets/${files[0]}` : '';
   } catch { return ''; }
 }
-function repairIndexAssetReferences(html) {
-  // Some portable builds were assembled from copied dist folders where index.html pointed to an older hashed Vite asset.
-  // If that happens, Safari/Chrome receive a blank page because the module script is missing. Repair at serve time.
-  html = html.replace(/src="(\/assets\/index-[^"]+\.js)"/g, (m, src) => {
-    return fs.existsSync(path.join(distDir, src.replace(/^\//, ''))) ? m : `src="${latestAsset(/^index-.*\.js$/) || src}"`;
+function repairIndexAssetReferences(html, entryName = 'index') {
+  // Some portable builds were assembled from copied dist folders where index.html/admin.html pointed
+  // to an older hashed Vite asset. If that happens, Safari/Chrome receive a blank page because the
+  // module script is missing. Repair at serve time.
+  const jsPattern = new RegExp(`^${entryName}-.*\\.js$`);
+  const cssPattern = new RegExp(`^${entryName}-.*\\.css$`);
+  html = html.replace(new RegExp(`src="(\\/assets\\/${entryName}-[^"]+\\.js)"`, 'g'), (m, src) => {
+    return fs.existsSync(path.join(distDir, src.replace(/^\//, ''))) ? m : `src="${latestAsset(jsPattern) || src}"`;
   });
-  html = html.replace(/href="(\/assets\/index-[^"]+\.css)"/g, (m, href) => {
-    return fs.existsSync(path.join(distDir, href.replace(/^\//, ''))) ? m : `href="${latestAsset(/^index-.*\.css$/) || href}"`;
+  html = html.replace(new RegExp(`href="(\\/assets\\/${entryName}-[^"]+\\.css)"`, 'g'), (m, href) => {
+    return fs.existsSync(path.join(distDir, href.replace(/^\//, ''))) ? m : `href="${latestAsset(cssPattern) || href}"`;
   });
   return html;
 }
@@ -622,7 +738,7 @@ function centreSetupHtml() {
 <body><main class="wrap"><h1>VetBara Centre access link required</h1><p>This Centre installation runs only after receiving the Centre access link generated by Admin.</p><div class="hint">Paste the full Admin Centre link here. It must contain <b>role=Centre</b> and <b>token=...</b>. The runner will automatically replace the host with this computer's current LAN address.</div><textarea id="link" placeholder="http://.../?role=Centre&id=...&token=..."></textarea><br><button id="go">Save link and open Centre</button><div id="err" class="err"></div></main><script>var OPERATOR_TOKEN=${JSON.stringify(operatorToken)};document.getElementById('go').onclick=async()=>{const err=document.getElementById('err');err.textContent='';try{const r=await fetch('/api/centre-link',{method:'POST',headers:{'Content-Type':'application/json','X-VetBara-Operator-Token':OPERATOR_TOKEN},body:JSON.stringify({link:document.getElementById('link').value})});const data=await r.json();if(!r.ok||!data.ok){err.textContent=data.error||'Invalid Centre link';return;}location.href=(data.localCentreLink||data.centreLink)+'&fresh='+Date.now();}catch(e){err.textContent=e.message||String(e);}};</script></body></html>`;
 }
 
-function resetHtml() { return `<!doctype html><meta charset="utf-8"><title>VetBara reset</title><body style="font-family:system-ui;padding:32px"><h1>VetBara cache reset</h1><p>Resetting service workers and caches...</p><pre id="out"></pre><script>(async()=>{const out=document.getElementById('out');function log(s){out.textContent+=s+'\n'}; if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations(); log('service workers: '+regs.length); for(const r of regs){await r.unregister(); log('unregistered '+(r.scope||''));}} if(window.caches){const keys=await caches.keys(); log('caches: '+keys.length); for(const k of keys){await caches.delete(k); log('deleted '+k);}} log('done - opening VetBara'); setTimeout(()=>location.href='/?role=${mode === 'admin' ? 'Admin&token=' + operatorToken : 'Centre'}&reset=1',800);})();</script></body>`; }
+function resetHtml() { return `<!doctype html><meta charset="utf-8"><title>VetBara reset</title><body style="font-family:system-ui;padding:32px"><h1>VetBara cache reset</h1><p>Resetting service workers and caches...</p><pre id="out"></pre><script>(async()=>{const out=document.getElementById('out');function log(s){out.textContent+=s+'\n'}; if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations(); log('service workers: '+regs.length); for(const r of regs){await r.unregister(); log('unregistered '+(r.scope||''));}} if(window.caches){const keys=await caches.keys(); log('caches: '+keys.length); for(const k of keys){await caches.delete(k); log('deleted '+k);}} log('done - opening VetBara'); setTimeout(()=>location.href='/${mode === 'admin' ? '' : '?role=Centre&reset=1'}',800);})();</script></body>`; }
 function injectedIndexHtml(role) {
   const file = path.join(distDir, 'index.html');
   let html = repairIndexAssetReferences(fs.readFileSync(file, 'utf8'));
@@ -638,15 +754,26 @@ function injectedIndexHtml(role) {
   const script = `${portableSafetyScript()}<script>window.__VETBARA_PORTABLE__=${JSON.stringify(payload)};(function(){var cfg=window.__VETBARA_PORTABLE__; if(!cfg)return; var url=new URL(location.href); var role=url.searchParams.get('role'); var appMode=url.searchParams.get('mode'); var isOtherAllowedRole = role==='Candidate'||role==='Examiner'||role==='FieldTablet'; var isFieldTablet = appMode==='field-tablet'||role==='FieldTablet'; if(cfg.mode==='admin'&&!role&&!appMode){url.search='?role=Admin&token=' + encodeURIComponent(cfg.adminToken || '') + '&portable=' + encodeURIComponent(cfg.startedAt); location.replace(url.toString()); return;} if(cfg.mode==='centre'&&cfg.centreLink&&role!=='Centre'&&!isFieldTablet&&!isOtherAllowedRole){location.replace(cfg.centreLink);}})();</script>${operatorFetchScript()}`;
   return html.replace('</head>', `${script}</head>`);
 }
+// Standalone Admin app (admin.html): single-purpose, no role branching or Centre-link
+// redirect logic needed — it just needs the operator token wired into same-origin API calls.
+function injectedAdminHtml() {
+  const file = path.join(distDir, 'admin.html');
+  let html = repairIndexAssetReferences(fs.readFileSync(file, 'utf8'), 'admin');
+  const payload = { mode, baseUrl, lanBaseUrl: baseUrl, localBaseUrl, startedAt: new Date().toISOString(), operatorToken };
+  const script = `${portableSafetyScript()}<script>window.__VETBARA_PORTABLE__=${JSON.stringify(payload)};</script>${operatorFetchScript()}`;
+  return html.replace('</head>', `${script}</head>`);
+}
 function serveStatic(req, res, parsedUrl) {
   const pathname = decodeURIComponent(parsedUrl.pathname);
   const role = parsedUrl.searchParams.get('role');
   if (mode === 'centre' && centreLinkMissing && (pathname === '/' || pathname === '/index.html')) { res.writeHead(200, { 'Content-Type': mime['.html'], 'Cache-Control': 'no-store' }); res.end(centreSetupHtml()); return; }
   if (pathname === '/__reset.html') { res.writeHead(200, { 'Content-Type': mime['.html'], 'Cache-Control': 'no-store' }); res.end(resetHtml()); return; }
   if (pathname === '/vetbara-field-sw.js') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(`self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`); return; }
-  let filePath = path.join(distDir, pathname === '/' ? 'index.html' : pathname);
+  const defaultDoc = mode === 'admin' ? 'admin.html' : 'index.html';
+  let filePath = path.join(distDir, pathname === '/' ? defaultDoc : pathname);
   if (!filePath.startsWith(distDir)) { res.writeHead(403); res.end('Forbidden'); return; }
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) filePath = path.join(distDir, 'index.html');
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) filePath = path.join(distDir, defaultDoc);
+  if (path.basename(filePath) === 'admin.html') { const body = injectedAdminHtml(); res.writeHead(200, { 'Content-Type': mime['.html'], 'Cache-Control': 'no-store, no-cache, must-revalidate' }); res.end(body); return; }
   if (path.basename(filePath) === 'index.html') { const body = injectedIndexHtml(role); res.writeHead(200, { 'Content-Type': mime['.html'], 'Cache-Control': 'no-store, no-cache, must-revalidate' }); res.end(body); return; }
   const ext = path.extname(filePath).toLowerCase();
   res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream', 'Cache-Control': 'no-store, no-cache, must-revalidate' });
@@ -661,9 +788,8 @@ if (protocol === 'https') {
   server = http.createServer(requestHandler);
 }
 server.listen(port, '0.0.0.0', () => {
-  const adminQuery = `?role=Admin&token=${encodeURIComponent(operatorToken)}`;
-  const lanLaunchUrl = mode === 'centre' ? (centreLink || `${baseUrl}/`) : `${baseUrl}/${adminQuery}`;
-  let localLaunchUrl = `${localBaseUrl}/${adminQuery}`;
+  const lanLaunchUrl = mode === 'centre' ? (centreLink || `${baseUrl}/`) : `${baseUrl}/`;
+  let localLaunchUrl = `${localBaseUrl}/`;
   if (mode === 'centre' && centreLink) {
     try {
       const u = new URL(centreLink);

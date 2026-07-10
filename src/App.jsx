@@ -4,10 +4,11 @@ import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp } from "./components/PilotInfoPanels";
-import { AuditSyncView } from "./components/AuditSyncView";
+import { AuditSyncView, translateAuditAction } from "./components/AuditSyncView";
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
 import { HandwritingPad } from "./components/HandwritingPad";
-import { LANGUAGES as UI_LANGUAGES, makeTranslator } from "./i18n";
+import { decodeAllQrCodes, parseScanSortPayload, mapOffsetToPhoto, classifyMark, resolveQuestionMark } from "./lib/scanMarkDetection";
+import { LANGUAGES as UI_LANGUAGES, makeTranslator, allTranslationKeys, translationFor, englishSourceFor, applyTranslationOverrides } from "./i18n";
 import { QRCodeSVG } from "qrcode.react";
 import JSZip from "jszip";
 import jsPDF from "jspdf";
@@ -24,15 +25,15 @@ async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examin
   return body;
 }
 
-function Button({ children, className = "", variant = "default", ...props }) {
+export function Button({ children, className = "", variant = "default", ...props }) {
   const base = "inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none";
   const styles = variant === "outline" ? "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50" : "bg-slate-950 text-white hover:bg-slate-800";
   return <button className={`${base} ${styles} ${className}`} {...props}>{children}</button>;
 }
-function Card({ children, className = "" }) { return <div className={`border bg-white ${className}`}>{children}</div>; }
-function CardContent({ children, className = "" }) { return <div className={className}>{children}</div>; }
+export function Card({ children, className = "" }) { return <div className={`border bg-white ${className}`}>{children}</div>; }
+export function CardContent({ children, className = "" }) { return <div className={className}>{children}</div>; }
 
-class VetBaraErrorBoundary extends React.Component {
+export class VetBaraErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { error: null };
@@ -44,13 +45,16 @@ class VetBaraErrorBoundary extends React.Component {
 
   render() {
     if (this.state.error) {
+      // Deliberately bilingual (EN+CZ), not routed through t(): the error boundary can be
+      // triggered by a crash anywhere below it, including inside the translation system itself,
+      // so it must not depend on that system to be readable.
       return (
         <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
           <div className="mx-auto max-w-3xl rounded-2xl border border-rose-300 bg-rose-50 p-5 shadow-sm">
-            <h1 className="text-2xl font-bold text-rose-950">VetBara runtime chyba</h1>
-            <p className="mt-2 text-sm text-rose-900">Pošlete tento text vývojáři.</p>
+            <h1 className="text-2xl font-bold text-rose-950">VetBara runtime error / chyba</h1>
+            <p className="mt-2 text-sm text-rose-900">Please send this text to the developer. / Pošlete tento text vývojáři.</p>
             <pre className="mt-4 overflow-auto rounded-xl bg-white p-4 text-xs text-rose-950">
-              {String(this.state.error?.message || this.state.error || "Neznámá chyba")}
+              {String(this.state.error?.message || this.state.error || "Unknown error / Neznámá chyba")}
             </pre>
           </div>
         </main>
@@ -63,15 +67,16 @@ class VetBaraErrorBoundary extends React.Component {
 
 
 function RuntimeCrashScreen({ error }) {
+  // Same bilingual, translation-independent fallback as VetBaraErrorBoundary above.
   return (
     <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
       <div className="mx-auto max-w-3xl rounded-2xl border border-rose-300 bg-rose-50 p-5 shadow-sm">
-        <h1 className="text-2xl font-bold text-rose-950">VetBara runtime chyba</h1>
+        <h1 className="text-2xl font-bold text-rose-950">VetBara runtime error / chyba</h1>
         <p className="mt-2 text-sm text-rose-900">
-          Aplikace nespadla do bílé obrazovky, ale zachytila chybu. Pošlete tento text vývojáři.
+          The app caught an error instead of showing a blank screen. Please send this text to the developer. / Aplikace nespadla do bílé obrazovky, ale zachytila chybu. Pošlete tento text vývojáři.
         </p>
         <pre className="mt-4 overflow-auto rounded-xl bg-white p-4 text-xs text-rose-950">
-          {String(error?.message || error || "Neznámá chyba")}
+          {String(error?.message || error || "Unknown error / Neznámá chyba")}
         </pre>
       </div>
     </main>
@@ -79,26 +84,38 @@ function RuntimeCrashScreen({ error }) {
 }
 
 function VetCertRulesReference({ t }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
   return (
     <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-      <div className="font-semibold">{t("vetcertRules.title")}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-semibold">{t("vetcertRules.title")}</div>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label={t("common.close")}
+          className="shrink-0 rounded-full p-1 text-lg leading-none text-amber-700 hover:bg-amber-100"
+        >
+          ×
+        </button>
+      </div>
       <p className="mt-1">{t("vetcertRules.body1")}</p>
       <p className="mt-2 text-xs">{t("vetcertRules.body2")}</p>
     </div>
   );
 }
 
-function StatusPill({ children, tone = "default", icon: Icon }) {
+export function StatusPill({ children, tone = "default", icon: Icon }) {
   const cls = { good: "bg-emerald-100 text-emerald-800", warn: "bg-amber-100 text-amber-800", bad: "bg-rose-100 text-rose-800", default: "bg-slate-100 text-slate-700" }[tone] || "bg-slate-100 text-slate-700";
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${cls}`}>{Icon && <Icon className="h-3.5 w-3.5" />}{children}</span>;
 }
-function IconBase({ children, className = "h-5 w-5" }) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>; }
+export function IconBase({ children, className = "h-5 w-5" }) { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>; }
 function BadgeCheck({ className }) { return <IconBase className={className}><path d="M8 12.5l2.5 2.5L16 9" /><path d="M12 2l2.1 2.2 3-.4.8 2.9 2.7 1.4-1.4 2.7.4 3-2.9.8-1.4 2.7-3-.4L12 22l-2.1-2.2-3 .4-.8-2.9-2.7-1.4 1.4-2.7-.4-3 2.9-.8 1.4-2.7 3 .4L12 2z" /></IconBase>; }
-function CloudOff({ className }) { return <IconBase className={className}><path d="M3 3l18 18" /><path d="M17.5 17H8a5 5 0 0 1-.8-9.9A6.5 6.5 0 0 1 18.7 9" /><path d="M20 16.5A3.5 3.5 0 0 0 18.5 10" /></IconBase>; }
-function FileSpreadsheet({ className }) { return <IconBase className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h8" /><path d="M11 10v9" /></IconBase>; }
-function Languages({ className }) { return <IconBase className={className}><path d="M4 5h8" /><path d="M8 5v12" /><path d="M4 17c3-2 5-5 6-12" /><path d="M12 17c-2-1-4-3-6-6" /><path d="M15 19l3-7 3 7" /><path d="M16 17h4" /></IconBase>; }
+export function CloudOff({ className }) { return <IconBase className={className}><path d="M3 3l18 18" /><path d="M17.5 17H8a5 5 0 0 1-.8-9.9A6.5 6.5 0 0 1 18.7 9" /><path d="M20 16.5A3.5 3.5 0 0 0 18.5 10" /></IconBase>; }
+export function FileSpreadsheet({ className }) { return <IconBase className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h8" /><path d="M11 10v9" /></IconBase>; }
+export function Languages({ className }) { return <IconBase className={className}><path d="M4 5h8" /><path d="M8 5v12" /><path d="M4 17c3-2 5-5 6-12" /><path d="M12 17c-2-1-4-3-6-6" /><path d="M15 19l3-7 3 7" /><path d="M16 17h4" /></IconBase>; }
 function Lock({ className }) { return <IconBase className={className}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></IconBase>; }
-function ShieldCheck({ className }) { return <IconBase className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-5" /></IconBase>; }
+export function ShieldCheck({ className }) { return <IconBase className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-5" /></IconBase>; }
 function Tablet({ className }) { return <IconBase className={className}><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M11 18h2" /></IconBase>; }
 function Users({ className }) { return <IconBase className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.9" /><path d="M16 3.1a4 4 0 0 1 0 7.8" /></IconBase>; }
 function QrCodeIcon({ className }) { return <IconBase className={className}><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M14 14h2v2h-2z" /><path d="M18 14h3" /><path d="M14 18h3" /><path d="M19 18h2v3h-3" /></IconBase>; }
@@ -120,6 +137,7 @@ function RefreshCw({ className }) { return <IconBase className={className}><path
 function Eraser({ className }) { return <IconBase className={className}><path d="M7 21H4a1 1 0 0 1-.7-1.7l10-10a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L15 21" /><path d="M22 21H7" /><path d="m5 12 5 5" /></IconBase>; }
 function Undo({ className }) { return <IconBase className={className}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v6h6" /></IconBase>; }
 function Pencil({ className }) { return <IconBase className={className}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></IconBase>; }
+function Printer({ className }) { return <IconBase className={className}><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></IconBase>; }
 function SectionTitle({ icon: Icon, title, subtitle, tooltip }) { return <div className="mb-4 flex items-start gap-3"><div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5" /></div><div className="min-w-0"><div className="flex items-center gap-1.5"><h2 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h2>{tooltip && <InfoTooltip text={tooltip} />}</div><p className="text-sm text-slate-500">{subtitle}</p></div></div>; }
 
 // Tap-to-toggle explanation bubble (not hover-based: this app runs on touch tablets, which have
@@ -160,8 +178,8 @@ const LANGUAGES = ["EN", "CZ", "PL", "DE", "NL"];
 const EXAM_LEVELS = ["Practicing", "Consulting"];
 const ROLES = ["Admin", "Centre", "Candidate", "Examiner"];
 const CENTRES = ["Arboricultural Academy", "VETcert Centre Poland", "VETcert Centre Germany", "VETcert Centre Netherlands"];
-const CENTRE_ACCESS_TOKEN = "VETBARA-CENTRE-ARBOR-2026";
-const CENTRE_QR_ID = "ARBOR-2026";
+export const CENTRE_ACCESS_TOKEN = "VETBARA-CENTRE-ARBOR-2026";
+export const CENTRE_QR_ID = "ARBOR-2026";
 const DEMO_QR_TOKENS = {
   Centre: CENTRE_ACCESS_TOKEN,
   Candidate: "VETBARA-CANDIDATE-C-001-2026",
@@ -305,8 +323,24 @@ const DEFAULT_TEST_BANK = {
   ],
 };
 const REPORT_TREES = ["Tree A", "Tree B"];
-const REPORT_SECTIONS = ["Health and vitality", "Structural condition / biomechanics", "Wildlife, historical, cultural or social values", "Threats to the tree", "Management plan", "Management justification summary"].map((title, i) => ({ key: `s${i + 1}`, title }));
-const CANDIDATE_SECTIONS = { Practicing: [{ key: "field-orientation", title: "Orientace", description: "Fullscreen map for orientation on the field site." }, { key: "field-trees", title: "Příprava stromů", description: "Readonly tree cards A-D with candidate notes." }, { key: "test", title: "Written test", description: "Complete and submit the Practicing written test." }], Consulting: [{ key: "field-orientation", title: "Orientace", description: "Fullscreen map for orientation on the field site." }, { key: "field-trees", title: "Příprava stromů", description: "Readonly tree cards A-D with candidate notes." }, { key: "test", title: "Written test", description: "Complete and submit the Consulting written test." }, { key: "report", title: "Report for 2 trees", description: "Collect field data and finalize the report for Tree A and Tree B." }] };
+// title/description are translation KEYS, not display text — module scope has no t(). Resolve
+// via sectionTitle(t, entry) / sectionDescription(t, entry) at render time.
+const REPORT_SECTIONS = ["s1", "s2", "s3", "s4", "s5", "s6"].map((key) => ({ key, titleKey: `reportSections.${key}` }));
+const CANDIDATE_SECTIONS = {
+  Practicing: [
+    { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
+    { key: "field-trees", titleKey: "candidateSections.trees.title", descriptionKey: "candidateSections.trees.description" },
+    { key: "test", titleKey: "candidateSections.writtenTest.title", descriptionKey: "candidateSections.writtenTest.practicingDescription" },
+  ],
+  Consulting: [
+    { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
+    { key: "field-trees", titleKey: "candidateSections.trees.title", descriptionKey: "candidateSections.trees.description" },
+    { key: "test", titleKey: "candidateSections.writtenTest.title", descriptionKey: "candidateSections.writtenTest.consultingDescription" },
+    { key: "report", titleKey: "candidateSections.report.title", descriptionKey: "candidateSections.report.description" },
+  ],
+};
+function sectionTitle(t, entry) { return entry?.titleKey ? t(entry.titleKey) : (entry?.title || ""); }
+function sectionDescription(t, entry) { return entry?.descriptionKey ? t(entry.descriptionKey) : (entry?.description || ""); }
 const OUTDOOR_SECTIONS = {
   Practicing: ["generic", "prework", "threats", "history", "risk"],
   Consulting: ["generic", "history", "risk"],
@@ -640,20 +674,20 @@ function isBackendPersistenceUnavailable(error) {
 // Synchronously renders a QR code to a standalone <svg>...</svg> markup string, for embedding
 // into print windows built via document.write (a separate document, so React components/props
 // can't be handed to it directly — only raw HTML/markup).
-function renderQrSvgMarkup(value, size = 160) {
+function renderQrSvgMarkup(value, size = 160, { includeMargin = false, level = "M" } = {}) {
   const safeValue = String(value ?? "");
   if (!safeValue) return "";
   const container = document.createElement("div");
   const root = createRoot(container);
   flushSync(() => {
-    root.render(<QRCodeSVG value={safeValue} size={size} level="M" includeMargin={false} />);
+    root.render(<QRCodeSVG value={safeValue} size={size} level={level} includeMargin={includeMargin} />);
   });
   const markup = container.querySelector("svg")?.outerHTML || "";
   root.unmount();
   return markup;
 }
 
-function RealQr({ value, size = 112 }) {
+export function RealQr({ value, size = 112 }) {
   const safeValue = String(value ?? "");
 
   return (
@@ -699,7 +733,7 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
   function submitManualPayload() {
     const value = manualPayload.trim();
     if (!value) {
-      window.alert("Vložte QR odkaz nebo payload.");
+      window.alert(t("qrScanner.enterPayloadAlert"));
       return;
     }
 
@@ -713,7 +747,7 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
             <p className="text-sm text-slate-600">
-              QR kamera je dočasně vypnutá kvůli stabilitě Examiner portálu. Použijte ruční vložení QR odkazu nebo offline payloadu.
+              {t("qrScanner.cameraDisabledHelper")}
             </p>
           </div>
           <Button onClick={onClose} variant="outline" className="rounded-2xl">
@@ -722,22 +756,21 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
         </div>
 
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="font-semibold">Stabilní fallback režim</div>
+          <div className="font-semibold">{t("qrScanner.fallbackModeTitle")}</div>
           <p className="mt-1">
-            Zkopírujte QR odkaz / obsah QR kódu ze zdrojového zařízení a vložte jej níže.
-            Kamerové skenování vrátíme samostatně až po ověření na HTTPS tabletu.
+            {t("qrScanner.fallbackModeHelper")}
           </p>
         </div>
 
         <div className="mt-4 rounded-2xl border bg-white p-4">
-          <h4 className="font-semibold">Ruční načtení QR payloadu</h4>
+          <h4 className="font-semibold">{t("qrScanner.manualPayloadTitle")}</h4>
           <p className="mt-1 text-sm text-slate-600">
-            Vložte sem odkaz z QR kódu, obsah QR, nebo offline JSON manifest kandidáta.
+            {t("qrScanner.manualPayloadHelper")}
           </p>
           <textarea
             value={manualPayload}
             onChange={(e) => setManualPayload(e.target.value)}
-            placeholder="Např. https://.../?role=Candidate&id=C-001&token=... nebo JSON balíček"
+            placeholder={t("qrScanner.manualPayloadPlaceholder")}
             className="mt-3 min-h-32 w-full rounded-xl border bg-white p-3 text-sm font-mono"
             autoCapitalize="none"
             autoCorrect="off"
@@ -745,10 +778,10 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <Button onClick={submitManualPayload} className="rounded-2xl">
-              Načíst vložený obsah
+              {t("qrScanner.loadPayload")}
             </Button>
             <Button onClick={() => setManualPayload("")} variant="outline" className="rounded-2xl">
-              Vymazat
+              {t("qrScanner.clearPayload")}
             </Button>
           </div>
         </div>
@@ -757,15 +790,15 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
   );
 }
 
-function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel }) {
+function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel, t }) {
   const [password, setPassword] = useState("");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-        <h3 className="text-lg font-semibold">Znovuotevření uzavřené části</h3>
+        <h3 className="text-lg font-semibold">{t("reopenModal.title")}</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Část <strong>{sectionKey}</strong> je uzavřená. Znovuotevření musí schválit dohlížející pracovník (Vetarbo) zadáním schvalovacího hesla přímo na tomto zařízení.
+          {t("reopenModal.bodyBefore")} <strong>{sectionKey}</strong> {t("reopenModal.bodyAfter")}
         </p>
         <input
           type="password"
@@ -773,13 +806,13 @@ function ReopenSectionModal({ sectionKey, error, onConfirm, onCancel }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") onConfirm(password); }}
-          placeholder="Schvalovací heslo"
+          placeholder={t("reopenModal.passwordPlaceholder")}
           className="mt-3 w-full rounded-xl border bg-white p-2 font-mono text-sm"
         />
         {error && <p className="mt-2 flex items-center gap-2 rounded-xl bg-rose-50 p-2 text-sm font-medium text-rose-900"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => onConfirm(password)} className="rounded-2xl">Potvrdit</Button>
-          <Button onClick={onCancel} variant="outline" className="rounded-2xl">Zrušit</Button>
+          <Button onClick={() => onConfirm(password)} className="rounded-2xl">{t("reopenModal.confirm")}</Button>
+          <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("reopenModal.cancel")}</Button>
         </div>
       </div>
     </div>
@@ -799,6 +832,17 @@ function VetBaraPrototype() {
   })();
 
   if (fieldTabletMode) return <FieldTabletPage />;
+
+  const scanCaptureMode = (() => {
+    try {
+      const query = new URLSearchParams(window.location.search);
+      return query.get("mode") === "scan-capture" || query.get("role") === "ScanCapture";
+    } catch {
+      return false;
+    }
+  })();
+
+  if (scanCaptureMode) return <ScanCaptureMobilePage />;
 
   const [uiLanguage, setUiLanguage] = useState("cs");
   const selectedUiLanguage = UI_LANGUAGES.find((lang) => lang.code === uiLanguage);
@@ -914,7 +958,7 @@ function VetBaraPrototype() {
   const selectedMode = loggedExaminer && assignments[selectedCandidate.id]?.primary === loggedExaminer.id ? "primary" : loggedExaminer && assignments[selectedCandidate.id]?.secondary === loggedExaminer.id ? "secondary" : "unassigned";
   const activeScoreLimits = useMemo(() => scoreLimitsForCandidate(selectedCandidate, variants, testBank, outdoorItemsByLevel), [selectedCandidate, variants, testBank, outdoorItemsByLevel]);
   const summary = useMemo(() => ({ total: candidates.length, practicing: candidates.filter((c) => c.level === "Practicing").length, consulting: candidates.filter((c) => c.level === "Consulting").length }), [candidates]);
-  const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp() }, ...prev]);
+  const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp(), createdAt: new Date().toISOString() }, ...prev]);
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
   const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => {
     const url = new URL(window.location.pathname || "/", portableLanOrigin() || window.location.origin);
@@ -1156,9 +1200,9 @@ function VetBaraPrototype() {
         source: "active-admin-json",
       });
 
-      setActiveCertificationPackageStatus(`Aktivní balíček načten: ${data.packageId}`);
+      setActiveCertificationPackageStatus(tf("centre.activePackage.autoLoaded", { packageId: data.packageId }));
     } catch (error) {
-      setActiveCertificationPackageError(error.message || "Načtení aktivního balíčku selhalo.");
+      setActiveCertificationPackageError(error.message || t("centre.activePackage.autoLoadFailed"));
       setActiveCertificationPackageStatus("");
     }
   }
@@ -1175,7 +1219,7 @@ function VetBaraPrototype() {
         if (cancelled) return;
 
         applyActiveCertificationPackage(data, { markDirty: false });
-        setActiveCertificationPackageStatus(`Aktivní Admin JSON balíček automaticky načten: ${data.packageId}`);
+        setActiveCertificationPackageStatus(tf("centre.activePackage.autoLoadedOnStartup", { packageId: data.packageId }));
         setActiveCertificationPackageError("");
       } catch {
         // Bez aktivního Admin balíčku ponecháme demo/default data.
@@ -1287,6 +1331,15 @@ function VetBaraPrototype() {
   function applyResolvedAccess(access, detail) {
     setAuthenticatedPortalRole(access.role);
     setActiveSessionToken(access.sessionToken ?? null);
+
+    // Every role opens this on its own separate page load (a different device, most of the
+    // time), so it can't inherit whatever the Centre operator already has in local memory —
+    // it only knows what's been persisted server-side. Apply that now, for every role, so an
+    // Examiner or Candidate whose Centre already imported+saved an Admin.vet package actually
+    // sees its questions instead of an empty test bank.
+    if (isObject(access.centreSetup?.testPackage)) {
+      applyTestPackagePayload(access.centreSetup.testPackage);
+    }
 
     if (access.role === "Centre") {
       setCentreUnlocked(true);
@@ -1601,6 +1654,31 @@ function VetBaraPrototype() {
     }]);
   }
 
+  // Shared by applyCentreSetup (Centre's own explicit "Load Centre Setup" click) and
+  // applyResolvedAccess (every role's QR/token bootstrap) — a Centre operator who imports an
+  // Admin.vet file locally (importTestPackage) only updates their own browser's state; that
+  // only reaches other devices once "Save Centre Setup" persists it into centre-setup.json,
+  // and only becomes visible to them once this same merge runs against that saved snapshot.
+  function applyTestPackagePayload(testPackage) {
+    if (!isObject(testPackage)) return;
+    if (Array.isArray(testPackage.availableVariants)) setAvailableVariants(testPackage.availableVariants);
+    if (isObject(testPackage.variants)) setVariants((previous) => ({ ...previous, ...testPackage.variants }));
+    if (isObject(testPackage.testBank)) setTestBank(testPackage.testBank);
+    if (isObject(testPackage.outdoorItemsByLevel)) {
+      const storedOutdoorItemsByLevel = testPackage.outdoorItemsByLevel;
+      if (!isHardcodedOutdoorFallbackBank(storedOutdoorItemsByLevel)) {
+        setOutdoorItemsByLevel(storedOutdoorItemsByLevel);
+      }
+    }
+    if (isObject(testPackage.activeAdminPackageMeta)) setActiveAdminPackageMeta(testPackage.activeAdminPackageMeta);
+    const summary = testPackage.summary ?? testPackage.testImportSummary ?? null;
+    if (summary) setTestImportSummary(summary);
+    setTestImportError("");
+    setTestImportStatus(summary?.variants && summary?.questions
+      ? tf("status.testImport.loadedStoredFull", { variants: summary.variants, questions: summary.questions })
+      : t("status.testImport.loadedStored"));
+  }
+
   function applyCentreSetup(result) {
     if (Array.isArray(result.candidates)) {
       setCandidates(result.candidates.map((candidate) => ({
@@ -1638,24 +1716,7 @@ function VetBaraPrototype() {
 
     setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
 
-    if (isObject(result.testPackage)) {
-      if (Array.isArray(result.testPackage.availableVariants)) setAvailableVariants(result.testPackage.availableVariants);
-      if (isObject(result.testPackage.variants)) setVariants((previous) => ({ ...previous, ...result.testPackage.variants }));
-      if (isObject(result.testPackage.testBank)) setTestBank(result.testPackage.testBank);
-      if (isObject(result.testPackage.outdoorItemsByLevel)) {
-        const storedOutdoorItemsByLevel = result.testPackage.outdoorItemsByLevel;
-        if (!isHardcodedOutdoorFallbackBank(storedOutdoorItemsByLevel)) {
-          setOutdoorItemsByLevel(storedOutdoorItemsByLevel);
-        }
-      }
-      if (isObject(result.testPackage.activeAdminPackageMeta)) setActiveAdminPackageMeta(result.testPackage.activeAdminPackageMeta);
-      const summary = result.testPackage.summary ?? result.testPackage.testImportSummary ?? null;
-      if (summary) setTestImportSummary(summary);
-      setTestImportError("");
-      setTestImportStatus(summary?.variants && summary?.questions
-        ? tf("status.testImport.loadedStoredFull", { variants: summary.variants, questions: summary.questions })
-        : t("status.testImport.loadedStored"));
-    }
+    applyTestPackagePayload(result.testPackage);
   }
 
   function validateCentreSetup() {
@@ -1845,12 +1906,12 @@ function VetBaraPrototype() {
   function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
   function removeCandidate(candidateId) {
     if (candidates.length <= 2) {
-      window.alert("Nejmenší povolený počet jsou 2 kandidáti.");
+      window.alert(t("centre.people.minCandidatesAlert"));
       return;
     }
 
     const candidate = candidates.find((item) => item.id === candidateId);
-    if (!window.confirm(`Opravdu odstranit kandidáta ${candidate?.name ?? candidateId}?`)) return;
+    if (!window.confirm(tf("centre.people.removeCandidateConfirm", { name: candidate?.name ?? candidateId }))) return;
 
     setCandidates((prev) => prev.filter((item) => item.id !== candidateId));
     setAssignments((prev) => {
@@ -1864,12 +1925,12 @@ function VetBaraPrototype() {
 
   function removeExaminer(examinerId) {
     if (examiners.length <= 2) {
-      window.alert("Nejmenší povolený počet jsou 2 examineři.");
+      window.alert(t("centre.people.minExaminersAlert"));
       return;
     }
 
     const examiner = examiners.find((item) => item.id === examinerId);
-    if (!window.confirm(`Opravdu odstranit examinera ${examiner?.name ?? examinerId}?`)) return;
+    if (!window.confirm(tf("centre.people.removeExaminerConfirm", { name: examiner?.name ?? examinerId }))) return;
 
     const fallback = examiners.find((item) => item.id !== examinerId)?.id ?? "";
     setExaminers((prev) => prev.filter((item) => item.id !== examinerId));
@@ -1911,7 +1972,7 @@ function VetBaraPrototype() {
   function confirmReopenRequest(password) {
     if (!reopenRequest) return;
     if (password !== "Vetarbo") {
-      setReopenRequest((prev) => prev && { ...prev, error: "Neplatné heslo. Znovuotevření nebylo povoleno." });
+      setReopenRequest((prev) => prev && { ...prev, error: t("reopenModal.invalidPassword") });
       addAudit("Candidate reopen request denied", loggedCandidate?.name ?? "-", `${reopenRequest.key} / wrong password`);
       return;
     }
@@ -2064,7 +2125,7 @@ function VetBaraPrototype() {
     const mode = assignment.primary === loggedExaminer.id ? "primary" : assignment.secondary === loggedExaminer.id ? "secondary" : "unassigned";
     if (mode === "unassigned") return;
     const prior = examinerTimes[loggedExaminer.id]?.[candidateId]?.outdoor;
-    if (prior?.closedAt && !confirmedReopenAllowed("Outdoor form")) return;
+    if (prior?.closedAt && !confirmedReopenAllowed(t("examiner.reopenLabel.outdoor"), t)) return;
     const openedAt = nowStamp();
     const openedAtIso = new Date().toISOString();
     let outdoorBankForOpen = outdoorItemsByLevel;
@@ -2100,14 +2161,14 @@ function VetBaraPrototype() {
     hydrateOutdoorProgress(activeSessionToken, loggedExaminer.id, candidateId);
   }
   function openExaminerWrittenReview(candidateId) {
-    if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.written?.closedAt && !confirmedReopenAllowed("Written test review")) return;
+    if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.written?.closedAt && !confirmedReopenAllowed(t("examiner.reopenLabel.writtenReview"), t)) return;
     setSelectedCandidateId(candidateId);
     setActiveExaminerPage("writtenReview");
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
   }
 
   function openExaminerReportReview(candidateId) {
-    if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.report?.closedAt && !confirmedReopenAllowed("Report review")) return;
+    if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.report?.closedAt && !confirmedReopenAllowed(t("examiner.reopenLabel.reportReview"), t)) return;
     setSelectedCandidateId(candidateId);
     setActiveExaminerPage("reportReview");
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
@@ -2195,7 +2256,7 @@ function VetBaraPrototype() {
     const closedAt = nowStamp();
     const submittedAt = new Date().toISOString();
     const cappedTotal = Math.min(total, max);
-    const ok = window.confirm(`Odeslat a uzavřít OUTDOOR pro ${selectedCandidate.name}?\n\nVýsledek: ${cappedTotal} / ${max} bodů.`);
+    const ok = window.confirm(tf("outdoor.submitCloseConfirm", { name: selectedCandidate.name, total: cappedTotal, max }));
     if (!ok) return;
     setCandidates((prev) => prev.map((c) => c.id === selectedCandidate.id ? { ...c, outdoor: cappedTotal, status: "Outdoor submitted" } : c));
     const outdoorResultRecord = {
@@ -2225,7 +2286,27 @@ function VetBaraPrototype() {
     setActiveExaminerPage("landing");
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
   }
-  function archivePlan() { if (!loggedExaminer || selectedCandidate.level !== "Practicing") return; setPracticingArchive((prev) => ({ ...prev, [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), { id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`, capturedBy: loggedExaminer.name }] })); }
+  function archivePlan(files) {
+    if (!loggedExaminer || selectedCandidate.level !== "Practicing") return;
+    const fileList = Array.from(files ?? []);
+    if (!fileList.length) return;
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPracticingArchive((prev) => ({
+          ...prev,
+          [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), {
+            id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`,
+            capturedBy: loggedExaminer.name,
+            capturedAt: new Date().toISOString(),
+            name: file.name || `management-plan-${Date.now()}.jpg`,
+            dataUrl: reader.result,
+          }],
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
   function updateScore(field, value, options = {}) {
     const limits = activeScoreLimits;
     const max = limits?.[`${field}Max`] ?? scoreLimits(selectedCandidate.level)?.[`${field}Max`] ?? 0;
@@ -2283,22 +2364,28 @@ function VetBaraPrototype() {
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} setScannerMode={setScannerMode} centreQr={payload("Centre", CENTRE_QR_ID, CENTRE_ACCESS_TOKEN)} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} />}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} t={t} />}
-      {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
+      {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
-    {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} />}
+    {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} t={t} />}
   </div></main>;
 }
 
+// Titles use a translated key, but "AUTHORING_DOCS" itself is a plain module-level array (no t()
+// available at module scope), so the doc list holds a translation KEY here; components resolve it
+// via authoringDocTitle(t, doc) below.
 const AUTHORING_DOCS = [
-  { key: "writtenPracticing", level: "Practicing", kind: "written", title: "Practicing written answers" },
-  { key: "writtenConsulting", level: "Consulting", kind: "written", title: "Consulting written answers" },
-  { key: "outdoorPracticing", level: "Practicing", kind: "outdoor", title: "Practicing outdoor exercises" },
-  { key: "outdoorConsulting", level: "Consulting", kind: "outdoor", title: "Consulting outdoor exercises" },
+  { key: "writtenPracticing", level: "Practicing", kind: "written", titleKey: "authoringDocs.writtenPracticing" },
+  { key: "writtenConsulting", level: "Consulting", kind: "written", titleKey: "authoringDocs.writtenConsulting" },
+  { key: "outdoorPracticing", level: "Practicing", kind: "outdoor", titleKey: "authoringDocs.outdoorPracticing" },
+  { key: "outdoorConsulting", level: "Consulting", kind: "outdoor", titleKey: "authoringDocs.outdoorConsulting" },
 ];
+function authoringDocTitle(t, doc) {
+  return doc?.titleKey ? t(doc.titleKey) : (doc?.title || "");
+}
 
 
 const AUTHORING_DOCUMENT_DEFAULTS = {
@@ -2320,13 +2407,22 @@ const AUTHORING_DOCUMENT_DEFAULTS = {
   },
 };
 
+// English default document titles, used only to seed a brand-new document's editable "title"
+// field (see AdminStructuredPackagePanel's "Document name" input) — not rendered as fixed UI
+// chrome itself, so it does not need t() here.
+const AUTHORING_DOC_ENGLISH_DEFAULT_TITLES = {
+  writtenPracticing: "Practicing written answers",
+  writtenConsulting: "Consulting written answers",
+  outdoorPracticing: "Practicing outdoor exercises",
+  outdoorConsulting: "Consulting outdoor exercises",
+};
 function defaultAuthoringDocumentMeta(key) {
   const doc = AUTHORING_DOCS.find((item) => item.key === key) || AUTHORING_DOCS[0];
   const defaults = AUTHORING_DOCUMENT_DEFAULTS[key] || {};
   return {
     level: doc.level,
     kind: doc.kind,
-    title: doc.title,
+    title: AUTHORING_DOC_ENGLISH_DEFAULT_TITLES[doc.key] || "",
     preface: defaults.preface || "",
     candidateIntro: defaults.candidateIntro || "",
   };
@@ -2600,19 +2696,19 @@ function buildArchiveSectionsPdfBlob(title, metaLines, sections) {
   return doc.output("blob");
 }
 
-function archiveWrittenTestSections(candidate, variants, testBank, testResponses, includeGrading) {
+function archiveWrittenTestSections(candidate, variants, testBank, testResponses, includeGrading, t) {
   const review = computeWrittenTestReview(candidate, variants, testBank, testResponses);
   return (review.items || []).map((item) => ({
-    heading: `${item.question?.id || "-"}${includeGrading ? ` (${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"} b.)` : ""}`,
+    heading: `${item.question?.id || "-"}${includeGrading ? ` (${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"} ${t("archive.pointsAbbrev")})` : ""}`,
     rows: [
-      { label: "Otázka", text: item.question?.text || "-" },
-      { label: "Odpověď kandidáta", text: item.hasAnswer ? String(item.answer ?? "") : "Bez odpovědi" },
-      ...(includeGrading ? [{ label: "Body", text: `${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"}` }] : []),
+      { label: t("archive.question"), text: item.question?.text || "-" },
+      { label: t("archive.candidateAnswer"), text: item.hasAnswer ? String(item.answer ?? "") : t("archive.noAnswer") },
+      ...(includeGrading ? [{ label: t("archive.points"), text: `${item.pointsAwarded ?? 0} / ${item.question?.points ?? "-"}` }] : []),
     ],
   }));
 }
 
-function archiveOutdoorSections(candidate, outdoor, outdoorNotes, outdoorItemsByLevel) {
+function archiveOutdoorSections(candidate, outdoor, outdoorNotes, outdoorItemsByLevel, t) {
   const scores = outdoor?.[candidate.id] ?? {};
   const notes = outdoorNotes?.[candidate.id] ?? {};
   const sections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, candidate.level);
@@ -2621,29 +2717,29 @@ function archiveOutdoorSections(candidate, outdoor, outdoorNotes, outdoorItemsBy
     return items.map((item) => ({
       heading: `${item.id} — ${outdoorSectionTitle(section)}`,
       rows: [
-        { label: "Otázka", text: item.text || "-" },
-        { label: "Body", text: `${scores[item.id] ?? "-"} / ${item.max}` },
-        ...(notes[item.id] ? [{ label: "Poznámka examinera", text: notes[item.id] }] : []),
+        { label: t("archive.question"), text: item.text || "-" },
+        { label: t("archive.points"), text: `${scores[item.id] ?? "-"} / ${item.max}` },
+        ...(notes[item.id] ? [{ label: t("archive.examinerNote"), text: notes[item.id] }] : []),
       ],
     }));
   });
 }
 
-function archiveReportSections(candidate, reportDrafts) {
+function archiveReportSections(candidate, reportDrafts, t) {
   const draft = reportDrafts?.[candidate.id] ?? createReportDraft();
   return REPORT_TREES.map((treeName) => {
     const tree = draft[treeName] ?? {};
-    const rows = [{ label: "Terénní poznámky", text: tree.fieldNotes || "-" }];
-    REPORT_SECTIONS.forEach((section) => rows.push({ label: section.title, text: tree.finalSections?.[section.key] || "-" }));
+    const rows = [{ label: t("archive.fieldNotes"), text: tree.fieldNotes || "-" }];
+    REPORT_SECTIONS.forEach((section) => rows.push({ label: sectionTitle(t, section), text: tree.finalSections?.[section.key] || "-" }));
     return { heading: treeName, rows };
   });
 }
 
-function archiveAuditSections(audit) {
+function archiveAuditSections(audit, t) {
   return [{
-    heading: "Auditní stopa",
+    heading: t("archive.auditTrail"),
     rows: (audit || []).map((entry) => ({
-      label: `${entry.time || "-"} — ${entry.action || "-"}`,
+      label: `${entry.time || "-"} — ${translateAuditAction(t, entry.action) || "-"}`,
       text: [entry.target, entry.detail].filter(Boolean).join(" · ") || "-",
     })),
   }];
@@ -2653,22 +2749,27 @@ function archiveAuditSections(audit) {
 // Centre lead reviews before final closure. Each entry knows how to serialize itself both as
 // JSON (machine-readable, embedded in the Centrum.vet manifest) and as a simple PDF (for the
 // human-readable copy in the ZIP) — see buildArchiveSectionsPdfBlob.
-function buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit }) {
+function buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const docs = [];
+  const categoryInputMaterials = t("archive.category.inputMaterials");
+  const categoryCandidateOutputs = t("archive.category.candidateOutputs");
+  const categoryExaminerGrading = t("archive.category.examinerGrading");
+  const categoryLog = t("archive.category.log");
 
   docs.push({
     id: "admin-package",
-    category: "Vstupní materiály",
-    label: "Admin.vet — aktivní zkušební balíček",
+    category: categoryInputMaterials,
+    label: t("archive.label.adminPackage"),
     jsonFilename: "Admin_balicek.json",
-    pdfTitle: "Admin.vet — aktivní zkušební balíček",
+    pdfTitle: t("archive.label.adminPackage"),
     getJson: () => activeAdminPackage || {},
     getPdfSections: () => [{
-      heading: "Balíček",
+      heading: t("archive.package"),
       rows: [
         { label: "Package ID", text: activeAdminPackage?.packageId || "-" },
-        { label: "Verze", text: activeAdminPackage?.version || "-" },
-        { label: "Jazyk", text: activeAdminPackage?.language || "-" },
+        { label: t("archive.version"), text: activeAdminPackage?.version || "-" },
+        { label: t("archive.language"), text: activeAdminPackage?.language || "-" },
       ],
     }],
   });
@@ -2676,22 +2777,22 @@ function buildArchiveDocuments({ candidates, activeAdminPackage, variants, testB
   candidates.forEach((c) => {
     docs.push({
       id: `candidate-test-${c.id}`,
-      category: "Výstupy kandidátů",
-      label: `${c.id} — písemný test (odpovědi kandidáta)`,
+      category: categoryCandidateOutputs,
+      label: tf("archive.label.candidateTest", { id: c.id }),
       jsonFilename: `${c.id}_test_odpovedi.json`,
-      pdfTitle: `${c.name || c.id} — písemný test`,
+      pdfTitle: tf("archive.pdfTitle.candidateTest", { name: c.name || c.id }),
       getJson: () => testResponses?.[c.id] ?? {},
-      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, false),
+      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, false, t),
     });
     if (c.level === "Consulting") {
       docs.push({
         id: `candidate-report-${c.id}`,
-        category: "Výstupy kandidátů",
-        label: `${c.id} — Consulting report (podklady kandidáta)`,
+        category: categoryCandidateOutputs,
+        label: tf("archive.label.candidateReport", { id: c.id }),
         jsonFilename: `${c.id}_report.json`,
-        pdfTitle: `${c.name || c.id} — Consulting report`,
+        pdfTitle: tf("archive.pdfTitle.candidateReport", { name: c.name || c.id }),
         getJson: () => reportDrafts?.[c.id] ?? {},
-        getPdfSections: () => archiveReportSections(c, reportDrafts),
+        getPdfSections: () => archiveReportSections(c, reportDrafts, t),
       });
     }
   });
@@ -2699,62 +2800,62 @@ function buildArchiveDocuments({ candidates, activeAdminPackage, variants, testB
   candidates.forEach((c) => {
     docs.push({
       id: `examiner-test-${c.id}`,
-      category: "Hodnocení examinerů",
-      label: `${c.id} — hodnocení písemného testu`,
+      category: categoryExaminerGrading,
+      label: tf("archive.label.examinerTest", { id: c.id }),
       jsonFilename: `${c.id}_test_hodnoceni.json`,
-      pdfTitle: `${c.name || c.id} — hodnocení písemného testu`,
+      pdfTitle: tf("archive.pdfTitle.examinerTest", { name: c.name || c.id }),
       getJson: () => computeWrittenTestReview(c, variants, testBank, testResponses),
-      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, true),
+      getPdfSections: () => archiveWrittenTestSections(c, variants, testBank, testResponses, true, t),
     });
     docs.push({
       id: `examiner-outdoor-${c.id}`,
-      category: "Hodnocení examinerů",
-      label: `${c.id} — hodnocení outdoor`,
+      category: categoryExaminerGrading,
+      label: tf("archive.label.examinerOutdoor", { id: c.id }),
       jsonFilename: `${c.id}_outdoor_hodnoceni.json`,
-      pdfTitle: `${c.name || c.id} — hodnocení outdoor`,
+      pdfTitle: tf("archive.pdfTitle.examinerOutdoor", { name: c.name || c.id }),
       getJson: () => outdoor?.[c.id] ?? {},
-      getPdfSections: () => archiveOutdoorSections(c, outdoor, outdoorNotes, outdoorItemsByLevel),
+      getPdfSections: () => archiveOutdoorSections(c, outdoor, outdoorNotes, outdoorItemsByLevel, t),
     });
     if (c.level === "Consulting") {
       docs.push({
         id: `examiner-report-${c.id}`,
-        category: "Hodnocení examinerů",
-        label: `${c.id} — kontrola Consulting reportu`,
+        category: categoryExaminerGrading,
+        label: tf("archive.label.examinerReport", { id: c.id }),
         jsonFilename: `${c.id}_report_kontrola.json`,
-        pdfTitle: `${c.name || c.id} — kontrola Consulting reportu`,
+        pdfTitle: tf("archive.pdfTitle.examinerReport", { name: c.name || c.id }),
         getJson: () => reportDrafts?.[c.id] ?? {},
-        getPdfSections: () => archiveReportSections(c, reportDrafts),
+        getPdfSections: () => archiveReportSections(c, reportDrafts, t),
       });
     }
   });
 
   docs.push({
     id: "audit-log",
-    category: "Log",
-    label: "Auditní stopa (log)",
+    category: categoryLog,
+    label: t("archive.label.auditLog"),
     jsonFilename: "auditni_stopa.json",
-    pdfTitle: "Auditní stopa",
+    pdfTitle: t("archive.auditTrail"),
     getJson: () => audit || [],
-    getPdfSections: () => archiveAuditSections(audit),
+    getPdfSections: () => archiveAuditSections(audit, t),
   });
 
   return docs;
 }
 
-function buildArchiveReadme(docs, vetFilename) {
+function buildArchiveReadme(docs, vetFilename, t) {
   const lines = [
-    "VetBara — archiv certifikační zkoušky",
-    `Vygenerováno: ${new Date().toLocaleString()}`,
+    t("archive.readme.title"),
+    `${t("archive.readme.generatedAt")}: ${new Date().toLocaleString()}`,
     "",
-    "STRUKTURA ARCHIVU",
-    `- ${vetFilename}: souhrnný soubor se všemi daty zkoušky (centrum, kandidáti, examineři,`,
-    "  všechny dokumenty). Lze znovu načíst v Adminovi, sekce C — Import dat ze zkoušky,",
-    "  pro prohlížení bez možnosti editace.",
-    "- README.txt: tento soubor.",
-    "- Každá kategorie dokumentů má vlastní složku; každý dokument je uložen dvakrát —",
-    "  jako .json (strojově čitelná data) a .pdf (čitelný formulář pro tisk/archiv).",
+    t("archive.readme.structureHeading"),
+    `- ${vetFilename}: ${t("archive.readme.vetFileLine1")}`,
+    `  ${t("archive.readme.vetFileLine2")}`,
+    `  ${t("archive.readme.vetFileLine3")}`,
+    `- README.txt: ${t("archive.readme.readmeLine")}`,
+    `- ${t("archive.readme.categoryFolderLine1")}`,
+    `  ${t("archive.readme.categoryFolderLine2")}`,
     "",
-    "OBSAH",
+    t("archive.readme.contentsHeading"),
   ];
   const byCategory = {};
   docs.forEach((d) => { (byCategory[d.category] ||= []).push(d); });
@@ -2877,7 +2978,7 @@ function guidanceToFlowHtml(value) {
   }).join("");
 }
 
-function authoringPrintHtml(draft) {
+function authoringPrintHtml(draft, t) {
   const pkg = certificationPackageFromAuthoringDraft(draft);
 
   function isMultipleChoiceItem(doc, item) {
@@ -2900,13 +3001,13 @@ function authoringPrintHtml(draft) {
       : "";
     const guidanceParts = [];
     if (isMultipleChoice) {
-      guidanceParts.push(`<div class="correct-answer"><strong>Correct answer:</strong> ${escapeHtml(item.correctAnswer || "-")}</div>`);
+      guidanceParts.push(`<div class="correct-answer"><strong>${escapeHtml(t("admin.authoringPrint.correctAnswer"))}:</strong> ${escapeHtml(item.correctAnswer || "-")}</div>`);
     }
     if (String(guidance ?? "").trim()) {
       guidanceParts.push(`<div class="guidance-text">${guidanceToFlowHtml(guidance)}</div>`);
     }
-    const typeLabel = isMultipleChoice ? "Multiple-choice" : doc.kind === "outdoor" ? "Outdoor / oral" : "Written answer";
-    return `<tr class="${isMultipleChoice ? "choice-row" : "written-row"}"><td class="q"><div class="qid"><strong>${escapeHtml(item.id || `Question ${index + 1}`)}</strong><span>${escapeHtml(typeLabel)}</span></div><div class="question-text">${linesToHtml(question)}</div>${optionHtml}</td><td class="guidance">${guidanceParts.join("") || "&nbsp;"}</td><td class="marks">/${escapeHtml(item.max || 0)}</td></tr>`;
+    const typeLabel = isMultipleChoice ? t("admin.authoringPrint.multipleChoice") : doc.kind === "outdoor" ? t("admin.authoringPrint.outdoorOral") : t("admin.authoringPrint.writtenAnswer");
+    return `<tr class="${isMultipleChoice ? "choice-row" : "written-row"}"><td class="q"><div class="qid"><strong>${escapeHtml(item.id || `${t("archive.question")} ${index + 1}`)}</strong><span>${escapeHtml(typeLabel)}</span></div><div class="question-text">${linesToHtml(question)}</div>${optionHtml}</td><td class="guidance">${guidanceParts.join("") || "&nbsp;"}</td><td class="marks">/${escapeHtml(item.max || 0)}</td></tr>`;
   }
 
   const docs = AUTHORING_DOCS.map((doc) => {
@@ -2918,16 +3019,21 @@ function authoringPrintHtml(draft) {
       const sectionItems = items.filter((item) => (String(item.section || item.theme || "Unsectioned").trim() || "Unsectioned") === section);
       const rows = sectionItems.map((item, index) => renderAuthoringPrintRow(doc, item, index)).join("");
       const isChoiceSection = sectionItems.length > 0 && sectionItems.every((item) => isMultipleChoiceItem(doc, item));
-      return `<h3>${escapeHtml(section)}</h3><table class="${[doc.kind === "written" ? "test-question-table" : "", isChoiceSection ? "choice-section-table" : "standard-section-table"].filter(Boolean).join(" ")}"><thead><tr><th>Question</th><th>Notes / answer guidance</th><th>Marks</th></tr></thead><tbody>${rows}</tbody></table>`;
+      return `<h3>${escapeHtml(section)}</h3><table class="${[doc.kind === "written" ? "test-question-table" : "", isChoiceSection ? "choice-section-table" : "standard-section-table"].filter(Boolean).join(" ")}"><thead><tr><th>${escapeHtml(t("archive.question"))}</th><th>${escapeHtml(t("admin.authoringPrint.notesGuidance"))}</th><th>${escapeHtml(t("archive.points"))}</th></tr></thead><tbody>${rows}</tbody></table>`;
     }).join("");
-    return `<section class="doc"><h2>${escapeHtml(data.title || doc.title)}</h2><p>${escapeHtml(doc.level)} / ${escapeHtml(doc.kind)} / ${summary.count} items / ${summary.max} marks</p>${data.preface ? `<div class="preface"><strong>Preface</strong><br />${linesToHtml(data.preface)}</div>` : ""}${data.candidateIntro ? `<div class="intro"><strong>Introductory text for candidates</strong><br />${linesToHtml(data.candidateIntro)}</div>` : ""}${sectionHtml}</section>`;
+    return `<section class="doc"><h2>${escapeHtml(data.title || AUTHORING_DOC_ENGLISH_DEFAULT_TITLES[doc.key] || "")}</h2><p>${escapeHtml(doc.level)} / ${escapeHtml(doc.kind)} / ${summary.count} ${escapeHtml(t("admin.authoringPrint.items"))} / ${summary.max} ${escapeHtml(t("admin.authoringPrint.marks"))}</p>${data.preface ? `<div class="preface"><strong>${escapeHtml(t("admin.authoringPrint.preface"))}</strong><br />${linesToHtml(data.preface)}</div>` : ""}${data.candidateIntro ? `<div class="intro"><strong>${escapeHtml(t("admin.authoringPrint.candidateIntro"))}</strong><br />${linesToHtml(data.candidateIntro)}</div>` : ""}${sectionHtml}</section>`;
   }).join("");
 
-  return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(pkg.packageId)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827}h1{font-size:26px}h2{page-break-before:always;margin-top:32px}.doc:first-of-type h2{page-break-before:auto}h3{margin-top:20px;font-size:15px}.preface,.intro,.meta{border:1px solid #cbd5e1;background:#f8fafc;padding:12px;margin:10px 0 14px}table{border-collapse:collapse;width:100%;font-size:12px;break-inside:auto}tr{break-inside:avoid;break-after:auto}th,td{border:1px solid #111827;padding:8px;vertical-align:top}th{background:#f1f5f9}.q{width:34%}.guidance{width:auto}.marks{width:60px;text-align:right;font-weight:bold}.test-question-table .q{width:44%}.test-question-table .guidance{width:auto;padding-left:6px;padding-right:6px}.test-question-table .marks{width:48px}.choice-section-table .q{width:46%}.test-question-table.choice-section-table .q{width:54%}.choice-section-table .guidance{width:auto}.qid{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:5px}.qid span{border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#475569;font-size:10px;font-weight:700;padding:2px 7px;white-space:nowrap}.question-text{font-weight:600;margin-bottom:8px}.choice-list{margin:8px 0 0 18px;padding:0}.choice-list li{margin:3px 0;padding-left:3px}.choice-row .q{background:#f8fafc}.choice-row .question-text{font-weight:700}.correct-answer{border:1px solid #bbf7d0;background:#f0fdf4;color:#064e3b;border-radius:8px;padding:8px;margin-bottom:8px}.guidance-text{white-space:normal;width:100%;max-width:none;line-height:1.25}.test-question-table .guidance-text{display:block}.guidance-heading{font-weight:700;margin:0 0 3px}.guidance-paragraph{margin:0 0 5px}.guidance-bullet{margin:0 0 2px;padding-left:0.9em;text-indent:-0.9em}.written-row .guidance-text{color:#334155}@media print{button{display:none}body{margin:12mm}}</style></head><body><button onclick="window.print()">Print / Save as PDF</button><h1>${escapeHtml(draft.title || "VETCERT examination package")}</h1><div class="meta"><div>Package ID: ${escapeHtml(pkg.packageId)}</div><div>Version: ${escapeHtml(draft.version || "")}</div><div>Language: ${escapeHtml(draft.language || "English")}</div><div>Generated: ${escapeHtml(pkg.createdAt)}</div></div>${docs}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(pkg.packageId)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827}h1{font-size:26px}h2{page-break-before:always;margin-top:32px}.doc:first-of-type h2{page-break-before:auto}h3{margin-top:20px;font-size:15px}.preface,.intro,.meta{border:1px solid #cbd5e1;background:#f8fafc;padding:12px;margin:10px 0 14px}table{border-collapse:collapse;width:100%;font-size:12px;break-inside:auto}tr{break-inside:avoid;break-after:auto}th,td{border:1px solid #111827;padding:8px;vertical-align:top}th{background:#f1f5f9}.q{width:34%}.guidance{width:auto}.marks{width:60px;text-align:right;font-weight:bold}.test-question-table .q{width:44%}.test-question-table .guidance{width:auto;padding-left:6px;padding-right:6px}.test-question-table .marks{width:48px}.choice-section-table .q{width:46%}.test-question-table.choice-section-table .q{width:54%}.choice-section-table .guidance{width:auto}.qid{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:5px}.qid span{border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;color:#475569;font-size:10px;font-weight:700;padding:2px 7px;white-space:nowrap}.question-text{font-weight:600;margin-bottom:8px}.choice-list{margin:8px 0 0 18px;padding:0}.choice-list li{margin:3px 0;padding-left:3px}.choice-row .q{background:#f8fafc}.choice-row .question-text{font-weight:700}.correct-answer{border:1px solid #bbf7d0;background:#f0fdf4;color:#064e3b;border-radius:8px;padding:8px;margin-bottom:8px}.guidance-text{white-space:normal;width:100%;max-width:none;line-height:1.25}.test-question-table .guidance-text{display:block}.guidance-heading{font-weight:700;margin:0 0 3px}.guidance-paragraph{margin:0 0 5px}.guidance-bullet{margin:0 0 2px;padding-left:0.9em;text-indent:-0.9em}.written-row .guidance-text{color:#334155}@media print{button{display:none}body{margin:12mm}}</style></head><body><button onclick="window.print()">${escapeHtml(t("admin.authoringPrint.printButton"))}</button><h1>${escapeHtml(draft.title || t("admin.authoringPrint.defaultTitle"))}</h1><div class="meta"><div>Package ID: ${escapeHtml(pkg.packageId)}</div><div>${escapeHtml(t("archive.version"))}: ${escapeHtml(draft.version || "")}</div><div>${escapeHtml(t("archive.language"))}: ${escapeHtml(draft.language || "English")}</div><div>${escapeHtml(t("admin.authoringPrint.generated"))}: ${escapeHtml(pkg.createdAt)}</div></div>${docs}</body></html>`;
 }
 
-function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, t }) {
+export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, centre, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [draft, setDraft] = useState(() => createEmptyAuthoringDraft());
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteDraft, setNoteDraft] = useState("");
   // The structured editor only models written/outdoor/language content. Package-level fields it
   // doesn't know about (rulesDocuments, packageKind, ...) must still survive a load -> edit ->
   // save round trip instead of being silently dropped, so we keep the last loaded raw package
@@ -3036,7 +3142,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
     setDraft(authoringDraftFromCertificationPackage(pkg));
     setSelectedIndex(0);
     setActiveSectionFilter("__all__");
-    setLocalStatus(`Načteno do strukturovaného editoru: ${pkg.packageId || "balíček bez ID"}`);
+    setLocalStatus(tf("admin.authoring.loadedIntoEditor", { packageId: pkg.packageId || t("admin.authoring.packageNoId") }));
     setLocalError("");
   }
 
@@ -3081,13 +3187,13 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
   }
 
   async function loadActivePackage({ silent = false } = {}) {
-    if (!silent) setLocalStatus("Načítám Admin balíček do editoru...");
+    if (!silent) setLocalStatus(t("admin.authoring.loadingIntoEditor"));
     setLocalError("");
 
     const attempts = [
-      { url: "/api/admin/test-package/approved", label: "schválený aktivní balíček" },
-      { url: "/api/centre/test-package/active", label: "aktivní Centre balíček" },
-      { url: "/api/admin/test-package/latest", label: "poslední uložený Admin balíček" },
+      { url: "/api/admin/test-package/approved", label: t("admin.authoring.attempt.approved") },
+      { url: "/api/centre/test-package/active", label: t("admin.authoring.attempt.centreActive") },
+      { url: "/api/admin/test-package/latest", label: t("admin.authoring.attempt.lastSaved") },
     ];
 
     const failures = [];
@@ -3096,14 +3202,14 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
       const result = await fetchJsonIfOk(attempt.url);
       if (result.ok && packageHasAuthoringContent(result.data)) {
         loadFromPackage(result.data);
-        setLocalStatus(`Načten ${attempt.label}: ${result.data.packageId || "bez packageId"}`);
+        setLocalStatus(tf("admin.authoring.loadedAttempt", { label: attempt.label, packageId: result.data.packageId || t("admin.authoring.packageNoId") }));
         return;
       }
       failures.push(`${attempt.label}: ${result.data?.error || `HTTP ${result.status}`}`);
     }
 
     if (!silent) {
-      setLocalError(`Nepodařilo se načíst žádný existující balíček. ${failures.join(" | ")}`);
+      setLocalError(tf("admin.authoring.loadAnyFailed", { details: failures.join(" | ") }));
       setLocalStatus("");
     }
   }
@@ -3112,29 +3218,29 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setLocalStatus("Načítám Admin.vet ze souboru...");
+    setLocalStatus(t("admin.authoring.loadingFromFile"));
     setLocalError("");
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const data = JSON.parse(String(reader.result || ""));
-        if (!packageHasAuthoringContent(data)) throw new Error("Soubor neobsahuje žádné otázky ani outdoor cvičení.");
+        if (!packageHasAuthoringContent(data)) throw new Error(t("admin.authoring.fileNoContent"));
         loadFromPackage(data);
-        setLocalStatus(`Načteno ze souboru ${file.name}: ${data.packageId || "bez packageId"}`);
+        setLocalStatus(tf("admin.authoring.loadedFromFile", { fileName: file.name, packageId: data.packageId || t("admin.authoring.packageNoId") }));
       } catch (error) {
-        setLocalError(error.message || "Soubor se nepodařilo načíst jako Admin.vet balíček.");
+        setLocalError(error.message || t("admin.authoring.fileLoadFailed"));
         setLocalStatus("");
       }
     };
     reader.onerror = () => {
-      setLocalError("Soubor se nepodařilo přečíst.");
+      setLocalError(t("admin.authoring.fileReadFailed"));
       setLocalStatus("");
     };
     reader.readAsText(file);
   }
 
   async function saveAsPackage() {
-    setLocalStatus("Ukládám strukturovaný obsah jako Admin JSON balíček...");
+    setLocalStatus(t("admin.authoring.savingAsPackage"));
     setLocalError("");
     try {
       const builtPkg = certificationPackageFromAuthoringDraft(draft);
@@ -3153,7 +3259,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
       // Saving only writes the draft/"latest" file. Centre and candidates read a separate
       // "active/approved" file, so without this call the save above would silently never
       // reach a live exam.
-      setLocalStatus("Schvaluji balíček jako aktivní pro Centre a kandidáty...");
+      setLocalStatus(t("admin.authoring.approvingAsActive"));
       const approveResponse = await fetch("/api/admin/test-package/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3167,17 +3273,83 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
       const vetFilename = `Admin_${languageAbbrev(draft.language)}_${vetFilenameStamp()}.vet`;
       downloadJsonFile(vetFilename, savedPackage);
       setAdminPdfPackageLatest?.(savedPackage);
-      setAdminPdfPackageStatus?.(`Balíček uložen a schválen jako aktivní: ${vetFilename}`);
-      setLocalStatus(`Uloženo a schváleno jako aktivní: ${vetFilename}`);
+      setAdminPdfPackageStatus?.(tf("admin.authoring.savedAndApproved", { fileName: vetFilename }));
+      setLocalStatus(tf("admin.authoring.savedAndApprovedShort", { fileName: vetFilename }));
+
+      try {
+        await fetch("/api/admin/package-history/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ language: draft.language, centre: centre || "", packageId: savedPackage.packageId, vetFilename, package: savedPackage }),
+        });
+        loadHistory();
+      } catch {
+        // Best-effort: history is a convenience list, must never block the actual save above.
+      }
     } catch (error) {
-      setLocalError(error.message || "Uložení selhalo.");
-      setAdminPdfPackageError?.(error.message || "Uložení strukturovaného balíčku selhalo.");
+      setLocalError(error.message || t("admin.authoring.saveFailed"));
+      setAdminPdfPackageError?.(error.message || t("admin.authoring.savePackageFailed"));
       setLocalStatus("");
     }
   }
 
+  async function loadHistory() {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch("/api/admin/package-history/list", { cache: "no-store" });
+      const data = await response.json();
+      const entries = Array.isArray(data.history) ? data.history : [];
+      entries.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
+      setHistory(entries);
+    } catch {
+      // Best-effort; leave the previous list in place.
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => { loadHistory(); }, []);
+
+  async function deleteHistoryEntry(id) {
+    if (!window.confirm(t("admin.authoring.historyDeleteConfirm"))) return;
+    try {
+      await fetch(`/api/admin/package-history/${encodeURIComponent(id)}/delete`, { method: "POST" });
+      setHistory((prev) => prev.filter((entry) => entry.id !== id));
+    } catch (error) {
+      setLocalError(error.message || t("admin.authoring.deleteFailed"));
+    }
+  }
+
+  async function saveHistoryNote(id) {
+    try {
+      await fetch(`/api/admin/package-history/${encodeURIComponent(id)}/note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: noteDraft }),
+      });
+      setHistory((prev) => prev.map((entry) => entry.id === id ? { ...entry, note: noteDraft } : entry));
+    } catch (error) {
+      setLocalError(error.message || t("admin.authoring.saveNoteFailed"));
+    } finally {
+      setEditingNoteId(null);
+    }
+  }
+
+  async function copyHistoryEntry(id) {
+    setLocalError("");
+    try {
+      const response = await fetch(`/api/admin/package-history/${encodeURIComponent(id)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data?.entry?.package) throw new Error(data.error || t("admin.authoring.historyLoadFailed"));
+      loadFromPackage(data.entry.package);
+      setLocalStatus(t("admin.authoring.historyCopied"));
+    } catch (error) {
+      setLocalError(error.message || t("admin.authoring.historyLoadFailed"));
+    }
+  }
+
   function printPackage() {
-    openPrintDocument(authoringPrintHtml(draft), () => setLocalError("Prohlížeč zablokoval nové okno pro tisk."));
+    openPrintDocument(authoringPrintHtml(draft, t), () => setLocalError(t("admin.authoring.printBlocked")));
   }
 
   useEffect(() => {
@@ -3208,7 +3380,54 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
   return (
     <Card className="rounded-2xl shadow-sm lg:col-span-2">
       <CardContent className="p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="font-bold">{t("admin.authoring.historyTitle")}</h4>
+              <p className="text-sm text-slate-600">{t("admin.authoring.historyHelper")}</p>
+            </div>
+            {historyLoading && <span className="text-xs text-slate-500">{t("admin.authoring.historyLoading")}</span>}
+          </div>
+          <div className="mt-3 space-y-2">
+            {!historyLoading && !history.length && (
+              <div className="rounded-xl border border-dashed bg-white p-3 text-sm text-slate-500">{t("admin.authoring.historyEmpty")}</div>
+            )}
+            {history.map((entry) => (
+              <div key={entry.id} className="rounded-xl border bg-white p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <div><span className="text-xs text-slate-500">{t("admin.authoring.historyDate")}: </span>{entry.savedAt ? new Date(entry.savedAt).toLocaleString() : "-"}</div>
+                  <div><span className="text-xs text-slate-500">{t("admin.authoring.historyLanguage")}: </span>{entry.language || "-"}</div>
+                  <div><span className="text-xs text-slate-500">{t("admin.authoring.historySentTo")}: </span>{entry.centre || "-"}</div>
+                </div>
+                <div className="mt-2">
+                  {editingNoteId === entry.id ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        autoFocus
+                        value={noteDraft}
+                        onChange={(e) => setNoteDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveHistoryNote(entry.id); if (e.key === "Escape") setEditingNoteId(null); }}
+                        placeholder={t("admin.authoring.historyNotePlaceholder")}
+                        className="min-w-[220px] flex-1 rounded-lg border bg-white p-1.5 text-sm"
+                      />
+                      <Button onClick={() => saveHistoryNote(entry.id)} className="rounded-lg px-3 py-1 text-xs">{t("common.save")}</Button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => { setEditingNoteId(entry.id); setNoteDraft(entry.note || ""); }} className="text-left text-sm text-slate-700 hover:underline">
+                      {entry.note ? entry.note : <span className="text-slate-400">{t("admin.authoring.historyNotePlaceholder")}</span>}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button onClick={() => copyHistoryEntry(entry.id)} variant="outline" className="rounded-lg px-3 py-1 text-xs">{t("admin.authoring.historyCopy")}</Button>
+                  <Button onClick={() => deleteHistoryEntry(entry.id)} variant="outline" className="rounded-lg px-3 py-1 text-xs">{t("admin.authoring.historyDelete")}</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h3 className="text-lg font-bold">{t("admin.authoring.panelTitle")}</h3>
             <p className="mt-1 text-sm text-slate-600">
@@ -3243,7 +3462,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
         <div className="mt-4 grid gap-2 md:grid-cols-4">
           {allSummaries.map((doc) => (
             <button key={doc.key} onClick={() => { setActiveDocKey(doc.key); setSelectedIndex(0); setActiveSectionFilter("__all__"); }} className={`rounded-xl border p-3 text-left text-sm ${activeDocKey === doc.key ? "border-slate-950 bg-slate-100" : "bg-white hover:bg-slate-50"}`}>
-              <div className="font-semibold">{doc.title}</div>
+              <div className="font-semibold">{authoringDocTitle(t, doc)}</div>
               <div className="mt-1 text-xs text-slate-600">{doc.count} {t("admin.authoring.itemsUnit")} / {doc.max} {t("common.points")}</div>
             </button>
           ))}
@@ -3293,7 +3512,7 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
           <div className="rounded-2xl border bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="font-semibold">{activeDocMeta.title}</div>
+                <div className="font-semibold">{authoringDocTitle(t, activeDocMeta)}</div>
                 <div className="text-xs text-slate-600">{activeSummary.count} {t("admin.authoring.itemsUnit")} / {activeSummary.max} {t("common.points")}</div>
               </div>
               <Button onClick={addItem} variant="outline" className="rounded-xl px-3 py-1">{t("admin.authoring.addItem")}</Button>
@@ -3395,26 +3614,30 @@ function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdfPackage
   );
 }
 
-function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children }) {
-  const isOpen = activeSection === id;
+export function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children, locked, lockedMessage }) {
+  const isOpen = !locked && activeSection === id;
   return (
     <Card className="rounded-2xl shadow-sm lg:col-span-3">
       <CardContent className="p-5">
         <button
           type="button"
-          onClick={() => setActiveSection(isOpen ? "" : id)}
-          className="flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between"
+          onClick={() => { if (locked) return; setActiveSection(isOpen ? "" : id); }}
+          aria-disabled={locked || undefined}
+          className={`flex w-full flex-col gap-3 text-left md:flex-row md:items-center md:justify-between ${locked ? "cursor-not-allowed" : ""}`}
         >
-          <div className="flex items-start gap-3">
+          <div className={`flex items-start gap-3 ${locked ? "opacity-60" : ""}`}>
             {Icon && <div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5" /></div>}
             <div>
               <h3 className="text-xl font-bold tracking-tight">{title}</h3>
               <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>
+              {locked && lockedMessage && <p className="mt-2 inline-block max-w-3xl rounded-xl bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900">{lockedMessage}</p>}
             </div>
           </div>
-          <span className="inline-flex rounded-2xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            {isOpen ? t("common.close") : t("common.open")}
-          </span>
+          {!locked && (
+            <span className="inline-flex rounded-2xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+              {isOpen ? t("common.close") : t("common.open")}
+            </span>
+          )}
         </button>
         {isOpen && <div className="mt-5 border-t pt-5">{children}</div>}
       </CardContent>
@@ -3422,7 +3645,7 @@ function AdminDashboardSection({ id, icon: Icon, title, description, activeSecti
   );
 }
 
-function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, centreQr, setStatus, addAudit, setScannerMode, t }) {
+export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, centreQr, setStatus, addAudit, setScannerMode, t }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-2xl border bg-white p-4">
@@ -3450,19 +3673,103 @@ function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate, place
   );
 }
 
-function AdminTranslationPanel({ t }) {
+export function AdminTranslationPanel({ t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const targetLanguages = UI_LANGUAGES.filter((lang) => lang.code !== "en");
+  const [selectedLang, setSelectedLang] = useState(targetLanguages[0]?.code || "cs");
+  const [search, setSearch] = useState("");
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [savingKey, setSavingKey] = useState(null);
+  const [savedKey, setSavedKey] = useState(null);
+  const savedTimeoutRef = useRef(null);
+
+  const allKeys = useMemo(() => allTranslationKeys(), []);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => allKeys.map((key) => ({
+    key,
+    en: englishSourceFor(key) ?? "",
+    value: translationFor(selectedLang, key) ?? "",
+    missing: translationFor(selectedLang, key) == null,
+  })), [allKeys, selectedLang, refreshTick]);
+
+  const filteredRows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (onlyMissing && !row.missing) return false;
+      if (!needle) return true;
+      return row.key.toLowerCase().includes(needle) || row.en.toLowerCase().includes(needle) || row.value.toLowerCase().includes(needle);
+    });
+  }, [rows, search, onlyMissing]);
+
+  const translatedCount = rows.length - rows.filter((row) => row.missing).length;
+  const coveragePct = rows.length ? Math.round((translatedCount / rows.length) * 100) : 0;
+
+  async function saveTranslation(key, value) {
+    setSavingKey(key);
+    try {
+      await fetch("/api/translations/overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang: selectedLang, key, value }),
+      });
+      applyTranslationOverrides({ [selectedLang]: { [key]: value } });
+      setRefreshTick((tick) => tick + 1);
+      setSavedKey(key);
+      clearTimeout(savedTimeoutRef.current);
+      savedTimeoutRef.current = setTimeout(() => setSavedKey(null), 1500);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
   return (
     <div className="rounded-2xl border bg-white p-4">
       <SectionTitle icon={Languages} title={t("admin.multilingual.title")} subtitle={t("admin.multilingual.subtitle")} />
       <p className="mb-4 text-sm text-slate-600">{t("admin.multilingual.helper")}</p>
-      <div className="grid gap-2 text-sm md:grid-cols-2">
-        {["exam.start", "exam.submit", "sync.offline", "evaluation.total"].map((key) => (
-          <div key={key} className="rounded-xl border bg-white p-3">
-            <div className="font-mono text-xs text-slate-500">{key}</div>
-            <div>{t("admin.multilingual.sourceTerms")}</div>
-            <StatusPill tone="warn">{t("admin.multilingual.needsReview")}</StatusPill>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm font-medium">{t("admin.multilingual.language")}
+          <select value={selectedLang} onChange={(e) => setSelectedLang(e.target.value)} className="mt-1 block w-56 rounded-xl border bg-white p-2">
+            {targetLanguages.map((lang) => <option key={lang.code} value={lang.code}>{lang.label}</option>)}
+          </select>
+        </label>
+        <label className="min-w-[220px] flex-1 text-sm font-medium">{t("admin.multilingual.search")}
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("admin.multilingual.searchPlaceholder")} className="mt-1 w-full rounded-xl border bg-white p-2" />
+        </label>
+        <label className="flex items-center gap-2 pb-2 text-sm font-medium">
+          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+          {t("admin.multilingual.onlyMissing")}
+        </label>
+        <div className="pb-2 text-sm text-slate-600">
+          {tf("admin.multilingual.coverage", { count: translatedCount, total: rows.length, pct: coveragePct })}
+        </div>
+      </div>
+
+      <div className="mt-4 max-h-[600px] space-y-2 overflow-auto pr-1">
+        {filteredRows.map((row) => (
+          <div key={row.key} className="rounded-xl border bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-mono text-xs text-slate-500">{row.key}</div>
+              <div className="flex items-center gap-2">
+                {savedKey === row.key && <StatusPill tone="good"><Check className="mr-1 h-3 w-3" />{t("admin.multilingual.saved")}</StatusPill>}
+                {row.missing && savedKey !== row.key && <StatusPill tone="warn">{t("admin.multilingual.needsReview")}</StatusPill>}
+              </div>
+            </div>
+            <div className="mt-1 text-sm text-slate-700">{row.en}</div>
+            <input
+              defaultValue={row.value}
+              key={`${row.key}-${refreshTick}`}
+              disabled={savingKey === row.key}
+              onBlur={(e) => { if (e.target.value !== row.value) saveTranslation(row.key, e.target.value); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+              placeholder={t("admin.multilingual.targetPlaceholder")}
+              className="mt-2 w-full rounded-xl border bg-white p-2"
+            />
           </div>
         ))}
+        {!filteredRows.length && <div className="rounded-xl border border-dashed bg-slate-50 p-4 text-sm text-slate-500">{t("admin.multilingual.noResults")}</div>}
       </div>
     </div>
   );
@@ -3487,6 +3794,7 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
           setAdminPdfPackageLatest={setAdminPdfPackageLatest}
           setAdminPdfPackageStatus={setAdminPdfPackageStatus}
           setAdminPdfPackageError={setAdminPdfPackageError}
+          centre={centre}
           t={t}
         />
       </AdminDashboardSection>
@@ -3619,8 +3927,8 @@ function examinerResultFor(results, candidateId, field) {
   return row && typeof row === "object" ? row : null;
 }
 
-function confirmedReopenAllowed(label) {
-  const password = window.prompt(`${label} is closed. Enter Vetarbo password to reopen:`);
+function confirmedReopenAllowed(label, t) {
+  const password = window.prompt(t("examiner.confirmReopenPrompt").replace("{label}", label));
   return password === EXAMINER_FORM_UNLOCK_PASSWORD;
 }
 
@@ -4116,6 +4424,18 @@ function parseFieldCoordinates(value) {
   return { lat, lng };
 }
 
+// The CUZK orthophoto tile service only covers Czech territory (it returns blank/error tiles
+// everywhere else), so any map that might be positioned outside CZ needs to fall back to a
+// general-coverage provider (OpenStreetMap) instead. Bounding box is intentionally a bit
+// generous around the real CZ borders (roughly 48.5-51.06 N, 12.09-18.87 E) to avoid flipping
+// providers right at the border.
+function isWithinCzechRepublic(lat, lng) {
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return true;
+  return latNum >= 48.3 && latNum <= 51.3 && lngNum >= 11.8 && lngNum <= 19.1;
+}
+
 function formatFieldCoordinates(point) {
   if (!Number.isFinite(Number(point?.lat)) || !Number.isFinite(Number(point?.lng))) return "-";
   return `${Number(point.lat).toFixed(9)}, ${Number(point.lng).toFixed(9)}`;
@@ -4187,38 +4507,38 @@ function fieldTreeLabels(tree) {
   return (tree.assignments || []).map((assignment) => `${assignment.level === "Practicing" ? "P" : "C"}-${assignment.code}`);
 }
 
-function fieldPreparationValidationIssues(prep) {
+function fieldPreparationValidationIssues(prep, t) {
   const issues = [];
   const center = prep?.examCenter;
   if (!center?.point || !Number.isFinite(Number(center.point.lat)) || !Number.isFinite(Number(center.point.lng))) {
-    issues.push({ severity: "error", message: "Zkušební centrum nemá platné GPS souřadnice." });
+    issues.push({ severity: "error", message: t("fieldPrep.issue.centerNoCoords") });
   }
 
   for (const tree of prep?.trees || []) {
     if (!Number.isFinite(Number(tree.point?.lat)) || !Number.isFinite(Number(tree.point?.lng))) {
-      issues.push({ severity: "error", message: `${tree.name || "Strom"} nemá platné GPS souřadnice.` });
+      issues.push({ severity: "error", message: `${tree.name || t("fieldPrep.tree")} ${t("fieldPrep.issue.treeNoCoordsSuffix")}` });
     }
   }
 
   for (const level of FIELD_LEVELS) {
     for (const code of FIELD_TREE_CODES) {
       const matches = (prep?.trees || []).filter((tree) => (tree.assignments || []).some((assignment) => assignment.level === level && assignment.code === code));
-      if (matches.length === 0) issues.push({ severity: "error", message: `Chybí ${level} strom ${code}.` });
-      if (matches.length > 1) issues.push({ severity: "warning", message: `${level} strom ${code} je přiřazen více než jednou.` });
+      if (matches.length === 0) issues.push({ severity: "error", message: `${t("fieldPrep.issue.missingTreePrefix")} ${level} ${t("fieldPrep.tree")} ${code}.` });
+      if (matches.length > 1) issues.push({ severity: "warning", message: `${level} ${t("fieldPrep.tree")} ${code} ${t("fieldPrep.issue.assignedMoreThanOnce")}` });
     }
   }
 
   const practicingA = (prep?.trees || []).find((tree) => (tree.assignments || []).some((assignment) => assignment.level === "Practicing" && assignment.code === "A"));
   const data = practicingA?.practicingTreeAData;
   if (!data) {
-    issues.push({ severity: "error", message: "Practicing A nemá vyplněná management data." });
+    issues.push({ severity: "error", message: t("fieldPrep.issue.practicingANoData") });
   } else {
-    if (!String(data.taxon || "").trim()) issues.push({ severity: "error", message: "Practicing A: chybí taxon." });
-    if (data.heightM === "" || data.heightM === null || data.heightM === undefined) issues.push({ severity: "error", message: "Practicing A: chybí výška." });
-    if (data.stemDiameterCm === "" || data.stemDiameterCm === null || data.stemDiameterCm === undefined) issues.push({ severity: "error", message: "Practicing A: chybí průměr kmene." });
-    if (data.crownSpreadM === "" || data.crownSpreadM === null || data.crownSpreadM === undefined) issues.push({ severity: "error", message: "Practicing A: chybí průmět koruny." });
+    if (!String(data.taxon || "").trim()) issues.push({ severity: "error", message: t("fieldPrep.issue.practicingAMissingTaxon") });
+    if (data.heightM === "" || data.heightM === null || data.heightM === undefined) issues.push({ severity: "error", message: t("fieldPrep.issue.practicingAMissingHeight") });
+    if (data.stemDiameterCm === "" || data.stemDiameterCm === null || data.stemDiameterCm === undefined) issues.push({ severity: "error", message: t("fieldPrep.issue.practicingAMissingDiameter") });
+    if (data.crownSpreadM === "" || data.crownSpreadM === null || data.crownSpreadM === undefined) issues.push({ severity: "error", message: t("fieldPrep.issue.practicingAMissingCrown") });
     if (!Array.isArray(data.interventions) || data.interventions.length === 0 || data.interventions.every((item) => !String(item.technology || "").trim())) {
-      issues.push({ severity: "error", message: "Practicing A: chybí alespoň jedna technologie zásahu." });
+      issues.push({ severity: "error", message: t("fieldPrep.issue.practicingAMissingIntervention") });
     }
   }
 
@@ -4285,7 +4605,7 @@ function fieldTabletQueueKey() {
 // operator's own browser happens to be on. Preferring it over window.location keeps generated
 // QR links/URLs scannable from other devices even when the operator opened this page via
 // localhost — otherwise the link bakes in "localhost", which on a tablet means the tablet itself.
-function portableLanOrigin() {
+export function portableLanOrigin() {
   try {
     const base = typeof window !== "undefined" && window.__VETBARA_PORTABLE__?.baseUrl;
     return base ? new URL(base).origin : null;
@@ -4383,7 +4703,8 @@ function normalizeFieldPreparationForCentreMap(preparation) {
 }
 
 
-function CentreFieldPreparationModule({ centreCode, language }) {
+function CentreFieldPreparationModule({ centreCode, language, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [prep, setPrep] = useState(() => createDefaultFieldPreparation({ examId: centreCode || CENTRE_QR_ID, language }));
   const [selectedTreeId, setSelectedTreeId] = useState(() => fieldEnsureArray(prep.trees)[0]?.id || "");
   const [coordinateInput, setCoordinateInput] = useState(`${prep.referenceLatitude}, ${prep.referenceLongitude}`);
@@ -4391,11 +4712,23 @@ function CentreFieldPreparationModule({ centreCode, language }) {
   const [error, setError] = useState("");
   const [tabletLevel, setTabletLevel] = useState("Practicing");
   const [tabletSyncLoadedAt, setTabletSyncLoadedAt] = useState("");
+  const [mapLayer, setMapLayer] = useState(() => (isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "osm"));
+  const mapLayerManualRef = useRef(false);
+  // CUZK only has Czech coverage; if the reference point moves outside CZ, switch to OSM
+  // automatically — unless the operator already picked a layer by hand, which always wins.
+  useEffect(() => {
+    if (mapLayerManualRef.current) return;
+    setMapLayer(isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "osm");
+  }, [prep.referenceLatitude, prep.referenceLongitude]);
+  function selectMapLayer(layer) {
+    mapLayerManualRef.current = true;
+    setMapLayer(layer);
+  }
   const centreMapRef = useRef(null);
   const centreDragRef = useRef(null);
   const centreFieldTrees = fieldEnsureArray(prep.trees);
   const selectedTree = centreFieldTrees.find((tree) => tree.id === selectedTreeId) || null;
-  const issues = useMemo(() => fieldPreparationValidationIssues(prep), [prep]);
+  const issues = useMemo(() => fieldPreparationValidationIssues(prep, t), [prep, t]);
   const errorCount = issues.filter((issue) => issue.severity === "error").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const missingAssignment = findMissingFieldAssignment(prep);
@@ -4416,7 +4749,7 @@ function CentreFieldPreparationModule({ centreCode, language }) {
   function addTree() {
     const missing = findMissingFieldAssignment(prep);
     if (!missing) {
-      setError("Všechny povinné stromy Practicing A-D a Consulting A-D už jsou připravené. Další strom přidejte jen změnou existujícího přiřazení.");
+      setError(t("fieldPrep.allRequiredTreesReady"));
       return;
     }
     const tree = createFieldTree(centreFieldTrees.length + 1, createFieldAssignment(missing.level, missing.code));
@@ -4435,14 +4768,14 @@ function CentreFieldPreparationModule({ centreCode, language }) {
     try {
       const response = await fetch(`/api/exams/${encodeURIComponent(prep.examId || centreCode || CENTRE_QR_ID)}/field-preparation`);
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Přípravu stanoviště se nepodařilo načíst.");
+      if (!response.ok) throw new Error(data?.error || t("fieldPrep.loadFailed"));
       const loaded = normalizeFieldPreparationForCentreMap(data.fieldPreparation || data);
       setPrep(loaded);
       setCoordinateInput(`${loaded.referenceLatitude}, ${loaded.referenceLongitude}`);
       setSelectedTreeId(fieldEnsureArray(loaded.trees)?.[0]?.id || "");
-      setStatus("Příprava stanoviště načtena.");
+      setStatus(t("fieldPrep.loaded"));
     } catch (err) {
-      setError(err.message || "Přípravu stanoviště se nepodařilo načíst.");
+      setError(err.message || t("fieldPrep.loadFailed"));
     }
   }
 
@@ -4452,16 +4785,16 @@ function CentreFieldPreparationModule({ centreCode, language }) {
     try {
       const response = await fetch(`/api/exams/${encodeURIComponent(prep.examId || centreCode || CENTRE_QR_ID)}/field-tablet-sync/latest`);
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Změny z tabletu se nepodařilo načíst.");
+      if (!response.ok) throw new Error(data?.error || t("fieldPrep.tabletChangesLoadFailed"));
       const loaded = normalizeFieldPreparationForCentreMap(data.fieldPreparation || data);
       setPrep(loaded);
       setCoordinateInput(`${loaded.referenceLatitude}, ${loaded.referenceLongitude}`);
       setSelectedTreeId(fieldEnsureArray(loaded.trees)?.[0]?.id || "__center__");
       const loadedAt = new Date().toISOString();
       setTabletSyncLoadedAt(loadedAt);
-      setStatus(data?.syncId ? `Změny z tabletu načteny (${data.syncId}).` : "Změny z tabletu načteny.");
+      setStatus(data?.syncId ? tf("fieldPrep.tabletChangesLoadedWithId", { syncId: data.syncId }) : t("fieldPrep.tabletChangesLoaded"));
     } catch (err) {
-      setError(err.message || "Změny z tabletu se nepodařilo načíst.");
+      setError(err.message || t("fieldPrep.tabletChangesLoadFailed"));
     }
   }
 
@@ -4475,11 +4808,11 @@ function CentreFieldPreparationModule({ centreCode, language }) {
         body: JSON.stringify({ fieldPreparation: prep }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Přípravu stanoviště se nepodařilo uložit.");
+      if (!response.ok) throw new Error(data?.error || t("fieldPrep.saveFailed"));
       setPrep(data.fieldPreparation || prep);
-      setStatus("Příprava stanoviště uložena.");
+      setStatus(t("fieldPrep.saved"));
     } catch (err) {
-      setError(err.message || "Přípravu stanoviště se nepodařilo uložit.");
+      setError(err.message || t("fieldPrep.saveFailed"));
     }
   }
 
@@ -4487,7 +4820,7 @@ function CentreFieldPreparationModule({ centreCode, language }) {
     event?.preventDefault();
     const parsed = parseFieldCoordinates(coordinateInput);
     if (!parsed) {
-      setError("Souřadnice musí být ve formátu například 49.406706323, 15.129055089.");
+      setError(t("fieldPrep.coordinateFormatError"));
       return;
     }
     setError("");
@@ -4496,7 +4829,7 @@ function CentreFieldPreparationModule({ centreCode, language }) {
     const previousLng = Number(prep.referenceLongitude);
     const hasMoved = Number.isFinite(previousLat) && Number.isFinite(previousLng) && (previousLat !== parsed.lat || previousLng !== parsed.lng);
 
-    if (hasMoved && window.confirm("Přesunout na tuto lokalitu i zkušební centrum a všechny stromy? Jejich vzájemné rozmístění zůstane zachováno.")) {
+    if (hasMoved && window.confirm(t("fieldPrep.moveLocationConfirm"))) {
       const deltaLat = parsed.lat - previousLat;
       const deltaLng = parsed.lng - previousLng;
       setPrep((current) => {
@@ -4583,9 +4916,9 @@ function CentreFieldPreparationModule({ centreCode, language }) {
 
   async function openFieldTablet(level = tabletLevel) {
     if (tabletSyncLoadedAt) {
-      const password = window.prompt("Field tablet has already been synced back. Enter Vetarbo password to reopen it:");
+      const password = window.prompt(t("fieldPrep.tabletReopenPrompt"));
       if (password !== "Vetarbo") {
-        setError("Tablet mode is locked after tablet changes were loaded. Enter the Vetarbo password to reopen it.");
+        setError(t("fieldPrep.tabletLockedError"));
         return;
       }
     }
@@ -4669,6 +5002,7 @@ function CentreFieldPreparationModule({ centreCode, language }) {
   }
 
   function centreTileUrl(x, y, z = 18) {
+    if (mapLayer === "osm") return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
@@ -4684,7 +5018,7 @@ function CentreFieldPreparationModule({ centreCode, language }) {
         const x = centerTileX + dx;
         const y = centerTileY + dy;
         tiles.push({
-          key: `centre-cuzk-18-${x}-${y}`,
+          key: `centre-${mapLayer}-18-${x}-${y}`,
           src: centreTileUrl(x, y, 18),
           style: { left: `calc(50% + ${dx * 256 - offsetX}px)`, top: `calc(50% + ${dy * 256 - offsetY}px)` },
         });
@@ -4693,31 +5027,172 @@ function CentreFieldPreparationModule({ centreCode, language }) {
     return tiles;
   }
 
+  // Fits every point into a widthPx x heightPx box by trying zoom levels from high to low —
+  // same Web Mercator math as the live map, just picking the tightest zoom where nothing spills
+  // past the print page instead of following the operator's pan/zoom.
+  function fitZoomAndCenter(points, widthPx, heightPx, minZoom = 13, maxZoom = 19) {
+    if (!points.length) return { zoom: 18, worldX: 0, worldY: 0 };
+    const padding = 90;
+    for (let zoom = maxZoom; zoom >= minZoom; zoom -= 1) {
+      const worldPts = points.map((p) => centreLatLngToWorld(p.lat, p.lng, zoom));
+      const minX = Math.min(...worldPts.map((w) => w.x));
+      const maxX = Math.max(...worldPts.map((w) => w.x));
+      const minY = Math.min(...worldPts.map((w) => w.y));
+      const maxY = Math.max(...worldPts.map((w) => w.y));
+      if ((maxX - minX) + padding * 2 <= widthPx && (maxY - minY) + padding * 2 <= heightPx) {
+        return { zoom, worldX: (minX + maxX) / 2, worldY: (minY + maxY) / 2 };
+      }
+    }
+    const worldPts = points.map((p) => centreLatLngToWorld(p.lat, p.lng, minZoom));
+    return {
+      zoom: minZoom,
+      worldX: worldPts.reduce((sum, w) => sum + w.x, 0) / worldPts.length,
+      worldY: worldPts.reduce((sum, w) => sum + w.y, 0) / worldPts.length,
+    };
+  }
+
+  function printMapPageHtml(levelLabel, points, layer) {
+    const widthPx = 680;
+    const heightPx = 900;
+    const fit = fitZoomAndCenter(points, widthPx, heightPx);
+    const centerTileX = Math.floor(fit.worldX / 256);
+    const centerTileY = Math.floor(fit.worldY / 256);
+    const offsetX = fit.worldX - centerTileX * 256;
+    const offsetY = fit.worldY - centerTileY * 256;
+    const tilesXHalf = Math.ceil(widthPx / 256 / 2) + 1;
+    const tilesYHalf = Math.ceil(heightPx / 256 / 2) + 1;
+    const tileHtmlParts = [];
+    for (let dx = -tilesXHalf; dx <= tilesXHalf; dx += 1) {
+      for (let dy = -tilesYHalf; dy <= tilesYHalf; dy += 1) {
+        const x = centerTileX + dx;
+        const y = centerTileY + dy;
+        const left = widthPx / 2 + dx * 256 - offsetX;
+        const top = heightPx / 2 + dy * 256 - offsetY;
+        const src = layer === "osm" ? `https://tile.openstreetmap.org/${fit.zoom}/${x}/${y}.png` : `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${fit.zoom}/${y}/${x}`;
+        tileHtmlParts.push(`<img src="${src}" style="position:absolute;left:${left}px;top:${top}px;width:256px;height:256px" />`);
+      }
+    }
+    const markerHtmlParts = points.map((p) => {
+      const w = centreLatLngToWorld(p.lat, p.lng, fit.zoom);
+      const left = widthPx / 2 + (w.x - fit.worldX);
+      const top = heightPx / 2 + (w.y - fit.worldY);
+      const isCentre = p.kind === "centre";
+      return `<div style="position:absolute;left:${left}px;top:${top}px;transform:translate(-50%,-50%);z-index:20;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;background:${isCentre ? "#e11d48" : "#020617"};box-shadow:0 0 0 3px #fff;white-space:nowrap">${escapeHtml(p.label)}</div>`;
+    }).join("");
+    return `<section class="print-map-page">
+      <h2>${escapeHtml(levelLabel)}</h2>
+      <div class="print-map-canvas" style="width:${widthPx}px;height:${heightPx}px">
+        ${tileHtmlParts.join("")}
+        ${markerHtmlParts}
+      </div>
+      <div class="print-map-attribution">${layer === "osm" ? "© OpenStreetMap contributors" : "© ČÚZK ORTOFOTO"}</div>
+    </section>`;
+  }
+
+  function printTreeDetailPageHtml(tree, index) {
+    const data = tree.practicingTreeAData || createPracticingTreeAData();
+    const interventionsHtml = (data.interventions || []).filter((item) => String(item.technology || item.description || "").trim()).map((item) => `<div class="print-intervention"><strong>${escapeHtml(item.technology || "-")}</strong>${item.description ? `<div>${linesToHtml(item.description)}</div>` : ""}</div>`).join("") || `<div class="print-empty">-</div>`;
+    const photosHtml = (tree.photos || []).length
+      ? `<div class="print-photo-grid">${tree.photos.map((photo) => `<figure><img src="${photo.url}" alt="" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
+      : `<div class="print-empty">${escapeHtml(t("fieldPrep.printNoPhotos"))}</div>`;
+    return `<section class="print-tree-page">
+      <h2>${escapeHtml(fieldTreeLabels(tree).join(" / ") || `A${index + 1}`)} · ${escapeHtml(tree.name || "")}</h2>
+      <div class="print-meta">${escapeHtml(formatFieldCoordinates(tree.point))}</div>
+      <div class="print-grid">
+        <div><strong>Taxon</strong><div>${escapeHtml(data.taxon || "-")}</div></div>
+        <div><strong>${escapeHtml(t("fieldPrep.heightM"))}</strong><div>${escapeHtml(String(data.heightM ?? "-"))}</div></div>
+        <div><strong>${escapeHtml(t("fieldPrep.stemDiameterCm"))}</strong><div>${escapeHtml(String(data.stemDiameterCm ?? "-"))}</div></div>
+        <div><strong>${escapeHtml(t("fieldPrep.crownSpreadM"))}</strong><div>${escapeHtml(String(data.crownSpreadM ?? "-"))}</div></div>
+      </div>
+      <h3>${escapeHtml(t("fieldPrep.interventionTechnology"))}</h3>
+      ${interventionsHtml}
+      <h3>${escapeHtml(t("fieldPrep.candidateNote"))}</h3>
+      <div class="print-note">${tree.candidateNote ? linesToHtml(tree.candidateNote) : `<span class="print-empty">-</span>`}</div>
+      <h3>${escapeHtml(t("fieldPrep.internalNote"))}</h3>
+      <div class="print-note">${tree.internalNote ? linesToHtml(tree.internalNote) : `<span class="print-empty">-</span>`}</div>
+      <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
+      ${photosHtml}
+    </section>`;
+  }
+
+  function printFieldPreparationPdf() {
+    const centreLabel = t("fieldPrep.centre");
+    const centerPoint = prep.examCenter?.point;
+    const centrePointEntry = Number.isFinite(Number(centerPoint?.lat)) && Number.isFinite(Number(centerPoint?.lng))
+      ? [{ lat: Number(centerPoint.lat), lng: Number(centerPoint.lng), label: centreLabel, kind: "centre" }]
+      : [];
+
+    const mapPages = FIELD_LEVELS.map((level) => {
+      const levelTrees = centreFieldTrees.filter((tree) => fieldEnsureArray(tree.assignments).some((a) => a.level === level));
+      const points = [
+        ...centrePointEntry,
+        ...levelTrees
+          .filter((tree) => Number.isFinite(Number(tree.point?.lat)) && Number.isFinite(Number(tree.point?.lng)))
+          .map((tree) => ({ lat: Number(tree.point.lat), lng: Number(tree.point.lng), label: fieldTreeLabels(tree).join("/") || tree.name, kind: "tree" })),
+      ];
+      if (!points.length) return "";
+      return printMapPageHtml(level, points, mapLayer);
+    }).join("");
+
+    const practicingATrees = centreFieldTrees.filter((tree) => fieldEnsureArray(tree.assignments).some((a) => a.level === "Practicing" && a.code === "A"));
+    const treePages = practicingATrees.map((tree, index) => printTreeDetailPageHtml(tree, index)).join("");
+
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(prep.siteName || "")}</title><style>
+      @page{size:A4 portrait;margin:12mm}
+      *{box-sizing:border-box}
+      body{margin:0;font-family:Arial,sans-serif;color:#102018}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+      section{page-break-after:always}
+      section:last-child{page-break-after:auto}
+      h2{margin:0 0 3mm;font-size:16pt}
+      h3{margin:5mm 0 2mm;font-size:11pt}
+      .print-map-canvas{position:relative;overflow:hidden;border:1px solid #cbd5e1;border-radius:4px;background:#e2e8f0}
+      .print-map-attribution{margin-top:2mm;font-size:8pt;color:#64748b}
+      .print-meta{font-family:ui-monospace,monospace;font-size:9pt;color:#516158;margin-bottom:3mm}
+      .print-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;font-size:10pt}
+      .print-grid strong{display:block;font-size:8pt;text-transform:uppercase;letter-spacing:.03em;color:#64748b;margin-bottom:1mm}
+      .print-intervention{border:1px solid #dbe3dd;border-radius:6px;padding:2mm 3mm;margin-bottom:2mm;font-size:10pt}
+      .print-note{border:1px solid #dbe3dd;border-radius:6px;padding:2mm 3mm;font-size:10pt;min-height:8mm}
+      .print-empty{color:#94a3b8;font-style:italic}
+      .print-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}
+      .print-photo-grid figure{margin:0}
+      .print-photo-grid img{width:100%;height:38mm;object-fit:cover;border-radius:4px;border:1px solid #dbe3dd}
+      .print-photo-grid figcaption{font-size:8pt;color:#64748b;margin-top:1mm}
+      @media print{.actions{display:none}}
+    </style></head><body>
+      <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
+      ${mapPages}
+      ${treePages}
+    </body></html>`;
+
+    openPrintDocument(html, () => setError(t("fieldPrep.printBlocked")));
+  }
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-2xl">
-            <h3 className="font-semibold">Příprava stanoviště</h3>
-            <p className="mt-1 text-sm text-slate-600">Připravte mapu a stromy, otevřete tabletový režim, načtěte změny z tabletu a uložte finální přípravu.</p>
+            <h3 className="font-semibold">{t("fieldPrep.title")}</h3>
+            <p className="mt-1 text-sm text-slate-600">{t("fieldPrep.subtitle")}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <StatusPill tone={errorCount ? "bad" : "good"}>{errorCount ? `${errorCount} chyb` : "Bez blokující chyby"}</StatusPill>
-              <StatusPill>{requiredReadyCount} / {FIELD_REQUIRED_ASSIGNMENTS.length} povinných přiřazení</StatusPill>
+              <StatusPill tone={errorCount ? "bad" : "good"}>{errorCount ? tf("fieldPrep.errorCount", { count: errorCount }) : t("fieldPrep.noBlockingError")}</StatusPill>
+              <StatusPill>{tf("fieldPrep.requiredAssignments", { count: requiredReadyCount, total: FIELD_REQUIRED_ASSIGNMENTS.length })}</StatusPill>
               <StatusPill>{prep.status || "DRAFT"}</StatusPill>
-              {tabletSyncLoadedAt && <StatusPill tone="good">Tablet sync načten</StatusPill>}
+              {tabletSyncLoadedAt && <StatusPill tone="good">{t("fieldPrep.tabletSyncLoaded")}</StatusPill>}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <div className={`flex items-center gap-3 rounded-2xl border bg-white p-2 shadow-sm ${tabletSyncLoadedAt ? "border-amber-200 bg-amber-50" : ""}`}>
               <RealQr value={fieldTabletAccessUrl} size={88} />
               <div className="min-w-[13rem] text-sm">
-                <div className="font-semibold text-slate-950">Tablet access</div>
+                <div className="font-semibold text-slate-950">{t("fieldPrep.tabletAccess")}</div>
                 <div className="mt-1 break-all font-mono text-[11px] leading-snug text-slate-500">{fieldTabletAccessUrl}</div>
-                {tabletSyncLoadedAt && <div className="mt-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">Reopen requires Vetarbo</div>}
+                {tabletSyncLoadedAt && <div className="mt-2 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">{t("fieldPrep.reopenRequiresPassword")}</div>}
               </div>
             </div>
-            <Button onClick={() => openFieldTablet(tabletLevel)} variant="outline" className={`rounded-2xl ${tabletSyncLoadedAt ? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100" : ""}`}>Otevřít tablet</Button>
-            <Button onClick={loadTabletChanges} variant="outline" className={`rounded-2xl ${tabletSyncLoadedAt ? "border-emerald-300 bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : ""}`} title={tabletSyncLoadedAt ? `Poslední sync načten: ${new Date(tabletSyncLoadedAt).toLocaleString()}` : "Načíst poslední změny uložené tabletem"}>Načíst změny z tabletu</Button>
+            <Button onClick={() => openFieldTablet(tabletLevel)} variant="outline" className={`rounded-2xl ${tabletSyncLoadedAt ? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100" : ""}`}>{t("fieldPrep.openTablet")}</Button>
+            <Button onClick={loadTabletChanges} variant="outline" className={`rounded-2xl ${tabletSyncLoadedAt ? "border-emerald-300 bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : ""}`} title={tabletSyncLoadedAt ? tf("fieldPrep.lastSyncLoadedTitle", { time: new Date(tabletSyncLoadedAt).toLocaleString() }) : t("fieldPrep.loadTabletChangesTitle")}>{t("fieldPrep.loadTabletChanges")}</Button>
           </div>
         </div>
       </div>
@@ -4729,28 +5204,40 @@ function CentreFieldPreparationModule({ centreCode, language }) {
         <div className="space-y-4">
           <div className="rounded-2xl border bg-white p-4">
             <div className="grid gap-3 md:grid-cols-3">
-              <label className="text-sm font-medium">Název areálu<input value={prep.siteName || ""} onChange={(event) => updatePrep({ siteName: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="text-sm font-medium">{t("fieldPrep.siteName")}<input value={prep.siteName || ""} onChange={(event) => updatePrep({ siteName: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <label className="text-sm font-medium">Exam ID<input value={prep.examId || ""} onChange={(event) => updatePrep({ examId: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2 font-mono text-xs" /></label>
-              <form onSubmit={applyCoordinateSearch} className="text-sm font-medium">Referenční souřadnice<div className="mt-1 flex gap-2"><input value={coordinateInput} onChange={(event) => setCoordinateInput(event.target.value)} className="w-full rounded-xl border bg-white p-2 font-mono text-xs" /><Button type="submit" variant="outline" className="rounded-xl px-3">Najít</Button></div></form>
+              <form onSubmit={applyCoordinateSearch} className="text-sm font-medium">{t("fieldPrep.referenceCoordinates")}<div className="mt-1 flex gap-2"><input value={coordinateInput} onChange={(event) => setCoordinateInput(event.target.value)} className="w-full rounded-xl border bg-white p-2 font-mono text-xs" /><Button type="submit" variant="outline" className="rounded-xl px-3">{t("fieldPrep.find")}</Button></div></form>
             </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4">
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div><h3 className="font-semibold">Mapový náhled stanoviště</h3><p className="text-sm text-slate-600">MVP zobrazuje pracovní mapové plátno s GPS body. Reálné Leaflet/ČÚZK vrstvy jsou připravené jako další technický krok modulu.</p></div>
-              <div className="text-xs text-slate-500">Reference: {Number(prep.referenceLatitude).toFixed(6)}, {Number(prep.referenceLongitude).toFixed(6)}</div>
+              <div><h3 className="font-semibold">{t("fieldPrep.mapPreviewTitle")}</h3></div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex overflow-hidden rounded-xl border text-xs font-medium">
+                  <button type="button" onClick={() => selectMapLayer("cuzk")} className={`px-2.5 py-1.5 ${mapLayer === "cuzk" ? "bg-slate-950 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>CUZK</button>
+                  <button type="button" onClick={() => selectMapLayer("osm")} className={`px-2.5 py-1.5 ${mapLayer === "osm" ? "bg-slate-950 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>OSM</button>
+                </div>
+                <div className="text-xs text-slate-500">{t("fieldPrep.reference")}: {Number(prep.referenceLatitude).toFixed(6)}, {Number(prep.referenceLongitude).toFixed(6)}</div>
+              </div>
             </div>
             <div ref={centreMapRef} onPointerMove={moveCentreDrag} onPointerUp={endCentreDrag} onPointerCancel={endCentreDrag} className="relative h-[520px] touch-none overflow-hidden rounded-2xl border bg-slate-100">
               <div className="field-tile-layer" aria-hidden="true">
                 {centreMapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
               </div>
               <div className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">N ▲</div>
-              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-lg ring-4 ring-white">Centrum</button>
+              <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© CUZK orthophoto" : "© OpenStreetMap contributors"}</div>
+              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
               {fieldEnsureArray(prep.trees).map((tree) => {
                 const selected = tree.id === selectedTreeId;
                 const labels = fieldTreeLabels(tree);
-                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : "strom"}</button>;
+                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
               })}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button type="button" onClick={printFieldPreparationPdf} variant="outline" className="rounded-2xl">
+                <Printer className="mr-1 h-4 w-4" />{t("fieldPrep.printPdf")}
+              </Button>
             </div>
           </div>
         </div>
@@ -4758,64 +5245,64 @@ function CentreFieldPreparationModule({ centreCode, language }) {
         <div className="space-y-4">
           {selectedTreeId === "__center__" ? (
             <div className="rounded-2xl border bg-white p-4">
-              <h3 className="font-semibold">Zkušební centrum</h3>
-              <label className="mt-3 block text-sm font-medium">Název<input value={prep.examCenter?.name || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, name: event.target.value } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <h3 className="font-semibold">{t("fieldPrep.examCentre")}</h3>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.name")}<input value={prep.examCenter?.name || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, name: event.target.value } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label className="text-sm font-medium">Latitude<input type="number" value={prep.examCenter?.point?.lat ?? ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, point: { ...prep.examCenter.point, lat: Number(event.target.value) } } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
                 <label className="text-sm font-medium">Longitude<input type="number" value={prep.examCenter?.point?.lng ?? ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, point: { ...prep.examCenter.point, lng: Number(event.target.value) } } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               </div>
-              <label className="mt-3 block text-sm font-medium">Poznámka pro kandidáty<textarea value={prep.examCenter?.candidateNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, candidateNote: event.target.value } })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              <label className="mt-3 block text-sm font-medium">Interní poznámka<textarea value={prep.examCenter?.internalNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, internalNote: event.target.value } })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={prep.examCenter?.candidateNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, candidateNote: event.target.value } })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={prep.examCenter?.internalNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, internalNote: event.target.value } })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
             </div>
           ) : selectedTree ? (
             <div className="rounded-2xl border bg-white p-4">
               <div className="flex items-start justify-between gap-3">
-                <div><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vybraný strom</div><h3 className="text-lg font-semibold">{selectedTree.name}</h3><p className="text-xs text-slate-500">{formatFieldCoordinates(selectedTree.point)}</p></div>
-                <Button onClick={() => removeTree(selectedTree.id)} variant="outline" className="rounded-2xl">Smazat</Button>
+                <div><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.selectedTree")}</div><h3 className="text-lg font-semibold">{selectedTree.name}</h3><p className="text-xs text-slate-500">{formatFieldCoordinates(selectedTree.point)}</p></div>
+                <Button onClick={() => removeTree(selectedTree.id)} variant="outline" className="rounded-2xl">{t("fieldPrep.delete")}</Button>
               </div>
-              <label className="mt-3 block text-sm font-medium">Název stromu<input value={selectedTree.name || ""} onChange={(event) => updateTree(selectedTree.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.treeName")}<input value={selectedTree.name || ""} onChange={(event) => updateTree(selectedTree.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 <label className="text-sm font-medium">Latitude<input type="number" value={selectedTree.point?.lat ?? ""} onChange={(event) => updateTree(selectedTree.id, (tree) => ({ ...tree, point: { ...tree.point, lat: Number(event.target.value) } }))} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
                 <label className="text-sm font-medium">Longitude<input type="number" value={selectedTree.point?.lng ?? ""} onChange={(event) => updateTree(selectedTree.id, (tree) => ({ ...tree, point: { ...tree.point, lng: Number(event.target.value) } }))} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               </div>
-              <div className="mt-4 flex items-center justify-between"><h4 className="font-semibold">Přiřazení</h4><Button onClick={() => addAssignment(selectedTree.id)} variant="outline" className="rounded-2xl">+ přiřazení</Button></div>
+              <div className="mt-4 flex items-center justify-between"><h4 className="font-semibold">{t("fieldPrep.assignment")}</h4><Button onClick={() => addAssignment(selectedTree.id)} variant="outline" className="rounded-2xl">{t("fieldPrep.addAssignment")}</Button></div>
               <div className="mt-2 space-y-2">
                 {(selectedTree.assignments || []).map((assignment) => <div key={assignment.id} className="grid gap-2 rounded-xl border bg-slate-50 p-2 md:grid-cols-[1fr_1fr_auto]">
                   <select value={assignment.level} onChange={(event) => updateAssignment(selectedTree.id, assignment.id, { level: event.target.value })} className="rounded-xl border bg-white p-2 text-sm"><option>Practicing</option><option>Consulting</option></select>
                   <select value={assignment.code} onChange={(event) => updateAssignment(selectedTree.id, assignment.id, { code: event.target.value })} className="rounded-xl border bg-white p-2 text-sm">{FIELD_TREE_CODES.map((code) => <option key={code}>{code}</option>)}</select>
-                  <Button onClick={() => removeAssignment(selectedTree.id, assignment.id)} variant="outline" className="rounded-xl">Odebrat</Button>
+                  <Button onClick={() => removeAssignment(selectedTree.id, assignment.id)} variant="outline" className="rounded-xl">{t("fieldPrep.remove")}</Button>
                 </div>)}
               </div>
-              <label className="mt-3 block text-sm font-medium">Poznámka pro kandidáty<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              <label className="mt-3 block text-sm font-medium">Interní poznámka<textarea value={selectedTree.internalNote || ""} onChange={(event) => updateTree(selectedTree.id, { internalNote: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={selectedTree.internalNote || ""} onChange={(event) => updateTree(selectedTree.id, { internalNote: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                <h4 className="font-semibold text-emerald-950">Management data</h4>
+                <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
                 <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
-                  <label className="text-sm font-medium">Výška m<input type="number" value={selectedTree.practicingTreeAData?.heightM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { heightM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                  <label className="text-sm font-medium">Průměr kmene cm<input type="number" value={selectedTree.practicingTreeAData?.stemDiameterCm ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { stemDiameterCm: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                  <label className="text-sm font-medium">Průmět koruny m<input type="number" value={selectedTree.practicingTreeAData?.crownSpreadM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { crownSpreadM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                  <label className="text-sm font-medium">{t("fieldPrep.heightM")}<input type="number" value={selectedTree.practicingTreeAData?.heightM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { heightM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                  <label className="text-sm font-medium">{t("fieldPrep.stemDiameterCm")}<input type="number" value={selectedTree.practicingTreeAData?.stemDiameterCm ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { stemDiameterCm: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                  <label className="text-sm font-medium">{t("fieldPrep.crownSpreadM")}<input type="number" value={selectedTree.practicingTreeAData?.crownSpreadM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { crownSpreadM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
                 </div>
-                <div className="mt-3 flex items-center justify-between"><h5 className="font-semibold">Technologie zásahu</h5><Button onClick={() => addIntervention(selectedTree.id)} variant="outline" className="rounded-xl">+ technologie</Button></div>
+                <div className="mt-3 flex items-center justify-between"><h5 className="font-semibold">{t("fieldPrep.interventionTechnology")}</h5><Button onClick={() => addIntervention(selectedTree.id)} variant="outline" className="rounded-xl">{t("fieldPrep.addTechnology")}</Button></div>
                 <div className="mt-2 space-y-2">
-                  {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder="Technologie" className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder="Popis" rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /></div>)}
+                  {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /></div>)}
                 </div>
               </div>
               <div className="mt-4">
-                <div className="text-sm font-medium">Fotografie</div>
+                <div className="text-sm font-medium">{t("fieldPrep.photos")}</div>
                 <label className="mt-1 inline-flex cursor-pointer items-center justify-center rounded-xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">
-                  + Nahrát fotografie
+                  {t("fieldPrep.uploadPhotos")}
                   <input type="file" multiple accept="image/*" onChange={(event) => { handlePhotoUpload(selectedTree.id, event.target.files); event.target.value = ""; }} className="hidden" />
                 </label>
               </div>
               <div className="mt-2 grid grid-cols-3 gap-2">{(selectedTree.photos || []).map((photo) => <img key={photo.id} src={photo.url} alt={photo.caption || photo.fileName || "photo"} className="h-20 w-full rounded-xl object-cover" />)}</div>
             </div>
-          ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">Vyberte strom nebo zkušební centrum v mapě.</div>}
+          ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">{t("fieldPrep.selectTreeOrCentre")}</div>}
 
           <div className="rounded-2xl border bg-white p-4">
-            <h3 className="font-semibold">Validace</h3>
+            <h3 className="font-semibold">{t("fieldPrep.validation")}</h3>
             <div className="mt-3 space-y-2 text-sm">
-              {issues.length === 0 && <div className="rounded-xl bg-emerald-50 p-3 text-emerald-900">Příprava je kompletní.</div>}
+              {issues.length === 0 && <div className="rounded-xl bg-emerald-50 p-3 text-emerald-900">{t("fieldPrep.preparationComplete")}</div>}
               {issues.map((issue, index) => <div key={index} className={`rounded-xl p-3 ${issue.severity === "error" ? "bg-rose-50 text-rose-900" : "bg-amber-50 text-amber-900"}`}>{issue.message}</div>)}
             </div>
           </div>
@@ -5190,14 +5677,14 @@ function FieldTabletPage() {
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Sync failed.");
+      if (!response.ok) throw new Error(data?.error || tt("syncFailed"));
       setLastSyncOk(true);
-      setStatus(data?.syncId ? `Synced back to VetBara (${data.syncId}).` : "Synced back to VetBara. The local copy remains on the tablet as backup.");
+      setStatus(data?.syncId ? tt("syncedWithId").replace("{syncId}", data.syncId) : tt("syncedNoId"));
     } catch (err) {
       const queued = { id: vetbaraUid("field-sync"), examId, level: normalizedLevel, queuedAt: new Date().toISOString(), fieldPackage, draft };
       appendFieldTabletSyncQueue(queued);
       setLastSyncOk(false);
-      setError(`${err.message || "Sync failed."} Změny byly uloženy do lokální sync queue.`);
+      setError(`${err.message || tt("syncFailed")} ${tt("savedToLocalQueue")}`);
     } finally {
       setSyncing(false);
     }
@@ -5916,7 +6403,82 @@ function FieldTabletPage() {
   );
 }
 
-function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBank, setOutdoorItemsByLevel, setActiveAdminPackageMeta, setTestImportSummary, setCentreSetupDirty, language }) {
+// Opened by scanning the "Připojit tablet/telefon" QR in Centre's Scan podkladů panel
+// (?mode=scan-capture&examId=...). Deliberately dumb: it has no candidate/testBank/variant
+// context at all, so it can't decode or sort anything itself — it just captures a page photo,
+// runs the same generic auto-enhance pass used everywhere else in the app, and uploads it to
+// this exam's server-side scan inbox. The Centre browser that showed the QR polls that inbox and
+// runs the full identify-and-detect pipeline there, where the exam data actually lives.
+function ScanCaptureMobilePage() {
+  const [uiLanguage] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "cs");
+  const t = makeTranslator(uiLanguage);
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const query = new URLSearchParams(window.location.search);
+  const examId = query.get("examId") || CENTRE_QR_ID;
+  const [uploaded, setUploaded] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function captureFile(file) {
+    setBusy(true);
+    setError("");
+    try {
+      const image = await loadImageFromFile(file);
+      const canvas = imageElementToCanvas(image);
+      autoEnhanceCanvas(canvas);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const response = await fetch(`/api/exams/${encodeURIComponent(examId)}/scan-inbox`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl, capturedAt: new Date().toISOString() }),
+      });
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+      setUploaded((prev) => [{ id: vetbaraUid("upload"), dataUrl, at: new Date().toISOString() }, ...prev]);
+    } catch (uploadError) {
+      console.error("Scan capture upload failed", uploadError);
+      setError(t("scanCapture.uploadError"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-slate-950 p-4 text-white">
+      <div className="mx-auto max-w-md">
+        <div className="mb-4 flex items-center gap-2">
+          <Camera className="h-6 w-6" />
+          <h1 className="text-xl font-bold">{t("scanCapture.title")}</h1>
+        </div>
+        <p className="mb-4 text-sm text-slate-300">{t("scanCapture.helper")}</p>
+
+        <label className={`flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${busy ? "border-slate-600 text-slate-500" : "border-emerald-400 text-white"}`}>
+          <Camera className="h-8 w-8" />
+          <span className="text-lg font-semibold">{busy ? t("scanCapture.uploading") : t("scanCapture.captureButton")}</span>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            disabled={busy}
+            onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) captureFile(file); }}
+          />
+        </label>
+
+        {error && <div className="mt-3 rounded-xl border border-rose-500 bg-rose-950 p-3 text-sm text-rose-200">{error}</div>}
+
+        <div className="mt-4 text-sm font-semibold text-slate-300">
+          {tf("scanCapture.uploadedCount", { count: uploaded.length })}
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {uploaded.map((item) => <img key={item.id} src={item.dataUrl} alt="uploaded scan" className="h-24 w-full rounded-lg border border-slate-700 object-cover" />)}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBank, setOutdoorItemsByLevel, setActiveAdminPackageMeta, setTestImportSummary, setCentreSetupDirty, language, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [activePackagePreview, setActivePackagePreview] = useState(null);
   const [activePackagePreviewStatus, setActivePackagePreviewStatus] = useState("");
   const [activePackagePreviewError, setActivePackagePreviewError] = useState("");
@@ -5981,7 +6543,7 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
 
     setCentreSetupDirty?.(true);
 
-    setActivePackagePreviewStatus(`Admin.vet načten a nastaven pro Centre: ${data.packageId || "bez ID"}`);
+    setActivePackagePreviewStatus(tf("centre.activePackage.loadedStatus", { packageId: data.packageId || t("centre.activePackage.noId") }));
   }
 
   function handleAdminVetFileSelect(event) {
@@ -5990,23 +6552,23 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
     if (!file) return;
 
     setActivePackagePreviewError("");
-    setActivePackagePreviewStatus(`Načítám ${file.name}...`);
+    setActivePackagePreviewStatus(tf("centre.activePackage.loadingFile", { name: file.name }));
 
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const data = JSON.parse(String(reader.result || ""));
         if (!data || typeof data !== "object" || (!data.written && !data.outdoor && !data.variants)) {
-          throw new Error("Soubor nevypadá jako platný Admin.vet balíček.");
+          throw new Error(t("centre.activePackage.invalidFile"));
         }
         applyActivePackageData(data);
       } catch (error) {
-        setActivePackagePreviewError(error.message || "Načtení souboru selhalo.");
+        setActivePackagePreviewError(error.message || t("centre.activePackage.loadFailed"));
         setActivePackagePreviewStatus("");
       }
     };
     reader.onerror = () => {
-      setActivePackagePreviewError("Soubor se nepodařilo přečíst.");
+      setActivePackagePreviewError(t("centre.activePackage.readFailed"));
       setActivePackagePreviewStatus("");
     };
     reader.readAsText(file);
@@ -6015,7 +6577,7 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
   return (
     <div data-vb-active-admin-package-panel="true" className="mb-4 flex flex-wrap items-center gap-3">
       <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-        Načíst Admin.vet
+        {t("centre.activePackage.loadButton")}
         <input type="file" accept=".vet,application/json" className="hidden" onChange={handleAdminVetFileSelect} />
       </label>
       {activePackagePreviewStatus && <span className="text-sm text-emerald-900">{activePackagePreviewStatus}</span>}
@@ -6073,85 +6635,6 @@ function ExaminerEditorCard({ examiner, removeExaminer, updateExaminer, examiner
   );
 }
 
-// --- SCAN tool math: 4-corner perspective correction (deskew) without any external CV library ---
-// Solves the 8-unknown planar homography that maps the 4 corners the operator tapped on the
-// photo to the 4 corners of the output document, using Gaussian elimination on the standard
-// 8x8 DLT linear system. h33 is fixed to 1 (standard normalization for a projective 2D homography).
-function solveLinearSystem8(A, b) {
-  const n = 8;
-  const M = A.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < n; col++) {
-    let pivot = col;
-    for (let row = col + 1; row < n; row++) if (Math.abs(M[row][col]) > Math.abs(M[pivot][col])) pivot = row;
-    [M[col], M[pivot]] = [M[pivot], M[col]];
-    const pivotVal = M[col][col];
-    if (Math.abs(pivotVal) < 1e-9) continue;
-    for (let row = 0; row < n; row++) {
-      if (row === col) continue;
-      const factor = M[row][col] / pivotVal;
-      for (let c = col; c <= n; c++) M[row][c] -= factor * M[col][c];
-    }
-  }
-  return M.map((row, i) => row[n] / row[i]);
-}
-function computeHomography(srcQuad, dstQuad) {
-  const A = [];
-  const b = [];
-  for (let i = 0; i < 4; i++) {
-    const [sx, sy] = srcQuad[i];
-    const [dx, dy] = dstQuad[i];
-    A.push([sx, sy, 1, 0, 0, 0, -sx * dx, -sy * dx]);
-    b.push(dx);
-    A.push([0, 0, 0, sx, sy, 1, -sx * dy, -sy * dy]);
-    b.push(dy);
-  }
-  const h = solveLinearSystem8(A, b);
-  return [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1];
-}
-function applyHomographyPoint(m, x, y) {
-  const w = m[6] * x + m[7] * y + m[8];
-  return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w];
-}
-// Warps sourceCanvas so the quadrilateral (docCorners, in source pixel coords, order:
-// top-left, top-right, bottom-right, bottom-left) becomes a straight outWidth x outHeight
-// rectangle, using bilinear sampling for quality. This is the "auto-align" step.
-function warpPerspective(sourceCanvas, docCorners, outWidth, outHeight) {
-  const dstQuad = [[0, 0], [outWidth, 0], [outWidth, outHeight], [0, outHeight]];
-  // Map OUTPUT rectangle -> SOURCE image directly, so we can sample per destination pixel.
-  const matrix = computeHomography(dstQuad, docCorners);
-  const srcCtx = sourceCanvas.getContext("2d");
-  const src = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-  const out = document.createElement("canvas");
-  out.width = outWidth;
-  out.height = outHeight;
-  const outCtx = out.getContext("2d");
-  const dstImage = outCtx.createImageData(outWidth, outHeight);
-  const sw = sourceCanvas.width;
-  const sh = sourceCanvas.height;
-  for (let y = 0; y < outHeight; y++) {
-    for (let x = 0; x < outWidth; x++) {
-      const [sx, sy] = applyHomographyPoint(matrix, x, y);
-      const di = (y * outWidth + x) * 4;
-      if (sx < 0 || sy < 0 || sx >= sw - 1 || sy >= sh - 1) {
-        dstImage.data[di] = 255; dstImage.data[di + 1] = 255; dstImage.data[di + 2] = 255; dstImage.data[di + 3] = 255;
-        continue;
-      }
-      const x0 = Math.floor(sx), y0 = Math.floor(sy);
-      const fx = sx - x0, fy = sy - y0;
-      for (let c = 0; c < 4; c++) {
-        const p00 = src.data[(y0 * sw + x0) * 4 + c];
-        const p10 = src.data[(y0 * sw + x0 + 1) * 4 + c];
-        const p01 = src.data[((y0 + 1) * sw + x0) * 4 + c];
-        const p11 = src.data[((y0 + 1) * sw + x0 + 1) * 4 + c];
-        const top = p00 * (1 - fx) + p10 * fx;
-        const bottom = p01 * (1 - fx) + p11 * fx;
-        dstImage.data[di + c] = top * (1 - fy) + bottom * fy;
-      }
-    }
-  }
-  outCtx.putImageData(dstImage, 0, 0);
-  return out;
-}
 // Auto brightness/contrast: per-channel histogram stretch (clips the darkest/lightest 0.5% of
 // pixels then linearly stretches the rest across the full 0-255 range) — a simple, fast "auto
 // levels" pass that makes a phone-photo of a printed page look closer to a flatbed scan.
@@ -6183,202 +6666,10 @@ function imageElementToCanvas(image) {
   return canvas;
 }
 
-// Full-screen capture tool: photograph a filled-in printed test, tap its 4 corners to deskew,
-// auto-enhance contrast, then either save the whole page as a scan or crop-and-assign a region
-// to a specific question so the review modal can show it next to that question's blank lines.
-// Deliberately does not attempt automatic checkbox/handwriting recognition — see project notes.
-function CentreScanModal({ candidate, questions, existingScans, onSaveScan, onAssignToQuestion, onClose, t }) {
-  const [rawImage, setRawImage] = useState(null); // HTMLImageElement
-  const [corners, setCorners] = useState(null); // [[x,y]x4] in displayed-image CSS pixel coords
-  const [correctedCanvas, setCorrectedCanvas] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [assignQuestionId, setAssignQuestionId] = useState("");
-  const [cropRect, setCropRect] = useState(null); // {x,y,w,h} on the corrected canvas, CSS px
-  const imgRef = useRef(null);
-  const dragRef = useRef(null);
-
-  function handleFileSelect(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      setRawImage(image);
-      setCorrectedCanvas(null);
-      setCorners(null);
-      URL.revokeObjectURL(url);
-    };
-    image.src = url;
-  }
-
-  function initCornersFromDisplay() {
-    const el = imgRef.current;
-    if (!el) return;
-    const margin = { x: el.clientWidth * 0.08, y: el.clientHeight * 0.08 };
-    setCorners([
-      [margin.x, margin.y],
-      [el.clientWidth - margin.x, margin.y],
-      [el.clientWidth - margin.x, el.clientHeight - margin.y],
-      [margin.x, el.clientHeight - margin.y],
-    ]);
-  }
-
-  function startDragCorner(index, event) {
-    event.preventDefault();
-    dragRef.current = index;
-    window.addEventListener("pointermove", onDragMove);
-    window.addEventListener("pointerup", onDragEnd);
-  }
-  function onDragMove(event) {
-    const index = dragRef.current;
-    if (index === null || index === undefined || !imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-    setCorners((current) => current.map((point, i) => (i === index ? [x, y] : point)));
-  }
-  function onDragEnd() {
-    dragRef.current = null;
-    window.removeEventListener("pointermove", onDragMove);
-    window.removeEventListener("pointerup", onDragEnd);
-  }
-
-  async function applyCorrection() {
-    if (!rawImage || !corners || !imgRef.current) return;
-    setProcessing(true);
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const displayRect = imgRef.current;
-    const scaleX = rawImage.naturalWidth / displayRect.clientWidth;
-    const scaleY = rawImage.naturalHeight / displayRect.clientHeight;
-    const sourceCorners = corners.map(([x, y]) => [x * scaleX, y * scaleY]);
-    const sourceCanvas = imageElementToCanvas(rawImage);
-    const outWidth = 1200;
-    const outHeight = Math.round(outWidth * 1.414); // A4 portrait aspect ratio
-    const warped = warpPerspective(sourceCanvas, sourceCorners, outWidth, outHeight);
-    autoEnhanceCanvas(warped);
-    setCorrectedCanvas(warped);
-    setProcessing(false);
-  }
-
-  function saveWholeScan() {
-    if (!correctedCanvas) return;
-    onSaveScan(candidate.id, correctedCanvas.toDataURL("image/jpeg", 0.9));
-  }
-
-  function startCrop(event) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const startX = event.clientX - rect.left;
-    const startY = event.clientY - rect.top;
-    setCropRect({ x: startX, y: startY, w: 0, h: 0 });
-    function move(moveEvent) {
-      const x = Math.max(0, Math.min(rect.width, moveEvent.clientX - rect.left));
-      const y = Math.max(0, Math.min(rect.height, moveEvent.clientY - rect.top));
-      setCropRect({ x: Math.min(startX, x), y: Math.min(startY, y), w: Math.abs(x - startX), h: Math.abs(y - startY) });
-    }
-    function up() {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    }
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }
-
-  function assignCroppedRegion() {
-    if (!correctedCanvas || !cropRect || !cropRect.w || !cropRect.h || !assignQuestionId) return;
-    const displayEl = document.getElementById("scan-corrected-preview");
-    if (!displayEl) return;
-    const scaleX = correctedCanvas.width / displayEl.clientWidth;
-    const scaleY = correctedCanvas.height / displayEl.clientHeight;
-    const cropCanvas = document.createElement("canvas");
-    cropCanvas.width = Math.max(1, Math.round(cropRect.w * scaleX));
-    cropCanvas.height = Math.max(1, Math.round(cropRect.h * scaleY));
-    cropCanvas.getContext("2d").drawImage(
-      correctedCanvas,
-      cropRect.x * scaleX, cropRect.y * scaleY, cropRect.w * scaleX, cropRect.h * scaleY,
-      0, 0, cropCanvas.width, cropCanvas.height
-    );
-    onAssignToQuestion(candidate.id, assignQuestionId, cropCanvas.toDataURL("image/jpeg", 0.92));
-    setCropRect(null);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 p-4 text-white">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">{t("centre.scan.title")} · {candidate.name}</h2>
-          <p className="text-sm text-slate-300">{t("centre.scan.helper")}</p>
-        </div>
-        <Button onClick={onClose} variant="outline" className="rounded-2xl bg-white text-slate-950">{t("common.close")}</Button>
-      </div>
-
-      <div className="mt-4 flex-1 overflow-auto rounded-2xl bg-white p-4 text-slate-950">
-        {!rawImage && (
-          <label className="flex h-64 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-center">
-            <Camera className="h-8 w-8 text-slate-500" />
-            <span className="font-semibold">{t("centre.scan.capture")}</span>
-            <span className="text-xs text-slate-500">{t("centre.scan.captureHelper")}</span>
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
-          </label>
-        )}
-
-        {rawImage && !correctedCanvas && (
-          <div>
-            <p className="mb-2 text-sm font-semibold">{t("centre.scan.dragCorners")}</p>
-            <div ref={imgRef} className="relative mx-auto w-full max-w-xl select-none" onLoad={initCornersFromDisplay}>
-              <img src={rawImage.src} alt="scan" className="w-full rounded-xl" onLoad={initCornersFromDisplay} draggable={false} />
-              {corners && (
-                <svg className="pointer-events-none absolute inset-0 h-full w-full">
-                  <polygon points={corners.map((p) => p.join(",")).join(" ")} fill="rgba(45,111,54,0.18)" stroke="#2d6f36" strokeWidth="2" />
-                </svg>
-              )}
-              {corners && corners.map((point, index) => (
-                <div key={index} onPointerDown={(event) => startDragCorner(index, event)} className="absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-white bg-emerald-600" style={{ left: point[0], top: point[1] }} />
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={() => { setRawImage(null); setCorners(null); }} variant="outline" className="rounded-2xl">{t("centre.scan.retake")}</Button>
-              <Button onClick={applyCorrection} disabled={!corners || processing} className="rounded-2xl">{processing ? t("centre.scan.processing") : t("centre.scan.applyAlign")}</Button>
-            </div>
-          </div>
-        )}
-
-        {correctedCanvas && (
-          <div>
-            <p className="mb-2 text-sm font-semibold">{t("centre.scan.assignHelper")}</p>
-            <div className="relative mx-auto w-full max-w-xl cursor-crosshair select-none" onPointerDown={startCrop}>
-              <img id="scan-corrected-preview" src={correctedCanvas.toDataURL("image/jpeg", 0.9)} alt="corrected scan" className="w-full rounded-xl border" draggable={false} />
-              {cropRect && <div className="pointer-events-none absolute border-2 border-amber-500 bg-amber-400/20" style={{ left: cropRect.x, top: cropRect.y, width: cropRect.w, height: cropRect.h }} />}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button onClick={() => { setCorrectedCanvas(null); setCorners(null); }} variant="outline" className="rounded-2xl">{t("centre.scan.redoAlign")}</Button>
-              <Button onClick={saveWholeScan} variant="outline" className="rounded-2xl">{t("centre.scan.saveWhole")}</Button>
-              <select value={assignQuestionId} onChange={(event) => setAssignQuestionId(event.target.value)} className="rounded-xl border bg-white p-2 text-sm">
-                <option value="">{t("centre.scan.selectQuestion")}</option>
-                {questions.map((q) => <option key={q.id} value={q.id}>{q.id}</option>)}
-              </select>
-              <Button onClick={assignCroppedRegion} disabled={!cropRect?.w || !assignQuestionId} className="rounded-2xl">{t("centre.scan.assignCrop")}</Button>
-            </div>
-          </div>
-        )}
-
-        {existingScans?.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-2 text-sm font-semibold">{t("centre.scan.savedScans")}</p>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-              {existingScans.map((scan) => <img key={scan.id} src={scan.dataUrl} alt="saved scan" className="rounded-lg border" />)}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Final-review modal: shows every question with the candidate's answer highlighted next to the
 // correct answer / scoring help, any scanned handwriting crops assigned to that question, and
 // (once an Examiner has identified themselves) a "mark as corrected" action.
-function CentreReviewModal({ candidate, section, snapshot, scanAssignments, identifiedExaminer, onRequireIdentify, onMarkCorrected, isCorrected, onClose, t }) {
+function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, isCorrected, onClose, t }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
       <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white">
@@ -6394,19 +6685,30 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, iden
             <div className="space-y-4">
               {snapshot.items.map((item) => {
                 const crop = scanAssignments?.[item.question.id];
+                const flagged = scanFlags?.[item.question.id];
                 return (
-                  <div key={item.question.id} className="rounded-2xl border p-3">
+                  <div key={item.question.id} className={`rounded-2xl border p-3 ${flagged ? "border-rose-300" : ""}`}>
                     <div className="flex items-center justify-between text-xs text-slate-500">
                       <span className="font-mono">{item.question.id}</span>
                       <span>{item.pointsAwarded} / {item.question.points ?? "-"} b.</span>
                     </div>
                     <div className="mt-1 font-medium">{item.question.text}</div>
+                    {flagged && (
+                      <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs font-semibold text-rose-950">
+                        {t("centre.scan.ambiguousMark")}
+                      </div>
+                    )}
                     <div className={`mt-2 rounded-xl p-2 text-sm ${item.hasCorrectAnswer ? (item.correct ? "bg-emerald-50 text-emerald-950" : "bg-rose-50 text-rose-950") : "bg-slate-50"}`}>
                       <span className="font-semibold">{t("centre.review.candidateAnswer")}: </span>{item.answer || <em>{t("centre.review.noAnswer")}</em>}
                     </div>
                     {item.hasCorrectAnswer && <div className="mt-1 text-xs text-slate-500">{t("centre.review.correctAnswer")}: {item.question.correctAnswer}</div>}
                     {item.question.scoringHelp && <div className="mt-1 text-xs text-slate-500">{t("centre.review.scoringHelp")}: {item.question.scoringHelp}</div>}
-                    {crop && <img src={crop} alt="handwritten answer scan" className="mt-2 max-h-48 rounded-lg border" />}
+                    {crop && (
+                      <div className="mt-2">
+                        <div className="mb-1 text-xs font-semibold text-slate-500">{t("centre.scan.originalLabel")}</div>
+                        <img src={crop} alt="scanned original page" className="max-h-64 rounded-lg border" />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -6457,6 +6759,114 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, iden
   );
 }
 
+// The corner QR is rendered with includeMargin:true (see scanSortQr in printCandidateTest),
+// which bakes a fixed 4-module quiet zone into the SVG's own viewBox — e.g. a 21x21-module QR
+// becomes a 29x29 viewBox. jsQR's detected corners bound only the actual module grid (the quiet
+// zone isn't part of the symbol by definition), so that inner grid — not the full 13mm rendered
+// box — is the ruler a photographed QR actually gives us. QR_MARGIN_MODULES mirrors
+// qrcode.react's own SPEC_MARGIN_SIZE constant.
+const QR_MARGIN_MODULES = 4;
+function qrModuleGridMm(svgMarkup, renderedMm) {
+  const match = svgMarkup.match(/viewBox="0 0 (\d+) (\d+)"/);
+  const totalUnits = match ? Number(match[1]) : null;
+  if (!totalUnits) return renderedMm;
+  return (renderedMm * (totalUnits - QR_MARGIN_MODULES * 2)) / totalUnits;
+}
+
+// Measures, once per candidate's question set, where each single_choice question's checkboxes
+// sit relative to that same question's own corner QR's actual module grid (see qrModuleGridMm
+// above) — in millimeters, so the result is scale-invariant and can be re-applied to a QR
+// detected at any photo resolution/distance (see mapOffsetToPhoto in lib/scanMarkDetection.js).
+// This mirrors printCandidateTest's `.pt-question`/`scanSortQr` markup/CSS closely enough to be
+// geometrically accurate; if that print layout's spacing ever changes, this offscreen copy needs
+// to change with it.
+function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-10000px";
+  container.style.top = "0";
+  container.style.width = "182mm";
+  container.style.fontFamily = "Arial, sans-serif";
+  container.style.fontSize = "10.5pt";
+  container.style.boxSizing = "border-box";
+  const style = document.createElement("style");
+  style.textContent = `
+    #vetbara-scan-measure *{box-sizing:border-box}
+    #vetbara-scan-measure .pt-question{margin-bottom:5mm;padding-bottom:3mm}
+    #vetbara-scan-measure .pt-question-head{font-size:8pt}
+    #vetbara-scan-measure .pt-question-head::after{content:"";display:block;clear:both}
+    #vetbara-scan-measure .pt-corner-qr{background:#fff;padding:1mm}
+    #vetbara-scan-measure .pt-corner-qr svg{width:13mm;height:13mm;display:block}
+    #vetbara-scan-measure .pt-corner-qr-options{display:block;margin:0 0 1.5mm}
+    #vetbara-scan-measure .pt-qtext{font-weight:700;margin:2.5mm 0;font-size:11.5pt;clear:both}
+    #vetbara-scan-measure .pt-options{margin-top:1mm}
+    #vetbara-scan-measure .pt-option{margin:1.8mm 0;font-size:10.5pt}
+    #vetbara-scan-measure .pt-checkbox{display:inline-block;width:4.5mm;height:4.5mm;border:1.5pt solid #102018;border-radius:1mm;margin-right:3mm;vertical-align:middle}
+  `;
+  container.id = "vetbara-scan-measure";
+  container.appendChild(style);
+
+  const sections = [];
+  questions.forEach((question, index) => {
+    if (!(question.type === "single_choice" && Array.isArray(question.options) && question.options.length)) return;
+    const qrValue = `VS-${testCode}-${candidateNumber}-Q${index + 1}`;
+    const qrSvg = renderQrSvgMarkup(qrValue, 68, { includeMargin: true });
+    const section = document.createElement("section");
+    section.className = "pt-question";
+    // Mirrors printCandidateTest: the QR sits inside .pt-options, directly above the checkbox
+    // column, not up in the question header — see the comment on questionsHtml there.
+    section.innerHTML = `
+      <div class="pt-qtext">${escapeHtml(question.text || "")}</div>
+      <div class="pt-options"><span class="pt-corner-qr pt-corner-qr-options">${qrSvg}</span>${question.options.map(() => `<div class="pt-option"><span class="pt-checkbox"></span></div>`).join("")}</div>
+    `;
+    container.appendChild(section);
+    sections.push({ question, section, qrSvg });
+  });
+
+  document.body.appendChild(container);
+  const layout = {};
+  sections.forEach(({ question, section, qrSvg }) => {
+    // The module grid jsQR actually bounds sits inset from the rendered 13mm SVG box by the
+    // quiet-zone margin on every side.
+    const svgRect = section.querySelector(".pt-corner-qr svg").getBoundingClientRect();
+    const pxPerMm = svgRect.width / 13;
+    const moduleGridMm = qrModuleGridMm(qrSvg, 13);
+    const marginMm = (13 - moduleGridMm) / 2;
+    const moduleGridLeft = svgRect.left + marginMm * pxPerMm;
+    const moduleGridTop = svgRect.top + marginMm * pxPerMm;
+    const options = [...section.querySelectorAll(".pt-checkbox")].map((boxEl, index) => {
+      const boxRect = boxEl.getBoundingClientRect();
+      return {
+        index,
+        dxMm: (boxRect.left + boxRect.width / 2 - moduleGridLeft) / pxPerMm,
+        dyMm: (boxRect.top + boxRect.height / 2 - moduleGridTop) / pxPerMm,
+      };
+    });
+    layout[question.id] = { moduleGridMm, options };
+  });
+  document.body.removeChild(container);
+  return layout;
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+    image.onerror = (error) => { URL.revokeObjectURL(url); reject(error); };
+    image.src = url;
+  });
+}
+
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+}
+
 const CENTRE_REVIEW_STATUS_COLORS = { locked: "bg-slate-200 text-slate-500", open: "bg-amber-400 text-amber-950", closed: "bg-rose-500 text-white", corrected: "bg-emerald-500 text-white" };
 
 function CentreReviewCell({ status, onClick, t }) {
@@ -6467,20 +6877,183 @@ function CentreReviewCell({ status, onClick, t }) {
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel, candidateStatus, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorItemsByLevel, candidateStatus, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
   const [correctionStatus, setCorrectionStatus] = useState({});
+  // scans[candidateId] holds every scanned page for that candidate's written test, in capture
+  // order — each page carries its own already-computed mark-detection results (see
+  // handleScanFile), so "processing" a candidate is just flattening those results into
+  // testResponses/scanAssignments rather than doing any image work itself.
   const [scans, setScans] = useState({});
   const [scanAssignments, setScanAssignments] = useState({});
+  const [expectedPageCounts, setExpectedPageCounts] = useState({});
+  const [processedInfo, setProcessedInfo] = useState({});
+  const [unmatchedScans, setUnmatchedScans] = useState([]);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanMessage, setScanMessage] = useState(null);
+  const [showConnectQr, setShowConnectQr] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
-  const [scanTarget, setScanTarget] = useState(null);
+  const checkboxLayoutCacheRef = useRef({});
+  // A phone that scans the "Připojit tablet/telefon" QR uploads photos to this exam's server-side
+  // scan inbox (see ScanCaptureMobilePage); this browser's own Centre session polls for new
+  // uploads and runs them through the exact same detection pipeline as a locally captured photo.
+  const scanInboxExamId = CENTRE_QR_ID;
+  const mobileScanCaptureUrl = `${window.location.origin}${window.location.pathname}?mode=scan-capture&examId=${encodeURIComponent(scanInboxExamId)}`;
 
   const identifiedExaminer = examiners.find((examiner) => examiner.id === identifiedExaminerId) || null;
 
-  function sectionQuestions(candidate) {
-    const variantCode = variants?.[candidate.level] ?? "";
-    return (testBank?.[variantCode] ?? []);
+  function scanErrorQuestionIds(candidateId) {
+    const ids = new Set();
+    (scans[candidateId] || []).forEach((page) => {
+      Object.entries(page.questionResults || {}).forEach(([questionId, result]) => { if (result.error) ids.add(questionId); });
+    });
+    return ids;
+  }
+
+  // Reads one photographed page: decodes every corner QR visible on it (there can be several,
+  // since questions aren't forced one-per-page), matches the first one back to a candidate,
+  // then — for every question whose QR was found on this page — samples that question's own
+  // checkboxes using the QR's own detected corners as a local ruler (mapOffsetToPhoto), so the
+  // result is accurate however the page was rotated or tilted in the photo. Shared by the local
+  // file-capture button and the remote scan-inbox poller (see the "Připojit tablet/telefon" QR),
+  // which both just need to hand it an already-loaded image.
+  async function processScanImage(image) {
+    const canvas = imageElementToCanvas(image);
+    autoEnhanceCanvas(canvas);
+    const decoded = decodeAllQrCodes(canvas);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+    if (!decoded.length) {
+      setUnmatchedScans((prev) => [{ id: vetbaraUid("unmatched"), dataUrl, reason: t("centre.scan.errorNoQr"), capturedAt: new Date().toISOString() }, ...prev]);
+      setScanMessage({ type: "error", text: t("centre.scan.errorNoQr") });
+      return;
+    }
+
+    const parsedList = decoded
+      .map((result) => ({ parsed: parseScanSortPayload(result.data), location: result.location }))
+      .filter((entry) => entry.parsed);
+
+    if (!parsedList.length) {
+      setUnmatchedScans((prev) => [{ id: vetbaraUid("unmatched"), dataUrl, reason: t("centre.scan.errorWrongQr"), capturedAt: new Date().toISOString() }, ...prev]);
+      setScanMessage({ type: "error", text: t("centre.scan.errorWrongQr") });
+      return;
+    }
+
+    const { testCode, candidateNumber } = parsedList[0].parsed;
+    const candidate = candidates.find((c) => {
+      const snapshot = resolveCandidateWrittenSnapshot({ candidate: c, variants, testBank });
+      return candidateScanTestCode(c, snapshot.variantCode) === testCode && candidateScanNumber(c) === candidateNumber;
+    });
+
+    if (!candidate) {
+      setUnmatchedScans((prev) => [{ id: vetbaraUid("unmatched"), dataUrl, reason: tf("centre.scan.errorUnknownCandidate", { code: `${testCode}-${candidateNumber}` }), capturedAt: new Date().toISOString() }, ...prev]);
+      setScanMessage({ type: "error", text: t("centre.scan.errorUnknownCandidate") });
+      return;
+    }
+
+    const { questions, variantCode } = resolveCandidateWrittenSnapshot({ candidate, variants, testBank });
+    if (!checkboxLayoutCacheRef.current[candidate.id]) {
+      checkboxLayoutCacheRef.current[candidate.id] = measureCandidateCheckboxLayout(questions, testCode, candidateNumber);
+    }
+    const layout = checkboxLayoutCacheRef.current[candidate.id];
+
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const questionResults = {};
+    parsedList.forEach(({ parsed, location }) => {
+      const question = questions[parsed.anchorQuestion - 1];
+      const entry = question ? layout[question.id] : null;
+      if (!question || !entry || !entry.options.length) return;
+      const pxPerMm = Math.hypot(location.topRightCorner.x - location.topLeftCorner.x, location.topRightCorner.y - location.topLeftCorner.y) / entry.moduleGridMm;
+      const boxHalfPx = Math.max(4, 4.5 * pxPerMm * 0.4);
+      const optionResults = entry.options.map((option) => {
+        const point = mapOffsetToPhoto(location, option.dxMm, option.dyMm, entry.moduleGridMm);
+        return { index: option.index, ...classifyMark(imageData, point.x, point.y, boxHalfPx) };
+      });
+      questionResults[question.id] = { ...resolveQuestionMark(optionResults), optionResults };
+    });
+
+    setScans((prev) => ({
+      ...prev,
+      [candidate.id]: [
+        ...(prev[candidate.id] || []),
+        { id: vetbaraUid("scan"), dataUrl, capturedAt: new Date().toISOString(), testCode, variantCode, anchorQuestions: parsedList.map((p) => p.parsed.anchorQuestion), questionResults },
+      ],
+    }));
+    setScanMessage({ type: "success", text: tf("centre.scan.pageAdded", { name: candidate.name || candidate.id }) });
+  }
+
+  async function handleScanFile(file) {
+    setScanBusy(true);
+    setScanMessage(null);
+    try {
+      const image = await loadImageFromFile(file);
+      await processScanImage(image);
+    } catch (error) {
+      console.error("Scan capture failed", error);
+      setScanMessage({ type: "error", text: t("centre.scan.errorGeneric") });
+    } finally {
+      setScanBusy(false);
+    }
+  }
+
+  // Polls the server-side scan inbox (see the "Připojit tablet/telefon" QR / ScanCaptureMobilePage)
+  // for pages a connected phone/tablet has uploaded, runs each one through the same detection
+  // pipeline as a locally captured photo, then deletes it from the inbox so it isn't reprocessed.
+  async function pollScanInbox() {
+    try {
+      const response = await fetch(`/api/exams/${encodeURIComponent(scanInboxExamId)}/scan-inbox`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+      for (const item of items) {
+        try {
+          const image = await loadImageFromDataUrl(item.dataUrl);
+          await processScanImage(image);
+        } catch (error) {
+          console.error("Remote scan processing failed", error);
+        } finally {
+          fetch(`/api/exams/${encodeURIComponent(scanInboxExamId)}/scan-inbox/${encodeURIComponent(item.id)}`, { method: "DELETE" }).catch(() => {});
+        }
+      }
+    } catch {
+      // Best-effort background poll; the next tick will retry.
+    }
+  }
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => { pollScanInbox(); }, 4000);
+    return () => window.clearInterval(intervalId);
+  }, [candidates, variants, testBank]);
+
+  function removeScanPage(candidateId, pageId) {
+    setScans((prev) => ({ ...prev, [candidateId]: (prev[candidateId] || []).filter((page) => page.id !== pageId) }));
+  }
+
+  // Flattens every scanned page's already-computed per-question results into testResponses
+  // (so the Examiner's own grading form shows these exactly like a candidate-typed answer) and
+  // scanAssignments (so both this Centre review and the Examiner's grading form can show the
+  // scanned original next to each question). A question with more than one non-crossed-out mark
+  // is left unanswered here and flagged for manual review instead of guessing.
+  function processCandidateScans(candidate) {
+    const pages = scans[candidate.id] || [];
+    const responsesPatch = {};
+    const assignPatch = {};
+    let errorCount = 0;
+    pages.forEach((page) => {
+      Object.entries(page.questionResults || {}).forEach(([questionId, result]) => {
+        assignPatch[questionId] = page.dataUrl;
+        if (result.error) { errorCount += 1; return; }
+        if (result.selectedIndex != null) responsesPatch[questionId] = String.fromCharCode(65 + result.selectedIndex);
+      });
+    });
+    if (Object.keys(responsesPatch).length) {
+      setTestResponses((prev) => ({ ...prev, [candidate.id]: { ...(prev[candidate.id] || {}), ...responsesPatch } }));
+    }
+    setScanAssignments((prev) => ({ ...prev, [candidate.id]: { ...(prev[candidate.id] || {}), ...assignPatch } }));
+    setProcessedInfo((prev) => ({ ...prev, [candidate.id]: { at: new Date().toISOString(), pageCount: pages.length, errorCount } }));
   }
 
   function cellStatus(candidate, sectionKey) {
@@ -6553,7 +7126,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
       </div>
 
       {pendingIdentify && (
-        // z-[60]: this must render above CentreReviewModal/CentreScanModal (z-50) — it can be
+        // z-[60]: this must render above CentreReviewModal (z-50) — it can be
         // triggered from inside either of those, and a plain inline block would render behind
         // the modal overlay and be invisible (the click would "do nothing" from the user's view).
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" onClick={() => setPendingIdentify(false)}>
@@ -6577,7 +7150,6 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
             <tr className="border-b text-left text-slate-500">
               <th className="py-2 pr-3">{t("centre.workflow.candidate")}</th>
               {sections.map((section) => <th key={section.key} className="py-2 pr-3">{section.label}</th>)}
-              <th className="py-2 pr-3">SCAN</th>
             </tr>
           </thead>
           <tbody>
@@ -6595,13 +7167,129 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
                     </td>
                   );
                 })}
-                <td className="py-2 pr-3">
-                  <Button onClick={() => setScanTarget(candidate)} variant="outline" className="rounded-2xl">SCAN</Button>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">{t("centre.scan.panelTitle")}</h3>
+            <p className="mt-1 text-sm text-slate-600">{t("centre.scan.panelHelper")}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => setShowConnectQr(true)} variant="outline" className="rounded-2xl">
+              <QrCodeIcon className="mr-1 h-4 w-4" />{t("centre.scan.connectDevice")}
+            </Button>
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white ${scanBusy ? "bg-slate-400" : "bg-slate-950"}`}>
+              <Camera className="h-4 w-4" />
+              {scanBusy ? t("centre.scan.processingPhoto") : t("centre.scan.scanButton")}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={scanBusy}
+                onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handleScanFile(file); }}
+              />
+            </label>
+          </div>
+        </div>
+
+        {showConnectQr && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" onClick={() => setShowConnectQr(false)}>
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h4 className="font-semibold">{t("centre.scan.connectDeviceTitle")}</h4>
+                <Button onClick={() => setShowConnectQr(false)} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+              </div>
+              <p className="mb-3 text-sm text-slate-600">{t("centre.scan.connectDeviceHelper")}</p>
+              <div className="flex justify-center">
+                <RealQr value={mobileScanCaptureUrl} size={200} />
+              </div>
+              <div className="mt-3 break-all rounded-xl bg-slate-100 p-2 text-center font-mono text-xs text-slate-500">{mobileScanCaptureUrl}</div>
+            </div>
+          </div>
+        )}
+
+        {scanMessage && (
+          <div className={`mt-3 rounded-xl p-3 text-sm ${scanMessage.type === "error" ? "border border-rose-200 bg-rose-50 text-rose-950" : "border border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+            {scanMessage.text}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-3">
+          {candidates.filter((candidate) => (scans[candidate.id] || []).length).map((candidate) => {
+            const pages = scans[candidate.id] || [];
+            const expected = expectedPageCounts[candidate.id] ?? "";
+            const confirmed = Number(expected) > 0 && Number(expected) === pages.length;
+            const info = processedInfo[candidate.id];
+            return (
+              <div key={candidate.id} className="rounded-2xl border bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-semibold">{candidate.name || candidate.id}</div>
+                    <div className="text-xs text-slate-500">{candidate.id} · {candidate.level} · {tf("centre.scan.pagesCount", { count: pages.length })}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs text-slate-500">
+                      {t("centre.scan.expectedPages")}
+                      <input
+                        type="number"
+                        min="1"
+                        value={expected}
+                        onChange={(event) => setExpectedPageCounts((prev) => ({ ...prev, [candidate.id]: event.target.value }))}
+                        className="ml-2 w-16 rounded-lg border bg-white p-1 text-sm"
+                      />
+                    </label>
+                    <Button onClick={() => processCandidateScans(candidate)} disabled={!confirmed} className="rounded-2xl">
+                      {t("centre.scan.confirmAndProcess")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {pages.map((page, index) => (
+                    <div key={page.id} className="relative">
+                      <img src={page.dataUrl} alt={`scan page ${index + 1}`} className="h-16 w-12 rounded border object-cover" />
+                      <button type="button" onClick={() => removeScanPage(candidate.id, page.id)} className="absolute -right-1 -top-1 rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-4 text-white">×</button>
+                    </div>
+                  ))}
+                </div>
+
+                {!confirmed && <div className="mt-2 text-xs text-amber-700">{t("centre.scan.confirmHint")}</div>}
+                {info && (
+                  <div className="mt-2 text-xs text-emerald-700">
+                    {tf("centre.scan.processedInfo", { count: info.pageCount })}
+                    {info.errorCount > 0 && <span className="ml-1 font-semibold text-rose-700">{tf("centre.scan.processedErrors", { count: info.errorCount })}</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!candidates.some((candidate) => (scans[candidate.id] || []).length) && (
+            <div className="rounded-xl bg-slate-100 p-3 text-sm text-slate-600">{t("centre.scan.emptyState")}</div>
+          )}
+        </div>
+
+        {unmatchedScans.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3">
+            <div className="text-sm font-semibold text-rose-950">{t("centre.scan.unmatchedTitle")}</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {unmatchedScans.map((item) => (
+                <div key={item.id} className="w-24 rounded-lg border border-rose-200 bg-white p-1">
+                  <img src={item.dataUrl} alt="unmatched scan" className="h-16 w-full rounded object-cover" />
+                  <div className="mt-1 text-[10px] text-rose-700">{item.reason}</div>
+                  <button type="button" onClick={() => setUnmatchedScans((prev) => prev.filter((x) => x.id !== item.id))} className="mt-1 text-[10px] font-semibold text-rose-700 underline">
+                    {t("centre.scan.discard")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4 rounded-2xl border bg-slate-50 p-3 text-xs text-slate-600">
@@ -6618,23 +7306,12 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           section={{ ...sections.find((s) => s.key === reviewTarget.sectionKey), kind: reviewTarget.sectionKey === "test" ? "written" : reviewTarget.sectionKey }}
           snapshot={buildSnapshot(reviewTarget.candidate, reviewTarget.sectionKey)}
           scanAssignments={scanAssignments[reviewTarget.candidate.id]}
+          scanFlags={reviewTarget.sectionKey === "test" ? Object.fromEntries([...scanErrorQuestionIds(reviewTarget.candidate.id)].map((id) => [id, true])) : null}
           identifiedExaminer={identifiedExaminer}
           onRequireIdentify={requireIdentify}
           onMarkCorrected={markCorrected}
           isCorrected={cellStatus(reviewTarget.candidate, reviewTarget.sectionKey) === "corrected"}
           onClose={() => setReviewTarget(null)}
-          t={t}
-        />
-      )}
-
-      {scanTarget && (
-        <CentreScanModal
-          candidate={scanTarget}
-          questions={sectionQuestions(scanTarget)}
-          existingScans={scans[scanTarget.id]}
-          onSaveScan={(candidateId, dataUrl) => setScans((current) => ({ ...current, [candidateId]: [...(current[candidateId] || []), { id: vetbaraUid("scan"), dataUrl, capturedAt: new Date().toISOString() }] }))}
-          onAssignToQuestion={(candidateId, questionId, dataUrl) => setScanAssignments((current) => ({ ...current, [candidateId]: { ...(current[candidateId] || {}), [questionId]: dataUrl } }))}
-          onClose={() => setScanTarget(null)}
           t={t}
         />
       )}
@@ -6664,8 +7341,8 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
   }, []);
 
   const documents = useMemo(
-    () => buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit }),
-    [candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit]
+    () => buildArchiveDocuments({ candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit, t }),
+    [candidates, activeAdminPackage, variants, testBank, testResponses, reportDrafts, outdoor, outdoorNotes, outdoorItemsByLevel, audit, t]
   );
 
   useEffect(() => {
@@ -6719,7 +7396,7 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
         zip.file(`${doc.category}/${doc.jsonFilename}`, JSON.stringify(jsonData, null, 2));
         manifest.documents.push({ id: doc.id, category: doc.category, label: doc.label, filename: doc.jsonFilename, data: jsonData });
         try {
-          const pdfBlob = buildArchiveSectionsPdfBlob(doc.pdfTitle, [`Kategorie: ${doc.category}`, `Vygenerováno: ${new Date().toLocaleString()}`], doc.getPdfSections());
+          const pdfBlob = buildArchiveSectionsPdfBlob(doc.pdfTitle, [`${t("archive.category")}: ${doc.category}`, `${t("archive.readme.generatedAt")}: ${new Date().toLocaleString()}`], doc.getPdfSections());
           zip.file(`${doc.category}/${doc.jsonFilename.replace(/\.json$/, ".pdf")}`, pdfBlob);
         } catch (pdfError) {
           console.error("Archive PDF generation failed for", doc.id, pdfError);
@@ -6727,7 +7404,7 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
       }
 
       zip.file(vetFilename, JSON.stringify(manifest, null, 2));
-      zip.file("README.txt", buildArchiveReadme(selectedDocs, vetFilename));
+      zip.file("README.txt", buildArchiveReadme(selectedDocs, vetFilename, t));
 
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -6780,7 +7457,7 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
   );
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
@@ -6858,20 +7535,20 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
       // Some tablet browsers reject programmatic clipboard access on insecure LAN URLs.
     }
 
-    window.prompt("Copy this VetBara access link", text);
+    window.prompt(t("centre.copy.promptTitle"), text);
     setCopiedQr(t("centre.copy.unavailable").replace("{label}", label));
   }
 
   function openPrintWindow(html) {
-    openPrintDocument(html, () => setCopiedQr("Tiskové okno bylo blokováno prohlížečem."));
+    openPrintDocument(html, () => setCopiedQr(t("centre.print.windowBlocked")));
   }
 
   // 4-per-page cut-and-distribute sheet: every Candidate and Examiner QR, with their name
   // printed underneath, laid out 2x2 so a pair of scissors gives one QR card per person.
   function printAllQrCodes() {
     const people = [
-      ...candidates.map((c) => ({ id: c.id, name: c.name, role: "Kandidát", url: candidateQrForRewritten(c.id) })),
-      ...examiners.map((ex) => ({ id: ex.id, name: ex.name, role: "Examinátor", url: examinerQrForRewritten(ex.id) })),
+      ...candidates.map((c) => ({ id: c.id, name: c.name, role: t("role.candidate"), url: candidateQrForRewritten(c.id) })),
+      ...examiners.map((ex) => ({ id: ex.id, name: ex.name, role: t("role.examiner"), url: examinerQrForRewritten(ex.id) })),
     ];
     const cells = people.map((person) => `<div class="qr-print-cell">
       <div class="qr-print-code">${renderQrSvgMarkup(person.url, 220)}</div>
@@ -6899,25 +7576,43 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
     const snapshot = resolveCandidateWrittenSnapshot({ candidate, variants, testBank });
     const questions = snapshot.questions;
     const qrMarkup = renderQrSvgMarkup(candidateQrForRewritten(candidate.id), 130);
-    // Each question keeps its own small scan-sort QR (candidate/variant/question encoded) so a
+    const candidateNumber = candidateScanNumber(candidate);
+    const testCode = candidateScanTestCode(candidate, snapshot.variantCode);
+    // Each question keeps its own small scan-sort QR (test/candidate/question encoded) so a
     // stack of scanned pages can still be matched back to the right digital question even if
     // pages get shuffled — but questions are no longer forced one-per-page. They flow normally
     // and only get `break-inside: avoid` so a question and its answer space never split across
     // a page boundary; this keeps the print compact instead of burning a sheet per question.
-    function scanSortQr(questionId) {
-      const value = `VETSCAN|${candidate.id}|${snapshot.variantCode || ""}|${questionId}`;
-      return renderQrSvgMarkup(value, 60);
+    // The payload is deliberately minimal (test code, candidate number, question number) — no
+    // long IDs — so the QR stays low-density and legible at a small printed size. The physical
+    // page number can't be known at this point (pagination happens later, in the browser's print
+    // layout), so it is shown separately as plain printed text via a CSS page counter instead.
+    function scanSortQr(questionIndex) {
+      // Only characters from the QR "alphanumeric" charset (0-9 A-Z space $ % * + - . / :) are
+      // used here — mixing in anything outside that set (e.g. a "|") forces the encoder into the
+      // much less efficient byte mode, which needs a bigger/denser QR for the same content.
+      const value = `VS-${testCode}-${candidateNumber}-Q${questionIndex}`;
+      return renderQrSvgMarkup(value, 68, { includeMargin: true });
     }
+    // The scan-sort QR for a choice question is placed directly above its own checkbox column
+    // (inside .pt-options) rather than up in the question header: a photographed QR's detected
+    // corners are only a reliable local ruler for a short distance around it (any small angular
+    // detection error scales into real position error over distance), and the header sits far
+    // to the right of the checkboxes at the left margin — tens of mm apart on an A4 page. Written
+    // (non-choice) questions have no checkboxes to locate, so their QR stays in the header.
     const questionsHtml = questions.map((q, index) => {
       const qid = q.id || `Q${index + 1}`;
-      const optionsHtml = q.type === "single_choice" && q.options.length
-        ? `<div class="pt-options">${q.options.map((opt, i) => `<div class="pt-option"><span class="pt-checkbox"></span>${escapeHtml(String.fromCharCode(65 + i))}. ${escapeHtml(String(opt).replace(/^[A-D][.)]\s*/i, ""))}</div>`).join("")}</div>`
+      const isChoice = q.type === "single_choice" && q.options.length;
+      const cornerQr = scanSortQr(index + 1);
+      const optionsHtml = isChoice
+        ? `<div class="pt-options"><span class="pt-corner-qr pt-corner-qr-options">${cornerQr}</span>${q.options.map((opt, i) => `<div class="pt-option"><span class="pt-checkbox"></span>${escapeHtml(String.fromCharCode(65 + i))}. ${escapeHtml(String(opt).replace(/^[A-D][.)]\s*/i, ""))}</div>`).join("")}</div>`
         : `<div class="pt-lines">${Array.from({ length: Math.max(3, Math.ceil((Number(q.points) || 1) * 1.5)) }).map(() => `<div class="pt-line"></div>`).join("")}</div>`;
       return `<section class="pt-question">
         <div class="pt-question-head">
           <span class="pt-qcode">[[${escapeHtml(qid)}]]</span>
           <span class="pt-qpoints">/${escapeHtml(String(q.points ?? "-"))} b.</span>
-          <span class="pt-corner-qr">${scanSortQr(qid)}</span>
+          <span class="pt-page-num"></span>
+          ${!isChoice ? `<span class="pt-corner-qr">${cornerQr}</span>` : ""}
         </div>
         <div class="pt-qtext">${linesToHtml(q.text || "")}</div>
         ${optionsHtml}
@@ -6943,8 +7638,11 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
       .pt-question-head::after{content:"";display:block;clear:both}
       .pt-qcode{float:left}
       .pt-qpoints{float:left;margin-left:4mm}
-      .pt-corner-qr{float:right}
-      .pt-corner-qr svg{width:10mm;height:10mm}
+      .pt-page-num{float:right;margin-left:2mm;font-size:8pt;color:#8a978f}
+      .pt-page-num::after{content:"str. " counter(page)}
+      .pt-corner-qr{float:right;background:#fff;padding:1mm}
+      .pt-corner-qr svg{width:13mm;height:13mm}
+      .pt-corner-qr-options{float:none;display:block;margin:0 0 1.5mm}
       .pt-qtext{font-weight:700;margin-bottom:2.5mm;font-size:11.5pt;clear:both}
       .pt-options{margin-top:1mm}
       .pt-option{margin:1.8mm 0;font-size:10.5pt}
@@ -6962,7 +7660,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
         </div>
         <div class="pt-qr">${qrMarkup}</div>
       </header>
-      <main>${questionsHtml || `<p>Žádné otázky nebyly nalezeny pro tento variant.</p>`}</main>
+      <main>${questionsHtml || `<p>${escapeHtml(t("centre.print.noQuestionsFound"))}</p>`}</main>
     </body></html>`);
   }
 
@@ -6998,7 +7696,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           setActiveSection={setActiveCentreSection}
         >
           <div className="space-y-4">
-            <CentreActivePackagePanel setVariants={setVariants} setAvailableVariants={setAvailableVariants} setTestBank={setTestBank} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} setTestImportSummary={setTestImportSummary} setCentreSetupDirty={setCentreSetupDirty} language={language} />
+            <CentreActivePackagePanel setVariants={setVariants} setAvailableVariants={setAvailableVariants} setTestBank={setTestBank} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} setTestImportSummary={setTestImportSummary} setCentreSetupDirty={setCentreSetupDirty} language={language} t={t} />
 
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="rounded-2xl border bg-white p-4">
@@ -7044,7 +7742,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
-          <CentreFieldPreparationModule centreCode={centreCode || CENTRE_QR_ID} language={language} />
+          <CentreFieldPreparationModule centreCode={centreCode || CENTRE_QR_ID} language={language} t={t} />
         </AdminDashboardSection>
 
         <AdminDashboardSection
@@ -7113,6 +7811,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           id="access"
           icon={QrCodeIcon}
           t={t}
+          locked={!activeAdminPackageMeta}
+          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
           title={t("centre.dashboard.access.title")}
           description={t("centre.dashboard.access.description")}
           activeSection={activeCentreSection}
@@ -7132,6 +7832,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           id="review"
           icon={ShieldCheck}
           t={t}
+          locked={!activeAdminPackageMeta}
+          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
           title={t("centre.dashboard.review.title")}
           description={t("centre.dashboard.review.description")}
           activeSection={activeCentreSection}
@@ -7143,6 +7845,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
             variants={variants}
             testBank={testBank}
             testResponses={testResponses}
+            setTestResponses={setTestResponses}
             reportDrafts={reportDrafts}
             outdoor={outdoor}
             outdoorItemsByLevel={outdoorItemsByLevel}
@@ -7155,6 +7858,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           id="archive"
           icon={FileSpreadsheet}
           t={t}
+          locked={!activeAdminPackageMeta}
+          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
           title={t("centre.dashboard.archive.title")}
           description={t("centre.dashboard.archive.description")}
           activeSection={activeCentreSection}
@@ -7513,13 +8218,15 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
 
 
   if (loggedCandidate && (activeSection === "field-orientation" || activeSection === "field-trees")) {
-    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} />;
+    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} t={t} />;
   }
 
   return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{t("candidate.offlineHandoff.title")}</h4><p className="mt-1 text-sm text-slate-600">{t("candidate.offlineHandoff.qrDisabled")}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={saveOfflineCandidatePackageToLan} disabled={lanPackageSaving || lanPackageSaved} className="rounded-2xl">{lanPackageSaving ? t("candidate.offlineHandoff.saving") : lanPackageSaved ? t("candidate.offlineHandoff.saved") : t("candidate.offlineHandoff.saveToLan")}</Button><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">{t("candidate.offlineHandoff.downloadBackup")}</Button></div>{lanPackageStatus && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{lanPackageStatus}</div>}<p className="mt-2 text-xs text-slate-500">{tf("candidate.offlineHandoff.packageContains", { count: candidateQuestionSnapshot.length })}</p></div>}</div>}</div></div></CardContent></Card>;
 }
 
-function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition, heightClass = "h-[430px]", allowPan = true, minZoom = 17, maxZoom = 20, title = "Orientace na ploše", showHeader = true }) {
+// title's default is never actually shown: every current caller passes showHeader={false},
+// which is the only place title renders — kept empty rather than a hardcoded-language default.
+function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition, heightClass = "h-[430px]", allowPan = true, minZoom = 17, maxZoom = 20, title = "", showHeader = true }) {
   const [center, setCenter] = useState(mapCenter);
   const [zoom, setZoom] = useState(mapZoom);
   const gestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: mapZoom });
@@ -7660,7 +8367,7 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
   );
 }
 
-function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, preparationDraft, updatePreparationNote, setActiveSection, mode = "orientation" }) {
+function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, preparationDraft, updatePreparationNote, setActiveSection, mode = "orientation", t }) {
   const [mapLayer, setMapLayer] = useState("cuzk");
   const [gpsPosition, setGpsPosition] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("");
@@ -7701,8 +8408,8 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2 border-b bg-white/95 p-3 shadow-sm">
-      <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">Back</Button>
-      <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? "Příprava stromů" : "Orientace"}</div>
+      <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
+      <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? t("candidateSections.trees.title") : t("candidateSections.orientation.title")}</div>
       <Button onClick={locate} variant="outline" className="rounded-2xl">GPS</Button>
       <Button onClick={() => setMapLayer("cuzk")} variant={mapLayer === "cuzk" ? "default" : "outline"} className="rounded-2xl">CUZK orthophoto</Button>
       <Button onClick={() => setMapLayer("osm")} variant={mapLayer === "osm" ? "default" : "outline"} className="rounded-2xl">OSM</Button>
@@ -7716,7 +8423,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <div className="fixed inset-0 z-50 bg-white">
         {toolbar}
         <div className="p-6">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{fieldError || "Field map package is not available on this tablet yet. Confirm identity again after the certification centre saves field preparation."}</div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{fieldError || t("candidateField.packageUnavailable")}</div>
         </div>
       </div>
     );
@@ -7727,7 +8434,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <div className="fixed inset-0 z-50 flex flex-col bg-white">
         {toolbar}
         <div className="min-h-0 flex-1">
-          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title="Orientace" showHeader={false} />
+          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} />
         </div>
       </div>
     );
@@ -7738,7 +8445,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       {toolbar}
       <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="min-h-0 border-r bg-slate-100">
-          <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={18} maxZoom={20} title="Tree preparation" showHeader={false} />
+          <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={18} maxZoom={20} title={t("candidateField.treePreparation")} showHeader={false} />
         </div>
         <div className="min-h-0 overflow-y-auto bg-white p-4">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -7750,8 +8457,8 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
           {selectedTree ? (
             <div className="space-y-4">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected tree</div>
-                <h3 className="text-2xl font-bold">{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTree.name || `Tree ${selectedTree.code}`}</h3>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("candidateField.selectedTree")}</div>
+                <h3 className="text-2xl font-bold">{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTree.name || `${t("fieldPrep.tree")} ${selectedTree.code}`}</h3>
                 <div className="mt-1 font-mono text-xs text-slate-500">{formatFieldCoordinates({ lat: selectedTree.latitude, lng: selectedTree.longitude })}</div>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -7763,12 +8470,12 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
                 ))}
               </div>
               <label className="block">
-                <span className="text-sm font-semibold">Candidate notes</span>
-                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={16} placeholder="Write your own notes for this tree here." className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
+                <span className="text-sm font-semibold">{t("candidateField.candidateNotes")}</span>
+                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={16} placeholder={t("candidateField.candidateNotesPlaceholder")} className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
               </label>
             </div>
           ) : (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">No trees A-D are available in the field package for this level.</div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("candidateField.noTreesAvailable")}</div>
           )}
         </div>
       </div>
@@ -7793,7 +8500,7 @@ function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, st
     return t("candidate.section.locked");
   }
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{!confirmed && [[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{confirmed && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-medium">{candidate.name}</div><div className="text-xs text-slate-500">{candidate.level}</div></div>}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{section.title}</h4><p className="mt-1 text-sm text-slate-600">{section.description}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? section.title : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{!confirmed && [[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{confirmed && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-medium">{candidate.name}</div><div className="text-xs text-slate-500">{candidate.level}</div></div>}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{sectionTitle(t, section)}</h4><p className="mt-1 text-sm text-slate-600">{sectionDescription(t, section)}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? sectionTitle(t, section) : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
 }
 
 
@@ -7860,6 +8567,26 @@ function candidateLevel(candidate) {
   return "Practicing";
 }
 
+// Shared by the printed test's scan-sort QR (printCandidateTest) and the batch-scan decoder
+// (CentreReviewSection) so a printout and a later scan of it always agree on how a candidate
+// is identified. Candidates are reduced to their bare number (e.g. "C-014" -> "14") to keep the
+// encoded QR payload short — shorter payload means fewer QR modules, which is what actually
+// makes a small printed code reliably scannable.
+function candidateScanNumber(candidate) {
+  const match = String(candidate?.id || "").match(/\d+/);
+  return match ? String(Number(match[0])) : String(candidate?.id || "?");
+}
+
+// variantCode can be a long internal identifier (e.g. a fallback like "CONSULTING_ADMIN_PACKAGE"
+// when a candidate has no real variant assignment yet), which would blow up the QR's module
+// count. Reduce it to level initial + variant letter (if any), e.g. "PA" — that's all that's
+// needed to identify "which test" and stays short in every case.
+function candidateScanTestCode(candidate, variantCode) {
+  const levelChar = candidateLevel(candidate) === "Consulting" ? "C" : "P";
+  const suffix = String(variantCode || "").match(/[-_]([A-Z])(?:[-_]|$)/i);
+  return suffix ? `${levelChar}${suffix[1].toUpperCase()}` : levelChar;
+}
+
 function variantCodeForCandidate(candidate, variants) {
   const level = candidateLevel(candidate);
 
@@ -7920,67 +8647,68 @@ function questionsForVariantStrict(testBank, variantCode) {
   return Array.isArray(questions) ? questions.map(normalizeRuntimeQuestionForUi) : [];
 }
 
-const TEST_INTRO_COPY = {
-  Practicing: {
-    title: "Before you start the Practicing written test",
-    sections: [
-      {
-        heading: "Section A",
-        paragraphs: [
-          "This section contains 10 multiple choice questions. For each question choose 1 answer that best answers the question. Each question is worth 1 mark. You should attempt to answer all questions. A total of 10 marks are available for this section.",
-        ],
-      },
-      {
-        heading: "Section B",
-        paragraphs: [
-          "This section contains 24 questions that require a written answer. Questions have been grouped into themes, the title of the theme is listed in bold and is underlined.",
-          "The number of marks available for each question is shown. You should attempt to answer all questions in this section. A total of 36 marks are available for this section.",
-          "Questions are grouped into the following themes:",
-        ],
-        bullets: [
-          "The development and aging of trees;",
-          "Roots of veteran trees and the soil environment;",
-          "The values of veteran trees;",
-          "Legislation affecting veteran tree management;",
-          "Veteran tree management; and",
-          "Country specific question(s).",
-        ],
-      },
-    ],
-  },
-  Consulting: {
-    title: "Before you start the Consulting written test",
-    sections: [
-      {
-        paragraphs: [
-          "This exam paper contains 45 questions that require a written answer. Questions have been grouped into themes, the title of the theme is listed in bold and is underlined.",
-          "For each question, the number of marks available is detailed. You should attempt to answer all questions. A total of 97 marks are available for this paper.",
-          "Questions are grouped into the following themes:",
-        ],
-        bullets: [
-          "The development and aging of trees;",
-          "Roots of veteran trees and the soil environment;",
-          "The values of veteran trees;",
-          "Legislation affecting veteran tree management; and",
-          "Surveying and managing veteran trees.",
-        ],
-      },
-    ],
-  },
-};
+function testIntroCopy(t) {
+  return {
+    Practicing: {
+      title: t("testIntro.practicing.title"),
+      sections: [
+        {
+          heading: t("testIntro.practicing.sectionA.heading"),
+          paragraphs: [t("testIntro.practicing.sectionA.p1")],
+        },
+        {
+          heading: t("testIntro.practicing.sectionB.heading"),
+          paragraphs: [
+            t("testIntro.practicing.sectionB.p1"),
+            t("testIntro.practicing.sectionB.p2"),
+            t("testIntro.practicing.sectionB.p3"),
+          ],
+          bullets: [
+            t("testIntro.practicing.sectionB.bullet1"),
+            t("testIntro.practicing.sectionB.bullet2"),
+            t("testIntro.practicing.sectionB.bullet3"),
+            t("testIntro.practicing.sectionB.bullet4"),
+            t("testIntro.practicing.sectionB.bullet5"),
+            t("testIntro.practicing.sectionB.bullet6"),
+          ],
+        },
+      ],
+    },
+    Consulting: {
+      title: t("testIntro.consulting.title"),
+      sections: [
+        {
+          paragraphs: [
+            t("testIntro.consulting.section.p1"),
+            t("testIntro.consulting.section.p2"),
+            t("testIntro.consulting.section.p3"),
+          ],
+          bullets: [
+            t("testIntro.consulting.section.bullet1"),
+            t("testIntro.consulting.section.bullet2"),
+            t("testIntro.consulting.section.bullet3"),
+            t("testIntro.consulting.section.bullet4"),
+            t("testIntro.consulting.section.bullet5"),
+          ],
+        },
+      ],
+    },
+  };
+}
 
-function WrittenTestIntroGate({ candidate, onAccept, onBack }) {
+function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
   const level = candidateLevel(candidate);
-  const copy = TEST_INTRO_COPY[level] ?? TEST_INTRO_COPY.Practicing;
+  const introCopy = testIntroCopy(t);
+  const copy = introCopy[level] ?? introCopy.Practicing;
 
   return (
     <div className="rounded-2xl border bg-white p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="text-lg font-semibold">{copy.title}</h3>
-          <p className="mt-1 text-sm text-slate-600">Read this information carefully. You must confirm it before the test questions are shown.</p>
+          <p className="mt-1 text-sm text-slate-600">{t("testIntro.readCarefully")}</p>
         </div>
-        <Button onClick={onBack} variant="outline" className="rounded-2xl">Back</Button>
+        <Button onClick={onBack} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
       </div>
 
       <div className="mt-4 space-y-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-slate-900">
@@ -8000,12 +8728,12 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack }) {
       </div>
 
       <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-sm text-slate-700">
-        By continuing, the candidate confirms that they have read and understood the instructions for this written test.
+        {t("testIntro.confirmationNotice")}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button onClick={onAccept} className="rounded-2xl">I have read and understood - start test</Button>
-        <Button onClick={onBack} variant="outline" className="rounded-2xl">Cancel</Button>
+        <Button onClick={onAccept} className="rounded-2xl">{t("testIntro.acceptButton")}</Button>
+        <Button onClick={onBack} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
       </div>
     </div>
   );
@@ -8024,7 +8752,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
   const helper = t("test.variantAutosave").replace("{variant}", selectedVariantCode);
 
   if (!introAccepted) {
-    return <WrittenTestIntroGate candidate={candidate} onAccept={acceptIntro} onBack={() => setActiveSection("landing")} />;
+    return <WrittenTestIntroGate candidate={candidate} onAccept={acceptIntro} onBack={() => setActiveSection("landing")} t={t} />;
   }
 
   return (
@@ -8156,10 +8884,10 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
     try {
       localStorage.setItem(localKey, JSON.stringify(backup));
-      setPhotoStatus(`Lokálně uloženo: ${new Date().toLocaleTimeString()}`);
+      setPhotoStatus(`${t("report.locallySaved")}: ${new Date().toLocaleTimeString()}`);
     } catch (error) {
       console.warn("Report field manual save skipped", error);
-      setPhotoStatus("Lokální uložení poznámek proběhlo bez obrazových dat fotografií.");
+      setPhotoStatus(t("report.locallySavedNoPhotos"));
     }
   }
 
@@ -8468,11 +9196,11 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               <div className="grid gap-3 md:grid-cols-2">
                 {REPORT_SECTIONS.map((sec) => (
                   <label key={sec.key} className="text-sm font-medium">
-                    {sec.title}
+                    {sectionTitle(t, sec)}
                     <textarea
                       value={tree.finalSections[sec.key] ?? ""}
                       onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)}
-                      placeholder={`${activeReportTree}: ${sec.title}`}
+                      placeholder={`${activeReportTree}: ${sectionTitle(t, sec)}`}
                       className="mt-1 min-h-32 w-full rounded-xl border bg-white p-3 text-sm"
                     />
                   </label>
@@ -8494,7 +9222,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h3 className="truncate text-lg font-semibold">{photoViewer.description || photoViewer.name || photoViewer.id}</h3>
-              <p className="text-sm text-slate-300">Fotografii lze na tabletu přiblížit gestem.</p>
+              <p className="text-sm text-slate-300">{t("report.photoZoomHint")}</p>
             </div>
             <Button onClick={() => setPhotoViewer(null)} variant="outline" className="rounded-2xl bg-white text-slate-950">
               {t("common.close")}
@@ -8552,6 +9280,7 @@ function ExaminerView({
   importOfflineCandidatePackageFile,
   importOfflineCandidatePackageData,
   examinerTimes,
+  activeAdminPackageMeta,
   t,
 }) {
   return (
@@ -8569,11 +9298,11 @@ function ExaminerView({
             <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h3 className="font-semibold">Offline balíček kandidáta</h3>
-                  <p className="mt-1 text-sm text-slate-600">Pokud nefunguje backend nebo internet, nahrajte zde JSON balíček exportovaný z Candidate portálu.</p>
+                  <h3 className="font-semibold">{t("examiner.offlinePackage.title")}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{t("examiner.offlinePackage.helper")}</p>
                 </div>
                 <label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
-                  Importovat offline balíček
+                  {t("examiner.offlinePackage.importButton")}
                   <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" />
                 </label>
               </div>
@@ -8644,6 +9373,7 @@ function ExaminerView({
                   updateScore={updateScore}
                   setActivePage={setActivePage}
                   examinerName={loggedExaminer?.name}
+                  activeAdminPackageMeta={activeAdminPackageMeta}
                   t={t}
                 />
               ) : activePage === "reportReview" ? (
@@ -8653,6 +9383,7 @@ function ExaminerView({
                   openWrittenReview={openWrittenReview}
                   setActivePage={setActivePage}
                   examinerName={loggedExaminer?.name}
+                  activeAdminPackageMeta={activeAdminPackageMeta}
                   t={t}
                 />
               ) : (
@@ -8677,6 +9408,7 @@ function ExaminerView({
                   setActivePage={setActivePage}
                   examinerName={loggedExaminer?.name}
                   time={examinerTimes[selectedCandidate.id]?.outdoor}
+                  activeAdminPackageMeta={activeAdminPackageMeta}
                   t={t}
                 />
               )}
@@ -9639,7 +10371,7 @@ function examinerChoiceAutoScore(question, candidate, index, value) {
   return fullyCorrect ? writtenQuestionMax(question) : 0;
 }
 
-function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResponses, importedCandidatePackages, scoringLimits, updateScore, setActivePage, examinerName, t }) {
+function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResponses, importedCandidatePackages, scoringLimits, updateScore, setActivePage, examinerName, activeAdminPackageMeta, t }) {
   const [showExamInfo, setShowExamInfo] = useState(false);
   const [questionScores, setQuestionScores] = useState({});
   // Manual scores only live in local state until the examiner clicks the final "submit and
@@ -9647,6 +10379,17 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
   // next to a question right after its score changes, so entering a number visibly registers.
   const [justSavedScoreId, setJustSavedScoreId] = useState(null);
   const savedScoreTimeoutRef = useRef(null);
+
+  if (!activeAdminPackageMeta) {
+    return (
+      <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
+        <Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">
+          {t("examiner.candidates.backToList")}
+        </Button>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("examiner.blockedNoAdminPackage")}</div>
+      </div>
+    );
+  }
 
   if (!selectedCandidate) {
     return (
@@ -9787,12 +10530,12 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
         <div style="margin-top:2mm"><span class="exam-score">${pointsAwarded} / ${max} b.</span></div>
       </section>`;
     }).join("");
-    const totalHtml = `<div class="exam-total">Celkem: ${manualTotal} / ${manualMax || writtenMax} b.</div>`;
+    const totalHtml = `<div class="exam-total">${escapeHtml(t("archive.total"))}: ${manualTotal} / ${manualMax || writtenMax} b.</div>`;
     openPrintDocument(examinerPdfShellHtml({
-      docTitle: "Kontrola písemného testu",
+      docTitle: t("examiner.pdf.writtenReviewTitle"),
       candidate: selectedCandidate,
       examinerName,
-      metaLine: `Varianta: ${review.variantCode || "-"} · Odpovězeno: ${answeredCount} / ${questions.length}`,
+      metaLine: `${escapeHtml(t("examiner.pdf.variant"))}: ${review.variantCode || "-"} · ${escapeHtml(t("examiner.pdf.answered"))}: ${answeredCount} / ${questions.length}`,
       bodyHtml: bodyHtml + totalHtml,
     }));
   }
@@ -9851,19 +10594,19 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
 
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <div className="rounded-xl bg-slate-100 p-3 text-sm">
-          <div className="text-xs text-slate-500">Questions</div>
+          <div className="text-xs text-slate-500">{t("examiner.writtenReview.questions")}</div>
           <div className="text-xl font-bold">{questions.length}</div>
         </div>
         <div className="rounded-xl bg-slate-100 p-3 text-sm">
-          <div className="text-xs text-slate-500">Answered</div>
+          <div className="text-xs text-slate-500">{t("examiner.pdf.answered")}</div>
           <div className="text-xl font-bold">{answeredCount}</div>
         </div>
         <div className="rounded-xl bg-slate-100 p-3 text-sm">
-          <div className="text-xs text-slate-500">Manual score</div>
+          <div className="text-xs text-slate-500">{t("examiner.writtenReview.manualScore")}</div>
           <div className="text-xl font-bold">{manualTotal}</div>
         </div>
         <div className="rounded-xl bg-slate-100 p-3 text-sm">
-          <div className="text-xs text-slate-500">Manual max</div>
+          <div className="text-xs text-slate-500">{t("examiner.writtenReview.manualMax")}</div>
           <div className="text-xl font-bold">{manualMax || writtenMax}</div>
         </div>
       </div>
@@ -10040,7 +10783,18 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
   );
 }
 
-function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, t }) {
+function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, activeAdminPackageMeta, t }) {
+  if (!activeAdminPackageMeta) {
+    return (
+      <div className="rounded-2xl border bg-white p-4">
+        <Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">
+          {t("examiner.candidates.backToList")}
+        </Button>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("examiner.blockedNoAdminPackage")}</div>
+      </div>
+    );
+  }
+
   if (!selectedCandidate) {
     return (
       <div className="rounded-2xl border bg-white p-4">
@@ -10075,7 +10829,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
         : `<p class="exam-help">${escapeHtml(t("examiner.reportReview.noPhotos"))}</p>`;
       const sectionsHtml = REPORT_SECTIONS.map((section) => {
         const value = String(tree.finalSections?.[section.key] ?? "").trim();
-        return `<div style="margin-top:2mm"><div class="exam-block-head" style="margin-bottom:0.5mm">${escapeHtml(section.title)}</div><div class="exam-answer">${value ? linesToHtml(value) : `<em>${escapeHtml(t("examiner.reportReview.missing"))}</em>`}</div></div>`;
+        return `<div style="margin-top:2mm"><div class="exam-block-head" style="margin-bottom:0.5mm">${escapeHtml(sectionTitle(t, section))}</div><div class="exam-answer">${value ? linesToHtml(value) : `<em>${escapeHtml(t("examiner.reportReview.missing"))}</em>`}</div></div>`;
       }).join("");
       return `<section class="exam-block">
         <div class="exam-title">${escapeHtml(treeName)} <span class="exam-score">${completedSections} / ${REPORT_SECTIONS.length}</span></div>
@@ -10086,7 +10840,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
       </section>`;
     }).join("");
     openPrintDocument(examinerPdfShellHtml({
-      docTitle: "Kontrola Consulting reportu",
+      docTitle: t("examiner.pdf.reportReviewTitle"),
       candidate: selectedCandidate,
       examinerName,
       bodyHtml,
@@ -10182,7 +10936,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
                 return (
                   <div key={section.key} className="rounded-xl border bg-white p-3">
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <h5 className="font-semibold">{section.title}</h5>
+                      <h5 className="font-semibold">{sectionTitle(t, section)}</h5>
                       <StatusPill tone={value ? "good" : "warn"}>{value ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill>
                     </div>
                     <div className="whitespace-pre-wrap text-sm text-slate-700">
@@ -10239,7 +10993,8 @@ function examinerReportSummary(candidate, reportDrafts) {
   };
 }
 
-function CentreCandidateResultsOverview({ candidates, assignments, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel }) {
+function CentreCandidateResultsOverview({ candidates, assignments, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [storedOutdoorResults, setStoredOutdoorResults] = useState(() => readOutdoorCentreResults());
   const [examinerResults, setExaminerResults] = useState(() => readExaminerResultsLocal());
 
@@ -10265,18 +11020,18 @@ function CentreCandidateResultsOverview({ candidates, assignments, examiners, va
   return (
     <div className="rounded-2xl border bg-white p-4">
       <div className="mb-3">
-        <h3 className="font-semibold">Přehled výsledků kandidátů</h3>
-        <p className="mt-1 text-sm text-slate-600">Souhrn výsledků jednotlivých kandidátů. Editace výsledků probíhá v rozhraní Examinera po kliknutí na příslušný výsledek.</p>
+        <h3 className="font-semibold">{t("centre.resultsOverview.title")}</h3>
+        <p className="mt-1 text-sm text-slate-600">{t("centre.resultsOverview.helper")}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-sm">
           <thead>
             <tr className="border-b text-left text-slate-500">
-              <th className="py-2 pr-3">Číslo kandidáta</th>
-              <th className="py-2 pr-3">Jméno</th>
-              <th className="py-2 pr-3">Výsledek testu</th>
-              <th className="py-2 pr-3">Výsledek Outdoor</th>
-              <th className="py-2 pr-3">Výsledek reportů</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.candidateNumber")}</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.name")}</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.testResult")}</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.outdoorResult")}</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.reportResult")}</th>
             </tr>
           </thead>
           <tbody>
@@ -10304,9 +11059,9 @@ function CentreCandidateResultsOverview({ candidates, assignments, examiners, va
                 <tr key={candidate.id} className="border-b align-top">
                   <td className="py-3 pr-3"><div className="font-semibold">{candidate.id}</div><div className="text-xs text-slate-500">{candidate.level}</div></td>
                   <td className="py-3 pr-3"><div className="font-medium">{candidate.name}</div></td>
-                  <td className="py-3 pr-3"><StatusPill tone={written.closed ? "good" : written.answered ? "warn" : "default"}>{written.score} / {written.max}</StatusPill><div className="mt-1 text-xs text-slate-500">{written.answered} / {written.total} answered{written.updatedAt ? ` · ${new Date(written.updatedAt).toLocaleString("cs-CZ")}` : ""}</div></td>
-                  <td className="py-3 pr-3"><StatusPill tone={outdoorSummary.closed || submittedOutdoorRows.length ? "good" : outdoorSummary.answered ? "warn" : "default"}>{outdoorSummary.total} / {outdoorSummary.max}</StatusPill><div className="mt-1 text-xs text-slate-500">Primary: {examinerNameById(examiners, assignment.primary)} · Secondary: {examinerNameById(examiners, assignment.secondary)}</div>{(submittedOutdoorRows.length > 0 || outdoorSummary.closed) && <div className="mt-1 text-xs text-emerald-700">Uzavřeno: {submittedOutdoorRows.length ? submittedOutdoorRows.map((row) => `${row.mode || row.role || "examiner"} ${row.total ?? 0}/${row.max ?? outdoorSummary.max}`).join(" · ") : `${storedOutdoorResult?.role || storedOutdoorResult?.examinerName || "examiner"} ${outdoorSummary.total}/${outdoorSummary.max}`}</div>}</td>
-                  <td className="py-3 pr-3">{candidate.level === "Consulting" ? <><StatusPill tone={report.complete ? "good" : report.sections ? "warn" : "default"}>{report.label}</StatusPill></> : <span className="text-slate-400">Not required</span>}</td>
+                  <td className="py-3 pr-3"><StatusPill tone={written.closed ? "good" : written.answered ? "warn" : "default"}>{written.score} / {written.max}</StatusPill><div className="mt-1 text-xs text-slate-500">{tf("centre.resultsOverview.answeredCount", { answered: written.answered, total: written.total })}{written.updatedAt ? ` · ${new Date(written.updatedAt).toLocaleString("cs-CZ")}` : ""}</div></td>
+                  <td className="py-3 pr-3"><StatusPill tone={outdoorSummary.closed || submittedOutdoorRows.length ? "good" : outdoorSummary.answered ? "warn" : "default"}>{outdoorSummary.total} / {outdoorSummary.max}</StatusPill><div className="mt-1 text-xs text-slate-500">{t("centre.resultsOverview.primary")}: {examinerNameById(examiners, assignment.primary)} · {t("centre.resultsOverview.secondary")}: {examinerNameById(examiners, assignment.secondary)}</div>{(submittedOutdoorRows.length > 0 || outdoorSummary.closed) && <div className="mt-1 text-xs text-emerald-700">{t("centre.resultsOverview.closed")}: {submittedOutdoorRows.length ? submittedOutdoorRows.map((row) => `${row.mode || row.role || "examiner"} ${row.total ?? 0}/${row.max ?? outdoorSummary.max}`).join(" · ") : `${storedOutdoorResult?.role || storedOutdoorResult?.examinerName || "examiner"} ${outdoorSummary.total}/${outdoorSummary.max}`}</div>}</td>
+                  <td className="py-3 pr-3">{candidate.level === "Consulting" ? <><StatusPill tone={report.complete ? "good" : report.sections ? "warn" : "default"}>{report.label}</StatusPill></> : <span className="text-slate-400">{t("centre.resultsOverview.notRequired")}</span>}</td>
                 </tr>
               );
             })}
@@ -10341,9 +11096,11 @@ function ExaminerLanding({
   const [lanLoading, setLanLoading] = useState(false);
   const [lanStatus, setLanStatus] = useState("");
 
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+
   async function loadLanPackages() {
     setLanLoading(true);
-    setLanStatus("Načítám LAN balíčky...");
+    setLanStatus(t("examiner.lan.loading"));
     try {
       const response = await fetch("/api/local-exchange/packages", { cache: "no-store" });
       const raw = await response.text();
@@ -10351,15 +11108,15 @@ function ExaminerLanding({
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error(`Server nevrátil JSON. HTTP ${response.status}. Začátek odpovědi: ${raw.slice(0, 160)}`);
+        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
       }
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       const loaded = Array.isArray(data.packages) ? data.packages : Array.isArray(data) ? data : [];
       setLanPackages(loaded);
-      setLanStatus(`LAN načteno: ${loaded.length} balíčků · ${new Date().toLocaleTimeString("cs-CZ")}`);
+      setLanStatus(tf("examiner.lan.loaded", { count: loaded.length, time: new Date().toLocaleTimeString("cs-CZ") }));
     } catch (error) {
       console.error("LAN package list failed", error);
-      setLanStatus(`Načtení LAN balíčků selhalo: ${error.message || "neznámá chyba"}`);
+      setLanStatus(tf("examiner.lan.loadFailed", { message: error.message || t("common.unknownError") }));
     } finally {
       setLanLoading(false);
     }
@@ -10367,7 +11124,7 @@ function ExaminerLanding({
 
   async function importLanPackage(packageId) {
     setLanLoading(true);
-    setLanStatus(`Importuji balíček ${packageId}...`);
+    setLanStatus(tf("examiner.lan.importing", { packageId }));
     try {
       const response = await fetch(`/api/local-exchange/packages/${encodeURIComponent(packageId)}`);
       const raw = await response.text();
@@ -10375,26 +11132,26 @@ function ExaminerLanding({
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error(`Server nevrátil JSON. HTTP ${response.status}. Začátek odpovědi: ${raw.slice(0, 160)}`);
+        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
       }
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      if (!data?.candidateId) throw new Error(`Balíček neobsahuje candidateId. Klíče: ${Object.keys(data || {}).join(", ")}`);
-      if (data?.kind !== "vetbara.offlineCandidatePackage.v1") throw new Error(`Neplatný typ balíčku: ${data?.kind || "chybí kind"}`);
+      if (!data?.candidateId) throw new Error(tf("examiner.lan.missingCandidateIdError", { keys: Object.keys(data || {}).join(", ") }));
+      if (data?.kind !== "vetbara.offlineCandidatePackage.v1") throw new Error(tf("examiner.lan.invalidKindError", { kind: data?.kind || t("examiner.lan.missingKind") }));
 
       const normalizedImportedPackage = normalizeOfflineCandidatePackageForImport(data, testBank);
       const imported = importOfflineCandidatePackageData(normalizedImportedPackage);
-      if (imported === false) throw new Error("importOfflineCandidatePackageData vrátil false.");
+      if (imported === false) throw new Error(t("examiner.lan.importFunctionFailed"));
 
       setImportedCandidatePackages?.((prev) => ({
         ...prev,
         [data.candidateId]: normalizedImportedPackage,
       }));
       setSelectedCandidateId?.(data.candidateId);
-      setLanStatus(`Balíček importován: ${data.candidateName || data.candidateId} (${data.level || "-"})`);
+      setLanStatus(tf("examiner.lan.imported", { name: data.candidateName || data.candidateId, level: data.level || "-" }));
       setActivePage?.("writtenReview");
     } catch (error) {
       console.error("LAN package import failed", error);
-      setLanStatus(`Import balíčku selhal: ${error.message || "neznámá chyba"}`);
+      setLanStatus(tf("examiner.lan.importFailed", { message: error.message || t("common.unknownError") }));
     } finally {
       setLanLoading(false);
     }
@@ -10412,7 +11169,7 @@ function ExaminerLanding({
     <div className="grid gap-4 lg:grid-cols-3">
       <div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}>
         <div className="mb-3 rounded-xl bg-slate-950 p-4 text-white">
-          <div className="text-xs uppercase tracking-wide text-slate-300">Examiner ID</div>
+          <div className="text-xs uppercase tracking-wide text-slate-300">{t("examiner.identity.idLabel")}</div>
           <div className="text-3xl font-bold tracking-tight">{examiner.id}</div>
         </div>
         <h3 className="font-semibold">{t("examiner.identity.title")}</h3>
@@ -10445,7 +11202,7 @@ function ExaminerLanding({
           </div>
           {confirmed && (
             <Button onClick={loadLanPackages} disabled={lanLoading} variant="outline" className="rounded-2xl">
-              {lanLoading ? "Načítám..." : "Načíst LAN"}
+              {lanLoading ? t("examiner.lan.loadingShort") : t("examiner.lan.loadButton")}
             </Button>
           )}
         </div>
@@ -10482,7 +11239,7 @@ function ExaminerLanding({
                       disabled={!confirmed}
                       variant={candidateOutdoorClosed(c.id) ? "outline" : "default"}
                       className={`rounded-2xl ${candidateOutdoorClosed(c.id) ? "bg-slate-200 text-slate-500 hover:bg-slate-200" : ""}`}
-                      title={candidateOutdoorClosed(c.id) ? "Outdoor is closed. Reopening requires Vetarbo password." : ""}
+                      title={candidateOutdoorClosed(c.id) ? t("examiner.worklist.outdoorClosedTitle") : ""}
                     >
                       OUTDOOR
                     </Button>
@@ -10490,15 +11247,15 @@ function ExaminerLanding({
                   </div>
                   {candidatePackages.length > 0 && (
                     <div className="mt-4 rounded-2xl border bg-slate-50 p-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">LAN balíčky</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("examiner.lan.packages")}</div>
                       <div className="mt-2 space-y-2">
                         {candidatePackages.map((pkg) => (
                           <div key={pkg.packageId} className="rounded-xl border bg-white p-3 text-sm">
-                            <div className="font-medium">{pkg.variantCode || "candidate package"}</div>
-                            <div className="mt-1 text-xs text-slate-500">Uloženo: {pkg.storedAt || pkg.createdAt || "-"}</div>
-                            <div className="mt-1 text-xs text-slate-500">Fotografie: {pkg.reportPhotoCount ?? 0}</div>
+                            <div className="font-medium">{pkg.variantCode || t("examiner.lan.candidatePackage")}</div>
+                            <div className="mt-1 text-xs text-slate-500">{t("examiner.lan.stored")}: {pkg.storedAt || pkg.createdAt || "-"}</div>
+                            <div className="mt-1 text-xs text-slate-500">{t("fieldPrep.photos")}: {pkg.reportPhotoCount ?? 0}</div>
                             <Button onClick={() => importLanPackage(pkg.packageId)} disabled={lanLoading || !confirmed} className="mt-2 rounded-2xl">
-                              Import
+                              {t("common.import")}
                             </Button>
                           </div>
                         ))}
@@ -10515,7 +11272,7 @@ function ExaminerLanding({
   );
 }
 
-function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorNoteDrawings, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, updateOutdoorNoteDrawing, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, setActivePage, examinerName, time, t }) {
+function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorNoteDrawings, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, updateOutdoorNoteDrawing, outdoorTotal, outdoorMax, submitOutdoor, archivePlan, practicingArchive, setActivePage, examinerName, time, activeAdminPackageMeta, t }) {
   const [drawingItemId, setDrawingItemId] = useState(null);
   const outdoorSections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, selectedCandidate.level);
   const effectiveActiveOutdoorSection = outdoorSections.includes(activeOutdoorSection)
@@ -10559,6 +11316,17 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }
   }, [activeOutdoorSection, effectiveActiveOutdoorSection, outdoorSections, setActiveOutdoorSection]);
 
+  if (!activeAdminPackageMeta || isOutdoorFallback) {
+    return (
+      <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
+        <Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">
+          {t("outdoor.backToLanding")}
+        </Button>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("examiner.blockedNoAdminPackage")}</div>
+      </div>
+    );
+  }
+
   const total = outdoorSections.reduce((sum, section) => sum + outdoorTotal(selectedCandidate.id, selectedCandidate.level, section), 0);
   const max = outdoorSections.reduce((sum, section) => sum + outdoorMax(selectedCandidate.level, section), 0) || scoreLimits(selectedCandidate.level).outdoorMax;
 
@@ -10576,15 +11344,15 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
           <div class="exam-block-head"><span>[[${escapeHtml(item.id)}]]</span></div>
           <div class="exam-title">${linesToHtml(item.text || "")}</div>
           <div style="margin-top:2mm"><span class="exam-score">${score !== undefined && score !== "" ? score : "-"} / ${item.max} b.</span></div>
-          ${note ? `<div class="exam-block-head" style="margin-top:2mm">Poznámka examinera</div><div class="exam-answer">${linesToHtml(note)}</div>` : ""}
-          ${drawing ? `<img class="exam-sketch" src="${drawing}" alt="Poznámka examinera - náčrt" />` : ""}
+          ${note ? `<div class="exam-block-head" style="margin-top:2mm">${escapeHtml(t("archive.examinerNote"))}</div><div class="exam-answer">${linesToHtml(note)}</div>` : ""}
+          ${drawing ? `<img class="exam-sketch" src="${drawing}" alt="${escapeHtml(t("examiner.pdf.examinerNoteSketchAlt"))}" />` : ""}
         </section>`;
       }).join("");
       return `<h2 style="font-size:12.5pt;margin:4mm 0 2mm">${escapeHtml(outdoorSectionTitle(section))}</h2>${itemsHtml}`;
     }).join("");
-    const totalHtml = `<div class="exam-total">Celkem: ${total} / ${max} b.</div>`;
+    const totalHtml = `<div class="exam-total">${escapeHtml(t("archive.total"))}: ${total} / ${max} b.</div>`;
     openPrintDocument(examinerPdfShellHtml({
-      docTitle: "Kontrola outdoor formuláře",
+      docTitle: t("examiner.pdf.outdoorReviewTitle"),
       candidate: selectedCandidate,
       examinerName,
       metaLine: `${t("common.opened")}: ${time?.openedAt || "-"} · ${t("common.closed")}: ${time?.closedAt || "-"}`,
@@ -10592,7 +11360,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className={isOutdoorFallback ? "text-amber-700" : "text-emerald-700"}>{isOutdoorFallback ? "Outdoor source: demo fallback" : "Outdoor source: active Admin package"}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><Button onClick={archivePlan} variant="outline" className="mt-3 w-full rounded-2xl">{t("outdoor.paperArchive.button")}</Button><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div></div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div>;
 }
 
 export default function VetBaraApp() {

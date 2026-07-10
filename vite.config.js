@@ -10,9 +10,12 @@ import { PDFParse } from "pdf-parse";
 const LOCAL_EXCHANGE_DIR = path.resolve(".vetbara-local/packages");
 const LOCAL_TEST_PACKAGES_DIR = path.resolve(".vetbara-local/test-packages");
 const LOCAL_AUTHORING_DRAFTS_DIR = path.resolve(".vetbara-local/authoring-drafts");
+const LOCAL_PACKAGE_HISTORY_DIR = path.resolve(".vetbara-local/package-history");
+const LOCAL_TRANSLATION_OVERRIDES_FILE = path.resolve(".vetbara-local/translation-overrides.json");
 const ACTIVE_TEST_PACKAGE_FILE = path.resolve(".vetbara-local/active-test-package.json");
 const LOCAL_FIELD_PREPARATIONS_DIR = path.resolve(".vetbara-local/field-preparations");
 const LOCAL_FIELD_TABLET_SYNC_DIR = path.resolve(".vetbara-local/field-tablet-sync");
+const LOCAL_SCAN_INBOX_DIR = path.resolve(".vetbara-local/scan-inbox");
 const LOCAL_EXAMINER_RESULTS_FILE = path.resolve(".vetbara-local/examiner-results.json");
 const execFileAsync = promisify(execFile);
 
@@ -764,6 +767,8 @@ function testPackageAdminPlugin() {
           if (
             !url.pathname.startsWith("/api/admin/test-package") &&
             !url.pathname.startsWith("/api/admin/authoring-drafts") &&
+            !url.pathname.startsWith("/api/admin/package-history") &&
+            !url.pathname.startsWith("/api/translations/overrides") &&
             !url.pathname.startsWith("/api/centre/test-package")
           ) {
             next();
@@ -772,6 +777,7 @@ function testPackageAdminPlugin() {
 
           await fs.mkdir(LOCAL_TEST_PACKAGES_DIR, { recursive: true });
           await fs.mkdir(LOCAL_AUTHORING_DRAFTS_DIR, { recursive: true });
+          await fs.mkdir(LOCAL_PACKAGE_HISTORY_DIR, { recursive: true });
 
           if (req.method === "GET" && url.pathname === "/api/admin/authoring-drafts/list") {
             const drafts = await readLocalAuthoringDrafts();
@@ -983,6 +989,88 @@ function testPackageAdminPlugin() {
             await fs.writeFile(path.join(LOCAL_TEST_PACKAGES_DIR, filename), JSON.stringify(data, null, 2));
 
             sendJson(res, 201, { ok: true, filename, package: data });
+            return;
+          }
+
+          if (url.pathname === "/api/translations/overrides") {
+            const readOverrides = async () => {
+              try { return JSON.parse(await fs.readFile(LOCAL_TRANSLATION_OVERRIDES_FILE, "utf8")); } catch { return {}; }
+            };
+            if (req.method === "GET") {
+              sendJson(res, 200, { ok: true, overrides: await readOverrides() });
+              return;
+            }
+            if (req.method === "POST") {
+              const body = JSON.parse((await readBody(req)) || "{}");
+              const lang = String(body.lang || "").trim();
+              const key = String(body.key || "").trim();
+              if (!lang || !key) { sendJson(res, 400, { ok: false, error: "lang and key are required" }); return; }
+              const overrides = await readOverrides();
+              const value = typeof body.value === "string" ? body.value.trim() : "";
+              if (!overrides[lang]) overrides[lang] = {};
+              if (value) overrides[lang][key] = value;
+              else delete overrides[lang][key];
+              await fs.writeFile(LOCAL_TRANSLATION_OVERRIDES_FILE, JSON.stringify(overrides, null, 2));
+              sendJson(res, 200, { ok: true, overrides });
+              return;
+            }
+            sendJson(res, 200, { ok: true });
+            return;
+          }
+
+          if (url.pathname.startsWith("/api/admin/package-history")) {
+            const historySummary = (entry) => ({ id: entry.id, savedAt: entry.savedAt, language: entry.language || "", centre: entry.centre || "", note: entry.note || "", packageId: entry.packageId || "", vetFilename: entry.vetFilename || "" });
+            const listHistoryFiles = async () => (await fs.readdir(LOCAL_PACKAGE_HISTORY_DIR)).filter((name) => name.endsWith(".json")).sort().reverse();
+            const findHistoryFile = async (id) => (await listHistoryFiles()).find((filename) => filename.includes(id));
+            const tail = url.pathname.split("/").filter(Boolean).slice(3);
+
+            if (tail.length === 1 && tail[0] === "list") {
+              const files = await listHistoryFiles();
+              const entries = [];
+              for (const file of files) {
+                try { entries.push(historySummary(JSON.parse(await fs.readFile(path.join(LOCAL_PACKAGE_HISTORY_DIR, file), "utf8")))); } catch {}
+              }
+              sendJson(res, 200, { ok: true, history: entries });
+              return;
+            }
+            if (tail.length === 1 && tail[0] === "save" && req.method === "POST") {
+              const body = JSON.parse((await readBody(req, 40 * 1024 * 1024)) || "{}");
+              const now = new Date().toISOString();
+              const id = `hist-${Date.now()}`;
+              const entry = { id, savedAt: now, language: body.language || "", centre: body.centre || "", note: body.note || "", packageId: body.packageId || "", vetFilename: body.vetFilename || "", package: body.package || null };
+              const filename = `${now.replace(/[:.]/g, "-")}-${id}.json`;
+              await fs.writeFile(path.join(LOCAL_PACKAGE_HISTORY_DIR, filename), JSON.stringify(entry, null, 2));
+              sendJson(res, 200, { ok: true, entry: historySummary(entry) });
+              return;
+            }
+            if (tail.length === 2 && tail[1] === "note" && req.method === "POST") {
+              const id = decodeURIComponent(tail[0]);
+              const match = await findHistoryFile(id);
+              if (!match) { sendJson(res, 404, { ok: false, error: `Package history entry not found: ${id}` }); return; }
+              const filePath = path.join(LOCAL_PACKAGE_HISTORY_DIR, match);
+              const entry = JSON.parse(await fs.readFile(filePath, "utf8"));
+              const body = JSON.parse((await readBody(req)) || "{}");
+              entry.note = body.note || "";
+              await fs.writeFile(filePath, JSON.stringify(entry, null, 2));
+              sendJson(res, 200, { ok: true, entry: historySummary(entry) });
+              return;
+            }
+            if (tail.length === 2 && tail[1] === "delete" && req.method === "POST") {
+              const id = decodeURIComponent(tail[0]);
+              const match = await findHistoryFile(id);
+              if (match) await fs.unlink(path.join(LOCAL_PACKAGE_HISTORY_DIR, match));
+              sendJson(res, 200, { ok: true });
+              return;
+            }
+            if (tail.length === 1 && req.method === "GET") {
+              const id = decodeURIComponent(tail[0]);
+              const match = await findHistoryFile(id);
+              if (!match) { sendJson(res, 404, { ok: false, error: `Package history entry not found: ${id}` }); return; }
+              const entry = JSON.parse(await fs.readFile(path.join(LOCAL_PACKAGE_HISTORY_DIR, match), "utf8"));
+              sendJson(res, 200, { ok: true, entry });
+              return;
+            }
+            sendJson(res, 200, { ok: true });
             return;
           }
 
@@ -1329,11 +1417,77 @@ function fieldPreparationPlugin() {
   };
 }
 
+function scanInboxPlugin() {
+  return {
+    name: "vetbara-scan-inbox-local-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          const url = new URL(req.url || "/", "http://localhost");
+          const listMatch = url.pathname.match(/^\/api\/exams\/([^/]+)\/scan-inbox$/);
+          const itemMatch = url.pathname.match(/^\/api\/exams\/([^/]+)\/scan-inbox\/([^/]+)$/);
+          if (!listMatch && !itemMatch) {
+            next();
+            return;
+          }
+
+          const examId = decodeURIComponent((listMatch || itemMatch)[1]);
+          const safeExamId = examId.replace(/[^a-z0-9_-]/gi, "_");
+          const dir = path.join(LOCAL_SCAN_INBOX_DIR, safeExamId);
+          await fs.mkdir(dir, { recursive: true });
+
+          if (req.method === "POST" && listMatch) {
+            const raw = await readBody(req);
+            const body = JSON.parse(raw || "{}");
+            if (!body || typeof body.dataUrl !== "string" || !body.dataUrl) {
+              sendJson(res, 400, { error: "Missing dataUrl" });
+              return;
+            }
+            const id = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+            await fs.writeFile(path.join(dir, `${id}.json`), JSON.stringify({ id, dataUrl: body.dataUrl, capturedAt: body.capturedAt || new Date().toISOString(), receivedAt: new Date().toISOString() }, null, 2));
+            sendJson(res, 200, { ok: true, id });
+            return;
+          }
+
+          if (req.method === "GET" && listMatch) {
+            const names = (await fs.readdir(dir)).filter((name) => name.endsWith(".json")).sort();
+            const items = [];
+            for (const name of names) {
+              try { items.push(JSON.parse(await fs.readFile(path.join(dir, name), "utf8"))); } catch { /* skip corrupt entry */ }
+            }
+            sendJson(res, 200, { items });
+            return;
+          }
+
+          if (req.method === "DELETE" && itemMatch) {
+            const id = decodeURIComponent(itemMatch[2]).replace(/[^a-zA-Z0-9_-]/g, "");
+            try { await fs.unlink(path.join(dir, `${id}.json`)); } catch { /* already gone */ }
+            sendJson(res, 200, { ok: true });
+            return;
+          }
+
+          sendJson(res, 405, { error: "Method not allowed" });
+        } catch (error) {
+          sendJson(res, 500, { error: error.message || "Scan inbox API failed" });
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), localExchangePlugin(), testPackageAdminPlugin(), fieldPreparationPlugin()],
+  plugins: [react(), localExchangePlugin(), testPackageAdminPlugin(), fieldPreparationPlugin(), scanInboxPlugin()],
   server: {
     host: "0.0.0.0",
     port: 3000,
     https: false,
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        index: path.resolve("index.html"),
+        admin: path.resolve("admin.html"),
+      },
+    },
   },
 });
