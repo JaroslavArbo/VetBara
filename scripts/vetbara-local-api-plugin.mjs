@@ -16,24 +16,19 @@ function detectLanHost() {
   return null;
 }
 
-// Resolve a request path to an api/ handler file the way Vercel does: exact file
-// first, then a catch-all `[...param].js` / `[[...param]].js` at the nearest
-// parent dir. Returns { file, params } or null.
+// Resolve a request path to an api/ handler file, mirroring production routing:
+// exact file first, then an `<area>-router.js` that vercel.json rewrites map
+// `/api/<area>/*` onto (path segments passed as ?path=<rest>). Returns
+// { file, params } or null.
 function resolveApiRoute(apiDir, pathname) {
   const segs = pathname.replace(/^\/api\//, "").replace(/\/+$/, "").split("/").filter(Boolean);
   const exact = path.join(apiDir, `${segs.join("/")}.js`);
   if (fs.existsSync(exact)) return { file: exact, params: {} };
   const index = path.join(apiDir, ...segs, "index.js");
   if (fs.existsSync(index)) return { file: index, params: {} };
-  for (let i = segs.length; i >= 1; i -= 1) {
-    const dir = path.join(apiDir, ...segs.slice(0, i - 1));
-    let entries = [];
-    try { entries = fs.readdirSync(dir); } catch { continue; }
-    const catchFile = entries.find((f) => /^\[\[?\.\.\.[^\].]+\]\]?\.js$/.test(f));
-    if (catchFile) {
-      const param = catchFile.match(/^\[\[?\.\.\.([^\].]+)\]\]?\.js$/)[1];
-      return { file: path.join(dir, catchFile), params: { [param]: segs.slice(i - 1) } };
-    }
+  if (segs.length >= 2) {
+    const router = path.join(apiDir, `${segs[0]}-router.js`);
+    if (fs.existsSync(router)) return { file: router, params: { path: segs.slice(1).join("/") } };
   }
   return null;
 }

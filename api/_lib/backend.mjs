@@ -27,7 +27,9 @@ export async function supabase(path, options = {}) {
     },
   });
   if (!response.ok) throw new Error(await response.text());
-  return response.status === 204 ? [] : response.json();
+  // Handle empty bodies (204, or Prefer: return=minimal which replies 201 empty).
+  const text = await response.text();
+  return text ? JSON.parse(text) : [];
 }
 
 // Resolve any app_sessions token → { role, subjectId } or null.

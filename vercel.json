@@ -1,5 +1,11 @@
 {
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/admin/(.*)", "destination": "/api/admin-router?path=$1" },
+    { "source": "/api/media/(.*)", "destination": "/api/media-router?path=$1" },
+    { "source": "/api/evaluation/(.*)", "destination": "/api/evaluation-router?path=$1" },
+    { "source": "/api/exams/(.*)", "destination": "/api/exams-router?path=$1" }
+  ]
 }

@@ -1,7 +1,7 @@
 // Consolidated evaluation API router → handlers in api/_impl.
-import calculate from "../_impl/evaluation-calculate.mjs";
-import candidate from "../_impl/evaluation-candidate.mjs";
-import exportEvaluation from "../_impl/evaluation-export.mjs";
+import calculate from "./_impl/evaluation-calculate.mjs";
+import candidate from "./_impl/evaluation-candidate.mjs";
+import exportEvaluation from "./_impl/evaluation-export.mjs";
 
 const routes = {
   calculate,
