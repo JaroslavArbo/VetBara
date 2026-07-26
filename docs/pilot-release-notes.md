@@ -10,6 +10,9 @@ This pilot build covers the current digital examination workflow prototype:
 - Candidate written test persistence
 - Consulting report draft persistence
 - Examiner outdoor score/note persistence
+- Examiner outdoor voice recording with live voice cleanup (Supabase Storage + local fallback)
+- Report and field-preparation photo storage (actual image bytes, not just metadata)
+- Centre recordings & photos download panel
 - Evaluation Preview
 - Draft Export
 - Centre Audit Package
@@ -36,7 +39,6 @@ These limitations should be communicated before a pilot run:
 - no official VETcert final certificate/result
 - no final PASS/FAIL decision workflow
 - no official VETcert export template
-- no real image upload/storage
 - no production-grade user management
 - no full offline conflict resolution UI
 - no completed multilingual production review

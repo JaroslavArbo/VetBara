@@ -11,6 +11,8 @@ import {
   AdminStructuredPackagePanel,
   AdminExamOpeningPanel,
   AdminTranslationPanel,
+  AdminLoginGate,
+  tomorrowIsoDate,
 } from "../App.jsx";
 import { LANGUAGES as UI_LANGUAGES, makeTranslator } from "../i18n";
 
@@ -174,7 +176,7 @@ export default function AdminApp() {
   const t = makeTranslator(uiLanguage);
 
   const [centre, setCentre] = useState("Arboricultural Academy");
-  const [examDate, setExamDate] = useState("2026-03-31");
+  const [examDate, setExamDate] = useState(tomorrowIsoDate);
   const [place, setPlace] = useState("Buchlovice");
   const [examLanguage, setExamLanguage] = useState("EN");
 
@@ -211,6 +213,7 @@ export default function AdminApp() {
         {adminPdfPackageStatus && <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">{adminPdfPackageStatus}</div>}
         {adminPdfPackageError && <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">{adminPdfPackageError}</div>}
 
+        <AdminLoginGate t={t} addAudit={() => {}}>
         <div className="grid gap-4">
           <AdminDashboardSection id="package-authoring" icon={FileSpreadsheet} t={t} title={t("admin.dashboard.authoring.title")} description={t("admin.dashboard.authoring.description")} activeSection={activeSection} setActiveSection={setActiveSection}>
             <AdminStructuredPackagePanel adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageLatest={setAdminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} centre={centre} uiLanguage={uiLanguage} t={t} />
@@ -228,6 +231,7 @@ export default function AdminApp() {
             <AdminTranslationPanel uiLanguage={uiLanguage} t={t} />
           </AdminDashboardSection>
         </div>
+        </AdminLoginGate>
       </main>
     </VetBaraErrorBoundary>
   );

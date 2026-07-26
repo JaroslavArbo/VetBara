@@ -48,3 +48,7 @@ Archive.zip
 
 # Claude Code local tool config (preview server launch settings) — machine-specific.
 .claude/
+.env*
+
+# Supabase CLI temp
+supabase/.temp/

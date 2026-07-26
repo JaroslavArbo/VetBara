@@ -113,6 +113,55 @@ export function downloadBase64File({ base64, filename, mimeType }) {
   URL.revokeObjectURL(url);
 }
 
+// --- Exam media (voice recordings + report/field photos) -------------------
+
+// Ask the backend for a signed upload URL for one media object. Returns
+// { ok, stored, demo?, uploadUrl?, path?, id? }. When `stored` is false the
+// backend is not configured (demo/offline) and the caller keeps the local copy.
+export function requestMediaUploadUrl(sessionToken, media) {
+  return requestJson("/api/media/upload-url", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, media }),
+  });
+}
+
+// Upload the raw bytes straight to Supabase Storage using the signed URL.
+// This bypasses the serverless body-size limit, so long voice recordings work.
+export async function uploadMediaBytes(uploadUrl, blob) {
+  const response = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": blob.type || "application/octet-stream", "x-upsert": "true" },
+    body: blob,
+  });
+  if (!response.ok) {
+    const error = new Error(`Media upload failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return true;
+}
+
+// Full best-effort upload: get a signed URL, then push the bytes. Resolves to
+// { stored: boolean, demo?: boolean, id?, path? }. Never throws for the demo
+// case; throws only on an unexpected backend/storage error.
+export async function uploadExamMedia(sessionToken, media, blob) {
+  const signed = await requestMediaUploadUrl(sessionToken, media);
+  if (!signed?.stored || !signed.uploadUrl) {
+    return { stored: false, demo: Boolean(signed?.demo) };
+  }
+  await uploadMediaBytes(signed.uploadUrl, blob);
+  return { stored: true, id: signed.id ?? null, path: signed.path ?? null };
+}
+
+// Centre-only: list stored media with signed download URLs. Returns
+// { ok, stored, demo?, media: [] }.
+export function listExamMedia(sessionToken) {
+  return requestJson("/api/media/list", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken }),
+  });
+}
+
 export async function generateEvaluation(sessionToken, payload) {
   const response = await fetch("/api/evaluation/generate", {
     method: "POST",

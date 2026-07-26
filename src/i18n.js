@@ -19,7 +19,7 @@ export const FUTURE_LANGUAGES = ["pl"];
 export const translations = {
   en: {
     "app.title": "VetBara",
-    "app.subtitle": "Pilot digital examination workspace",
+    "app.subtitle": "Digital examination workspace",
     "language.label": "Language",
     "language.draftPreviewWarning": "Draft machine translation preview — not approved for official VETcert exam use.",
     "role.centre": "Centre",
@@ -117,7 +117,7 @@ export const translations = {
 
   cs: {
     "app.title": "VetBara",
-    "app.subtitle": "Pilotní digitální zkušební prostředí",
+    "app.subtitle": "Digitální zkušební prostředí",
     "language.label": "Jazyk",
     "language.draftPreviewWarning": "Náhled strojového překladu — není schváleno pro oficiální zkoušku VETcert.",
     "role.centre": "Centrum",
@@ -164,9 +164,9 @@ export const translations = {
     "centre.validation.helper": "Chyby je vhodné opravit před distribucí QR odkazů. Varování lze vyhodnotit během přípravy pilotu.",
     "centre.validation.empty": "Žádné validační problémy. Setup je připraven pro pilotní smoke test.",
 
-    "centre.guardrails.title": "Pilotní guardrails připravenosti",
+    "centre.guardrails.title": "Guardrails připravenosti",
     "centre.guardrails.helper": "Tyto guardrails neblokují demo testování, ale před reálným pilotem by měly být vyřešeny.",
-    "centre.guardrails.ready": "Pilotní připravenost vypadá dobře.",
+    "centre.guardrails.ready": "Připravenost vypadá dobře.",
     "centre.guardrails.validation": "Opravte validační chyby před distribucí QR odkazů.",
     "centre.guardrails.unsaved": "Uložte Centre Setup před distribucí QR odkazů.",
     "centre.guardrails.testPackage": "Importujte/vyberte testový balíček před pilotním během written test.",
@@ -577,7 +577,41 @@ Object.assign(translations.en, {
   "outdoor.mode.primary": "primary - full form required",
   "outdoor.mode.secondary": "secondary - optional input",
   "outdoor.mode.unassigned": "unassigned",
-  "outdoor.autosave": "autosave to sync queue"
+  "outdoor.autosave": "autosave to sync queue",
+
+  "voice.title": "Voice recording",
+  "voice.helper": "Records the whole outdoor exam. Stays available the entire time.",
+  "voice.start": "Start voice recording",
+  "voice.stop": "Stop and save recording",
+  "voice.recordingFor": "Recording for",
+  "voice.recordingNote": "Recording in progress — voice is emphasised and background noise suppressed. Closing the section saves the recording automatically.",
+  "voice.otherCandidate": "A recording started for another candidate is still running.",
+  "voice.status.processing": "Cleaning and saving the recording…",
+  "voice.status.savedLocal": "Recording cleaned and saved locally (this tablet).",
+  "voice.status.uploaded": "Recording cleaned, saved and uploaded to the backend.",
+  "voice.error.unsupported": "Audio recording is not supported on this device/browser.",
+  "voice.error.permission": "Microphone access was denied. Allow the microphone to record.",
+  "voice.error.start": "Recording could not be started.",
+  "voice.error.save": "The recording could not be saved.",
+
+  "media.title": "Recordings & photos",
+  "media.subtitle": "Download examiner voice recordings and candidate report/field photos for further processing.",
+  "media.refresh": "Refresh",
+  "media.refreshing": "Refreshing…",
+  "media.mode.backend": "Backend storage",
+  "media.mode.local": "Local only",
+  "media.recordings": "recordings",
+  "media.photos": "photos",
+  "media.download": "Download",
+  "media.audio.title": "Voice recordings (outdoor)",
+  "media.audio.empty": "No voice recordings yet.",
+  "media.photo.title": "Report & field photos",
+  "media.photo.empty": "No photos yet.",
+  "media.photo.remote": "Stored",
+  "media.source.both": "Backend + local",
+  "media.source.backend": "Backend",
+  "media.source.local": "Local (this tablet)",
+  "media.error.backend": "Backend media list unavailable — showing local recordings only."
 });
 
 Object.assign(translations.cs, {
@@ -618,15 +652,49 @@ Object.assign(translations.cs, {
   "outdoor.mode.primary": "primary - vyžaduje celý formulář",
   "outdoor.mode.secondary": "secondary - volitelný vstup",
   "outdoor.mode.unassigned": "nepřiřazeno",
-  "outdoor.autosave": "automatické ukládání do sync queue"
+  "outdoor.autosave": "automatické ukládání do sync queue",
+
+  "voice.title": "Hlasový záznam",
+  "voice.helper": "Nahrává celou outdoor zkoušku. Zůstává dostupné po celou dobu.",
+  "voice.start": "Zahájit hlasový záznam",
+  "voice.stop": "Zastavit a uložit záznam",
+  "voice.recordingFor": "Nahrává se pro",
+  "voice.recordingNote": "Probíhá nahrávání — hlas je zvýrazněn a ruchy na pozadí potlačeny. Uzavřením sekce se záznam automaticky uloží.",
+  "voice.otherCandidate": "Stále běží záznam zahájený pro jiného kandidáta.",
+  "voice.status.processing": "Čištění a ukládání záznamu…",
+  "voice.status.savedLocal": "Záznam vyčištěn a uložen lokálně (na tomto tabletu).",
+  "voice.status.uploaded": "Záznam vyčištěn, uložen a nahrán do backendu.",
+  "voice.error.unsupported": "Nahrávání zvuku není na tomto zařízení/prohlížeči podporováno.",
+  "voice.error.permission": "Přístup k mikrofonu byl odepřen. Pro nahrávání povolte mikrofon.",
+  "voice.error.start": "Nahrávání se nepodařilo spustit.",
+  "voice.error.save": "Záznam se nepodařilo uložit.",
+
+  "media.title": "Záznamy a fotografie",
+  "media.subtitle": "Stáhněte si hlasové záznamy zkoušejících a fotografie z reportů i terénu k dalšímu zpracování.",
+  "media.refresh": "Obnovit",
+  "media.refreshing": "Obnovuji…",
+  "media.mode.backend": "Backendové úložiště",
+  "media.mode.local": "Pouze lokálně",
+  "media.recordings": "záznamů",
+  "media.photos": "fotografií",
+  "media.download": "Stáhnout",
+  "media.audio.title": "Hlasové záznamy (outdoor)",
+  "media.audio.empty": "Zatím žádné hlasové záznamy.",
+  "media.photo.title": "Fotografie z reportu a terénu",
+  "media.photo.empty": "Zatím žádné fotografie.",
+  "media.photo.remote": "Uloženo",
+  "media.source.both": "Backend + lokálně",
+  "media.source.backend": "Backend",
+  "media.source.local": "Lokálně (tento tablet)",
+  "media.error.backend": "Seznam médií z backendu není dostupný — zobrazuji jen lokální záznamy."
 });
 
 Object.assign(translations.en, {
   "centre.access.title": "Certification centre / Open delegated workspace",
-  "centre.access.subtitle": "Open workspace using Centre QR received from Admin.",
-  "centre.access.placeholder": "Paste centre token",
+  "centre.access.subtitle": "Opening the Centre link from Admin unlocks this workspace automatically. Use the field below only as a manual fallback.",
+  "centre.access.placeholder": "Manual fallback: paste the Centre link or token",
   "centre.access.open": "Open centre workspace",
-  "centre.access.prototypeToken": "Prototype token",
+  "centre.access.prototypeToken": "Token",
 
   "centre.config.title": "Centre / Configure levels, variants, candidates and examiners",
   "centre.config.subtitle": "One exam can contain Practicing, Consulting or both. Each candidate has primary and secondary examiner.",
@@ -670,10 +738,10 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "centre.access.title": "Certifikační centrum / otevření delegovaného pracovního prostoru",
-  "centre.access.subtitle": "Otevřete pracovní prostor pomocí Centre QR získaného od Admina.",
-  "centre.access.placeholder": "Vložte token centra",
+  "centre.access.subtitle": "Otevření odkazu od Admina odemkne pracovní prostor automaticky. Pole níže je jen ruční záloha.",
+  "centre.access.placeholder": "Ruční záloha: vložte odkaz nebo token centra",
   "centre.access.open": "Otevřít pracovní prostor centra",
-  "centre.access.prototypeToken": "Prototypový token",
+  "centre.access.prototypeToken": "Token",
 
   "centre.config.title": "Centrum / nastavení úrovní, variant, kandidátů a zkoušejících",
   "centre.config.subtitle": "Jedna zkouška může obsahovat úroveň Practicing, Consulting nebo obě. Každý kandidát má primary a secondary examiner.",
@@ -2283,6 +2351,54 @@ export function allTranslationKeys() {
 export function translationFor(language, key) {
   return translations[language]?.[key];
 }
+
+Object.assign(translations.en, {
+  "adminAuth.loginTitle": "Admin sign-in required",
+  "adminAuth.loginHelper": "Generating Centre access links needs an admin session. First login: Bara / VetBara2026 (change it after signing in).",
+  "adminAuth.username": "Username",
+  "adminAuth.password": "Password",
+  "adminAuth.login": "Sign in",
+  "adminAuth.loggingIn": "Signing in…",
+  "adminAuth.loginFailed": "Sign-in failed.",
+  "adminAuth.loginFailedGeneric": "Invalid username or password.",
+  "adminAuth.logout": "Sign out",
+  "adminAuth.signedInAs": "Signed in as {name}",
+  "adminAuth.required": "Sign in as admin first.",
+  "adminAuth.expired": "Admin session expired — please sign in again.",
+  "adminAuth.generateFailed": "Could not generate the Centre link.",
+  "adminAuth.changeCredentials": "Change credentials",
+  "adminAuth.changeTitle": "Change username / password",
+  "adminAuth.currentPassword": "Current password",
+  "adminAuth.newUsername": "New username (optional)",
+  "adminAuth.newPassword": "New password (optional, min 6 chars)",
+  "adminAuth.saveCredentials": "Save",
+  "adminAuth.changed": "Credentials updated.",
+  "adminAuth.changeFailed": "Could not update credentials.",
+});
+
+Object.assign(translations.cs, {
+  "adminAuth.loginTitle": "Vyžadováno přihlášení admina",
+  "adminAuth.loginHelper": "Generování přístupových odkazů pro Centrum vyžaduje admin session. První přihlášení: Bara / VetBara2026 (po přihlášení si ho změňte).",
+  "adminAuth.username": "Uživatelské jméno",
+  "adminAuth.password": "Heslo",
+  "adminAuth.login": "Přihlásit",
+  "adminAuth.loggingIn": "Přihlašuji…",
+  "adminAuth.loginFailed": "Přihlášení selhalo.",
+  "adminAuth.loginFailedGeneric": "Neplatné jméno nebo heslo.",
+  "adminAuth.logout": "Odhlásit",
+  "adminAuth.signedInAs": "Přihlášen jako {name}",
+  "adminAuth.required": "Nejprve se přihlaste jako admin.",
+  "adminAuth.expired": "Admin session vypršela — přihlaste se prosím znovu.",
+  "adminAuth.generateFailed": "Odkaz pro Centrum se nepodařilo vygenerovat.",
+  "adminAuth.changeCredentials": "Změnit přihlašovací údaje",
+  "adminAuth.changeTitle": "Změna jména / hesla",
+  "adminAuth.currentPassword": "Současné heslo",
+  "adminAuth.newUsername": "Nové jméno (volitelné)",
+  "adminAuth.newPassword": "Nové heslo (volitelné, min. 6 znaků)",
+  "adminAuth.saveCredentials": "Uložit",
+  "adminAuth.changed": "Údaje aktualizovány.",
+  "adminAuth.changeFailed": "Údaje se nepodařilo aktualizovat.",
+});
 
 export function englishSourceFor(key) {
   return translations.en[key];

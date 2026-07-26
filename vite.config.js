@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { PDFParse } from "pdf-parse";
+import { vetbaraLocalApiPlugin } from "./scripts/vetbara-local-api-plugin.mjs";
 
 const LOCAL_EXCHANGE_DIR = path.resolve(".vetbara-local/packages");
 const LOCAL_TEST_PACKAGES_DIR = path.resolve(".vetbara-local/test-packages");
@@ -1505,7 +1506,7 @@ function scanInboxPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), localExchangePlugin(), testPackageAdminPlugin(), fieldPreparationPlugin(), scanInboxPlugin()],
+  plugins: [react(), vetbaraLocalApiPlugin(), localExchangePlugin(), testPackageAdminPlugin(), fieldPreparationPlugin(), scanInboxPlugin()],
   server: {
     host: "0.0.0.0",
     port: 3000,
