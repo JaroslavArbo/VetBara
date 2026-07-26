@@ -16,20 +16,40 @@ function detectLanHost() {
   return null;
 }
 
-// Resolve a request path to an api/ handler file, mirroring production routing:
-// exact file first, then an `<area>-router.js` that vercel.json rewrites map
-// `/api/<area>/*` onto (path segments passed as ?path=<rest>). Returns
-// { file, params } or null.
-function resolveApiRoute(apiDir, pathname) {
-  const segs = pathname.replace(/^\/api\//, "").replace(/\/+$/, "").split("/").filter(Boolean);
-  const exact = path.join(apiDir, `${segs.join("/")}.js`);
-  if (fs.existsSync(exact)) return { file: exact, params: {} };
-  const index = path.join(apiDir, ...segs, "index.js");
-  if (fs.existsSync(index)) return { file: index, params: {} };
-  if (segs.length >= 2) {
-    const router = path.join(apiDir, `${segs[0]}-router.js`);
-    if (fs.existsSync(router)) return { file: router, params: { path: segs.slice(1).join("/") } };
+// Load vercel.json `rewrites` so dev routing mirrors production exactly.
+function loadRewrites(root) {
+  try {
+    const json = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
+    return Array.isArray(json.rewrites) ? json.rewrites : [];
+  } catch {
+    return [];
   }
+}
+
+// Apply the first matching rewrite to a pathname. Returns { pathname, params }
+// (params from a `?path=...` in the destination), or the input unchanged.
+function applyRewrites(pathname, rewrites) {
+  for (const rule of rewrites) {
+    if (!rule?.source || !rule?.destination) continue;
+    const match = pathname.match(new RegExp(`^${rule.source}$`));
+    if (!match) continue;
+    const dest = rule.destination.replace(/\$(\d+)/g, (_, n) => match[Number(n)] ?? "");
+    const [destPath, destQuery = ""] = dest.split("?");
+    const params = Object.fromEntries(new URLSearchParams(destQuery));
+    return { pathname: destPath, params };
+  }
+  return { pathname, params: {} };
+}
+
+// Resolve a request path to an api/ handler file, mirroring production: apply
+// vercel.json rewrites, then exact file / index. Returns { file, params } or null.
+function resolveApiRoute(apiDir, pathname, rewrites) {
+  const { pathname: routed, params } = applyRewrites(pathname, rewrites);
+  const segs = routed.replace(/^\/api\//, "").replace(/\/+$/, "").split("/").filter(Boolean);
+  const exact = path.join(apiDir, `${segs.join("/")}.js`);
+  if (fs.existsSync(exact)) return { file: exact, params };
+  const index = path.join(apiDir, ...segs, "index.js");
+  if (fs.existsSync(index)) return { file: index, params };
   return null;
 }
 
@@ -63,6 +83,7 @@ export function vetbaraLocalApiPlugin() {
   const apiDir = path.join(root, "api");
 
   let resolvedPort = 3000;
+  let rewrites = [];
 
   return {
     name: "vetbara-local-api",
@@ -71,6 +92,7 @@ export function vetbaraLocalApiPlugin() {
       loadEnvFile(path.join(root, ".env.local"));
       loadEnvFile(path.join(root, ".env"));
       resolvedPort = config.server?.port || resolvedPort;
+      rewrites = loadRewrites(root);
       // Local Supabase is bound on 127.0.0.1; tablets can't reach that. Derive a
       // LAN-facing public base so the signed storage URLs we hand to the tablet
       // use the host's LAN IP (server-side REST keeps using the loopback URL).
@@ -107,7 +129,7 @@ export function vetbaraLocalApiPlugin() {
         const url = new URL(req.url, "http://localhost");
         // Resolve exact file or a catch-all router; if neither exists this route
         // belongs to vite.config's own mocks, so hand it back with next().
-        const match = resolveApiRoute(apiDir, url.pathname);
+        const match = resolveApiRoute(apiDir, url.pathname, rewrites);
         if (!match) return next();
         const file = match.file;
 

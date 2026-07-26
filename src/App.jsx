@@ -3446,7 +3446,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
         await fetch("/api/admin/package-history/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ language: draft.language, centre: centre || "", packageId: savedPackage.packageId, vetFilename, package: savedPackage }),
+          body: JSON.stringify({ sessionToken: admin?.sessionToken, language: draft.language, centre: centre || "", packageId: savedPackage.packageId, vetFilename, package: savedPackage }),
         });
         loadHistory();
       } catch {
@@ -3479,7 +3479,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   async function deleteHistoryEntry(id) {
     if (!window.confirm(t("admin.authoring.historyDeleteConfirm"))) return;
     try {
-      await fetch(`/api/admin/package-history/${encodeURIComponent(id)}/delete`, { method: "POST" });
+      await fetch(`/api/admin/package-history/${encodeURIComponent(id)}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionToken: admin?.sessionToken }) });
       setHistory((prev) => prev.filter((entry) => entry.id !== id));
     } catch (error) {
       setLocalError(error.message || t("admin.authoring.deleteFailed"));
@@ -3491,7 +3491,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
       await fetch(`/api/admin/package-history/${encodeURIComponent(id)}/note`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: noteDraft }),
+        body: JSON.stringify({ sessionToken: admin?.sessionToken, note: noteDraft }),
       });
       setHistory((prev) => prev.map((entry) => entry.id === id ? { ...entry, note: noteDraft } : entry));
     } catch (error) {
@@ -3997,7 +3997,7 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
     fetch("/api/admin/centre-links/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(entry),
+      body: JSON.stringify({ ...entry, sessionToken: admin?.sessionToken }),
     }).catch(() => {});
   }
 
@@ -4070,6 +4070,7 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
 
 export function AdminTranslationPanel({ uiLanguage, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const admin = React.useContext(AdminSessionContext);
   const targetLanguages = UI_LANGUAGES.filter((lang) => lang.code !== "en");
   const [selectedLang, setSelectedLang] = useState(targetLanguages[0]?.code || "cs");
   const [search, setSearch] = useState("");
@@ -4107,7 +4108,7 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
       await fetch("/api/translations/overrides", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lang: selectedLang, key, value }),
+        body: JSON.stringify({ sessionToken: admin?.sessionToken, lang: selectedLang, key, value }),
       });
       applyTranslationOverrides({ [selectedLang]: { [key]: value } });
       setRefreshTick((tick) => tick + 1);

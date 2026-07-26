@@ -12,6 +12,10 @@ import tpApprove from "./_impl/admin-test-package-approve.mjs";
 import tpList from "./_impl/admin-test-package-list.mjs";
 import tpLatest from "./_impl/admin-test-package-latest.mjs";
 import tpApproved from "./_impl/admin-test-package-approved.mjs";
+import draftsGet from "./_impl/admin-authoring-drafts-get.mjs";
+import packageHistory from "./_impl/admin-package-history.mjs";
+import centreLinks from "./_impl/admin-centre-links.mjs";
+import translations from "./_impl/admin-translations.mjs";
 
 const routes = {
   "auth/login": login,
@@ -20,18 +24,26 @@ const routes = {
   "authoring-drafts/list": draftsList,
   "authoring-drafts/latest": draftsLatest,
   "centre-links/register": centreLinksRegister,
+  "centre-links/list": centreLinks,
+  "centre-links/save": centreLinks,
   "test-package/authoring/save": tpAuthoringSave,
   "test-package/approve": tpApprove,
   "test-package/list": tpList,
   "test-package/latest": tpLatest,
   "test-package/approved": tpApproved,
+  "translations/overrides": translations,
 };
 
 export default async function handler(request, response) {
   const raw = request.query?.path;
   const parts = Array.isArray(raw) ? raw : String(raw || "").split("/").filter(Boolean);
   const key = parts.join("/");
-  const fn = routes[key];
+
+  // Exact static routes first.
+  let fn = routes[key];
+  // Then dynamic patterns.
+  if (!fn && (key === "package-history" || key.startsWith("package-history/"))) fn = packageHistory;
+  if (!fn && key.startsWith("authoring-drafts/")) fn = draftsGet; // /<id> (save|list|latest handled above)
   if (!fn) return response.status(404).json({ error: `Unknown admin route: ${key}` });
   return fn(request, response);
 }
