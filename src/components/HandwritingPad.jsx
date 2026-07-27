@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
 
 function tr(t, key, fallback) {
@@ -82,6 +82,24 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const [color, setColor] = useState(COLORS[0].value);
   const [size, setSize] = useState(SIZES[1].value);
   const [eraserMode, setEraserMode] = useState(false);
+
+  // touch-action:none on an <svg> is not honoured by every tablet browser, and React's
+  // onTouch*/onPointer* handlers are passive — neither can stop the browser's touch-scroll.
+  // Once scrolling starts the browser fires pointercancel, the stroke ends, and the rest of
+  // the gesture just pans the page ("draws a short line, then the viewport moves"). A native
+  // non-passive touchmove/touchstart listener that preventDefaults on the drawing surface is
+  // the only reliable way to keep the whole stylus gesture as drawing.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return undefined;
+    const prevent = (event) => { event.preventDefault(); };
+    el.addEventListener("touchstart", prevent, { passive: false });
+    el.addEventListener("touchmove", prevent, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", prevent);
+      el.removeEventListener("touchmove", prevent);
+    };
+  }, []);
 
   function svgPoint(event) {
     const svg = svgRef.current;
@@ -267,7 +285,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           className={`h-[420px] w-full rounded-2xl border bg-white ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
-          style={{ touchAction: "none" }}
+          style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none" }}
         >
           {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} preserveAspectRatio="xMidYMid meet" />}
           {strokes.map((stroke, index) => (
