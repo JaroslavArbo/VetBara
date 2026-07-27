@@ -6582,34 +6582,32 @@ function FieldTabletPage() {
     }
   }
 
+  function requestGpsPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error("GPS is not available in this browser.")); return; }
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy }),
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
+      );
+    });
+  }
+
   function locateTablet() {
     setError("");
-    if (!navigator.geolocation) {
-      setError("GPS is not available in this browser.");
-      return;
-    }
     setStatus("Requesting GPS permission...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const next = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
+    requestGpsPosition()
+      .then((next) => {
         setGpsPosition(next);
         setMapCenterOverride({ lat: next.lat, lng: next.lng });
         setStatus(`GPS position loaded${Number.isFinite(next.accuracy) ? ` · accuracy approx. ${Math.round(next.accuracy)} m` : ""}.`);
-      },
-      (err) => setError(`GPS could not be loaded: ${err.message || "permission was denied"}.`),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
-    );
+      })
+      .catch((err) => setError(`GPS could not be loaded: ${err?.message || "permission was denied"}.`));
   }
 
   // Rigidly translates the whole standard setup — exam centre + every tree in the row — so the
-  // centre lands on the current GPS fix while all relative offsets (the row geometry) are kept.
-  function moveEntireSetupToGps() {
-    const targetLat = Number(gpsPosition?.lat);
-    const targetLng = Number(gpsPosition?.lng);
-    if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) {
-      setError(tt("moveAllNoGps"));
-      return;
-    }
+  // centre lands on the given point while all relative offsets (the row geometry) are kept.
+  function applyMoveEntireSetup(targetLat, targetLng) {
     if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
       setError(tt("moveAllNoCentre"));
       return;
@@ -6645,6 +6643,24 @@ function FieldTabletPage() {
     });
     setMapCenterOverride({ lat: targetLat, lng: targetLng });
     setStatus(tt("moveAllDone"));
+  }
+
+  // Always available. If there is no GPS fix yet, acquire one first (so the button never
+  // "disappears" behind a missing position), then move the whole setup onto it.
+  async function moveEntireSetupToGps() {
+    let target = gpsPosition;
+    if (!target || !Number.isFinite(Number(target.lat)) || !Number.isFinite(Number(target.lng))) {
+      setError("");
+      setStatus(tt("moveAllLocating"));
+      try {
+        target = await requestGpsPosition();
+        setGpsPosition(target);
+      } catch {
+        setError(tt("moveAllNoGps"));
+        return;
+      }
+    }
+    applyMoveEntireSetup(Number(target.lat), Number(target.lng));
   }
 
   function updateSelectedManagementData(patch) {
@@ -6784,7 +6800,7 @@ function FieldTabletPage() {
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
-                      {gpsPosition && <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>}
+                      <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>
                       <button type="button" className={mapLayer === "cuzk" ? "active" : ""} onClick={() => setMapLayer("cuzk")} title={tt("cuzk")}><Layers className="h-3.5 w-3.5" />{tt("cuzk")}</button>
                       <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")} title={tt("osm")}><Layers className="h-3.5 w-3.5" />{tt("osm")}</button>
                     </div>
