@@ -2400,6 +2400,34 @@ Object.assign(translations.cs, {
   "adminAuth.changeFailed": "Údaje se nepodařilo aktualizovat.",
 });
 
+Object.assign(translations.en, {
+  "admin.pdfConvert.title": "Import from exam PDFs",
+  "admin.pdfConvert.helper": "Upload the exam PDFs to auto-extract questions into the editor below. Review before saving.",
+  "admin.pdfConvert.practicingWritten": "Practicing – written",
+  "admin.pdfConvert.consultingWritten": "Consulting – written",
+  "admin.pdfConvert.practicingOutdoor": "Practicing – outdoor",
+  "admin.pdfConvert.consultingOutdoor": "Consulting – outdoor",
+  "admin.pdfConvert.button": "Convert PDFs",
+  "admin.pdfConvert.working": "Extracting from PDFs…",
+  "admin.pdfConvert.done": "Imported from PDFs ({packageId}). Review and save.",
+  "admin.pdfConvert.noFiles": "Select at least one PDF first.",
+  "admin.pdfConvert.failed": "PDF import failed.",
+});
+
+Object.assign(translations.cs, {
+  "admin.pdfConvert.title": "Import ze zkušebních PDF",
+  "admin.pdfConvert.helper": "Nahrajte zkušební PDF pro automatické vytažení otázek do editoru níže. Před uložením zkontrolujte.",
+  "admin.pdfConvert.practicingWritten": "Practicing – písemka",
+  "admin.pdfConvert.consultingWritten": "Consulting – písemka",
+  "admin.pdfConvert.practicingOutdoor": "Practicing – outdoor",
+  "admin.pdfConvert.consultingOutdoor": "Consulting – outdoor",
+  "admin.pdfConvert.button": "Převést PDF",
+  "admin.pdfConvert.working": "Vytahuji z PDF…",
+  "admin.pdfConvert.done": "Naimportováno z PDF ({packageId}). Zkontrolujte a uložte.",
+  "admin.pdfConvert.noFiles": "Nejdřív vyberte alespoň jedno PDF.",
+  "admin.pdfConvert.failed": "Import z PDF selhal.",
+});
+
 export function englishSourceFor(key) {
   return translations.en[key];
 }

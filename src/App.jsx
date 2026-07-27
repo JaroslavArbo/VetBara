@@ -3217,6 +3217,8 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   const [activeSectionFilter, setActiveSectionFilter] = useState("__all__");
   const [localStatus, setLocalStatus] = useState("");
   const [localError, setLocalError] = useState("");
+  const [pdfFiles, setPdfFiles] = useState({});
+  const [converting, setConverting] = useState(false);
 
   const activeDocMeta = AUTHORING_DOCS.find((doc) => doc.key === activeDocKey) || AUTHORING_DOCS[0];
   const activeDoc = draft.documents[activeDocKey] || {};
@@ -3402,6 +3404,45 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
     } catch (error) {
       setLocalError(error.message || t("admin.authoring.fileLoadFailed"));
       setLocalStatus("");
+    }
+  }
+
+  function readFileBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",").pop());
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Import 4 exam PDFs → server extracts questions → load the built package into
+  // the editor. PDFs are sent base64 in JSON (no multipart).
+  async function convertPdfs() {
+    const slots = ["practicingWritten", "consultingWritten", "practicingOutdoor", "consultingOutdoor"];
+    const chosen = slots.filter((slot) => pdfFiles[slot]);
+    if (!chosen.length) { setLocalError(t("admin.pdfConvert.noFiles")); return; }
+    setConverting(true);
+    setLocalError("");
+    setLocalStatus(t("admin.pdfConvert.working"));
+    try {
+      const files = {};
+      for (const slot of chosen) files[slot] = await readFileBase64(pdfFiles[slot]);
+      const response = await fetch("/api/admin/test-package/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: admin?.sessionToken, files }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      loadFromPackage(data.package);
+      setPdfFiles({});
+      setLocalStatus(tf("admin.pdfConvert.done", { packageId: data.package?.packageId || "" }));
+    } catch (error) {
+      setLocalError(error.message || t("admin.pdfConvert.failed"));
+      setLocalStatus("");
+    } finally {
+      setConverting(false);
     }
   }
 
@@ -3608,6 +3649,20 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
             <Button onClick={saveAsPackage} className="rounded-2xl">{t("admin.authoring.createPackage")}</Button>
             <Button onClick={printPackage} variant="outline" className="rounded-2xl">{t("admin.authoring.print")}</Button>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
+          <h4 className="text-sm font-semibold text-slate-900">{t("admin.pdfConvert.title")}</h4>
+          <p className="mt-1 text-xs text-slate-600">{t("admin.pdfConvert.helper")}</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {[["practicingWritten", "admin.pdfConvert.practicingWritten"], ["consultingWritten", "admin.pdfConvert.consultingWritten"], ["practicingOutdoor", "admin.pdfConvert.practicingOutdoor"], ["consultingOutdoor", "admin.pdfConvert.consultingOutdoor"]].map(([slot, label]) => (
+              <label key={slot} className="flex flex-col gap-1 text-xs font-medium text-slate-700">
+                <span>{t(label)}{pdfFiles[slot] ? " ✓" : ""}</span>
+                <input type="file" accept="application/pdf,.pdf" onChange={(e) => setPdfFiles((prev) => ({ ...prev, [slot]: e.target.files?.[0] || undefined }))} className="text-xs" />
+              </label>
+            ))}
+          </div>
+          <Button onClick={convertPdfs} disabled={converting} className="mt-3 rounded-2xl">{converting ? t("admin.pdfConvert.working") : t("admin.pdfConvert.button")}</Button>
         </div>
 
         {localStatus && <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">{localStatus}</div>}

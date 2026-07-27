@@ -16,6 +16,7 @@ import draftsGet from "./_impl/admin-authoring-drafts-get.mjs";
 import packageHistory from "./_impl/admin-package-history.mjs";
 import centreLinks from "./_impl/admin-centre-links.mjs";
 import translations from "./_impl/admin-translations.mjs";
+import tpConvert from "./_impl/admin-test-package-convert.mjs";
 
 const routes = {
   "auth/login": login,
@@ -27,6 +28,7 @@ const routes = {
   "centre-links/list": centreLinks,
   "centre-links/save": centreLinks,
   "test-package/authoring/save": tpAuthoringSave,
+  "test-package/convert": tpConvert,
   "test-package/approve": tpApprove,
   "test-package/list": tpList,
   "test-package/latest": tpLatest,
