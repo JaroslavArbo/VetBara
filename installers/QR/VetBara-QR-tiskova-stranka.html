@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8">
+<title>VetBara — QR pro instalaci aplikace</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#0b3d2e; margin:0; padding:32px; background:#fff; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:#4b6b5e; margin:0 0 28px; font-size:14px; }
+  .grid { display:flex; gap:28px; flex-wrap:wrap; }
+  .card { flex:1 1 320px; border:2px solid #0b3d2e; border-radius:16px; padding:24px; text-align:center; }
+  .card h2 { margin:0 0 2px; font-size:19px; }
+  .role { font-size:13px; color:#4b6b5e; margin:0 0 16px; }
+  .card img { width:230px; height:230px; }
+  .url { font-family: ui-monospace, Menlo, monospace; font-size:12px; word-break:break-all; margin-top:12px; color:#0b3d2e; }
+  .steps { margin-top:32px; font-size:13.5px; line-height:1.55; color:#243b33; }
+  .steps h3 { font-size:15px; margin:0 0 6px; }
+  .steps ol { margin:0; padding-left:20px; }
+  .foot { margin-top:22px; font-size:12px; color:#6b8478; }
+  @media print { body { padding:12mm; } .card { break-inside:avoid; } }
+</style></head><body>
+  <h1>VetBara — instalace aplikace přes QR</h1>
+  <p class="sub">Naskenuj telefonem/tabletem, nebo otevři v Chrome/Edge na počítači → „Instalovat aplikaci".</p>
+  <div class="grid">
+    <div class="card">
+      <h2>Admin</h2>
+      <p class="role">Tvorba a schvalování balíčků, přístupové odkazy</p>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAhwAAAIcAQMAAACHMOU/AAAABlBMVEULPS7////WQsskAAACmUlEQVR42u2dS27DMAwFiV5A97+lbsDWSUw+UgKyaBdtNYYX+SizMDCgSFGK+fevaUCAAAECBAgQIECAAAHyayEW1/Cv+/pkXB/qgNeLUQY/IB/2AxcQIH8LkkakGuNyKl6EZfFWB+MOENyJoJNfPQ16jrltyjEDd4DgzqpDmlJCj9luMA8WCO7cyY5ZBKBMeXRehztAcGfnRegTGdDr7RRlyHeA4M5SZ3tzy2DcAXK4O3qJFPa6pQQXQUcK3TxYIEe7k0EnpmeR9Yxc38mKAXEHCO6oCC4Rxz0kCmvWVR7cAcKcrdjxuGteY1GFy5G4A+TwuDNEjZFNOBYrpMvCaIzHHSBHx501xFhO2zT9yZHEHSC401Z2op0gimwaeuyezpHvAMGduiTaUxvf1dy0XIA7QKgVzN7/uQ09GqpwB8jpccdKZNGUp/dOb0byYIEc7c4STayFodZZTb4DBHeiFt0acvp2Ht/nRLgDBHc01uh20Yg7WYWjnw0I7nhtFai72zTKxLbrvIg7QI53py3rZBhyV5t6qxtxBwhxR/KdmKfphutsCr1L1tSogeCObkPQmVs7hGr7GneAnO7O7Id49JRn9qPb5Lc8WCAHz9m0d3r0Fh0pC5R5He4AwZ08vkO3HpipLzE+SwrkO0BwZ3g5mqB3e0qJYJZyAe4AwZ2ycPP8apZAUy7tC8UdICfXCto5ObVFJ4vVureUuAMEd7wfuWZ1g1tJfGQHHHEHCO6Uoz5l94Huxe5nGuAOENzZrexoA1vapPmO4Q4Q3Fn+Q2TUg9pkWaf0tpHvAMGdtaMgvp0lLSp74og7QHCn5julLDBKK7VWp3EHCO5oItO3YGu9esl6cAfI4e7w/8VAgAABAgQIECBAgAD5d5BP0dr24Mjf30YAAAAASUVORK5CYII=" alt="QR Admin">
+      <div class="url">vet-bara.vercel.app/admin.html</div>
+    </div>
+    <div class="card">
+      <h2>Centrum</h2>
+      <p class="role">Průběh zkoušky (kandidáti, zkoušející, archivace)</p>
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAhwAAAIcAQMAAACHMOU/AAAABlBMVEULPS7////WQsskAAACi0lEQVR42u2dW05DMQwFLTaQ/e/SOwiPpvaxE/iBDyBzhVBbpfNRaeRHnHttfv9yAwIECBAgQIAAAQIECJBfC7G4Rr6NBW8fPt4+FrTF01/sBy4gQP4W5OnOmPFCDXp3x6spdTHuAMGdFVNGCUNLEC+KtcW4AwR3ijvjmaq5taQOd4AAObvjJWdLZcIj3AEC5Fjv1CStNwoG9Q4QIOJOS8m+/rPaPcAdIBe7o1dEmdRqzOPKZ6ObHxbI7e7EJ1npRAUk6022fnAHCPXOcuFDk3jddlFjWSZsuAPkencyvoxPbBKttGOAO0Au7xXo/8jKtDNQJg1wBwjuzNJwzlpm2+XR1kGYhTtAcCeMSFO8JnXPoEPOBgRIc2d9JBugK8p4Tuas16IV7gC5vVcQRY10CUonYW4TO7gDBHf02E4WMmGH9UacdORwBwhxJzsA0iso8wYSdKh3gOCOtgh6MJKOtFnf4sEdILgT+pQT1nnKoFo2qXeAAJGKJlIyz4qmm6L7PsQdILgjIwQ6M2B1Ymc/Roo7QHCnnw+VPK0Ntp2yOH5YIPe609MzSd40i2sjbbgDBHf6aZ16+wLd+sl4ZOzvAMGdbEfruJr1M275lbL1gztAbo4789wf0N51utNuSYo7QO52R40ojTWdyTnv/vDDArm6V1CMcGv6RHWzvjZwBwjunO6T41YmDbbjoiVzwx0g18edFVBMOtKjlzl6T13cAYI7+3MQVKXc0JGBHNwBgjvtFtNqx2E+Ry/qHSC40zZDZStnjzW9SsIdILgztum1qHT2ByLQKwCCO+1Rbl6PXes4gfUzPrgD5HZ3tISRvrTemqDdlo16Bwju8PxiIECAAAECBAgQIECA/EfIK4kzFxowIcmgAAAAAElFTkSuQmCC" alt="QR Centrum">
+      <div class="url">vet-bara.vercel.app/?role=Centre</div>
+    </div>
+  </div>
+  <div class="steps">
+    <h3>Jak appku „nainstalovat" (samostatné okno + ikona)</h3>
+    <ol>
+      <li><b>Počítač (Chrome/Edge):</b> otevři adresu → v adresním řádku ikona „Instalovat", nebo menu ⋮ → <i>Odeslat, uložit a sdílet → Instalovat stránku jako aplikaci</i>.</li>
+      <li><b>Android (Chrome):</b> naskenuj QR → menu ⋮ → <i>Přidat na plochu / Instalovat aplikaci</i>.</li>
+      <li><b>iPhone/iPad (Safari):</b> naskenuj QR → tlačítko Sdílet → <i>Přidat na plochu</i>.</li>
+    </ol>
+    <p class="foot">Vyžaduje připojení k internetu — systém běží v cloudu (Vercel + Supabase). Admin první přihlášení: Bara / VetBara2026 (heslo si pak změň). Centrum odemkne odkaz/token od Admina.</p>
+  </div>
+</body></html>
