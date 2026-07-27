@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -128,6 +128,7 @@ function Info({ className }) { return <IconBase className={className}><circle cx
 function AlertTriangle({ className }) { return <IconBase className={className}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></IconBase>; }
 function Camera({ className }) { return <IconBase className={className}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></IconBase>; }
 function MapPin({ className }) { return <IconBase className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></IconBase>; }
+function Relocate({ className }) { return <IconBase className={className}><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3" /></IconBase>; }
 function ChevronDown({ className }) { return <IconBase className={className}><path d="M6 9l6 6 6-6" /></IconBase>; }
 function Check({ className }) { return <IconBase className={className}><path d="M20 6L9 17l-5-5" /></IconBase>; }
 function X({ className }) { return <IconBase className={className}><path d="M18 6L6 18" /><path d="M6 6l12 12" /></IconBase>; }
@@ -5920,8 +5921,9 @@ function FieldTabletPage() {
   const [mapZoom, setMapZoom] = useState(18);
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
-  const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18 });
+  const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18, panDelta: null });
   const treeDragRef = useRef(null);
+  const panLayerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
   const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
 
@@ -6309,15 +6311,18 @@ function FieldTabletPage() {
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
-  function mapTiles() {
-    const centerWorld = latLngToWorld(mapCenter.lat, mapCenter.lng);
+  // Memoized so a pan/typing re-render doesn't rebuild the whole tile array; the visible
+  // window is intentionally wider than the map so a single drag gesture (which pans via a
+  // CSS transform without re-rendering — see handleMapPointer*) rarely reaches the buffer edge.
+  const mapTiles = useMemo(() => {
+    const centerWorld = latLngToWorld(mapCenter.lat, mapCenter.lng, mapZoom);
     const centerTileX = Math.floor(centerWorld.x / 256);
     const centerTileY = Math.floor(centerWorld.y / 256);
     const offsetX = centerWorld.x - centerTileX * 256;
     const offsetY = centerWorld.y - centerTileY * 256;
     const tiles = [];
-    for (let dx = -3; dx <= 3; dx += 1) {
-      for (let dy = -2; dy <= 2; dy += 1) {
+    for (let dx = -4; dx <= 4; dx += 1) {
+      for (let dy = -3; dy <= 3; dy += 1) {
         const x = centerTileX + dx;
         const y = centerTileY + dy;
         tiles.push({
@@ -6328,7 +6333,8 @@ function FieldTabletPage() {
       }
     }
     return tiles;
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapLayer, mapZoom, mapCenter.lat, mapCenter.lng]);
 
   function mapPoint(latValue, lngValue) {
     const lat = Number(latValue);
@@ -6349,7 +6355,7 @@ function FieldTabletPage() {
   }
 
   function handleMapPointerDown(event) {
-    if (treeDragRef.current || event.target?.closest?.(".field-map-marker") || event.target?.closest?.(".field-map-toolbar")) return;
+    if (treeDragRef.current || event.target?.closest?.(".field-map-marker") || event.target?.closest?.(".field-map-toolbar") || event.target?.closest?.(".field-map-overlay-controls")) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const pointers = mapGestureRef.current.pointers;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -6357,8 +6363,14 @@ function FieldTabletPage() {
     mapGestureRef.current.startPointer = { x: event.clientX, y: event.clientY };
     mapGestureRef.current.startDistance = pointerDistance(pointers);
     mapGestureRef.current.startZoom = mapZoom;
+    mapGestureRef.current.panDelta = null;
   }
 
+  // Panning moves a CSS transform on the tile+marker layer instead of committing map state
+  // on every pointermove. That keeps a drag on the compositor (zero React re-renders of this
+  // very large component), which is the main fix for the slow redraw. The new centre is
+  // committed once on pointer-up; the stale transform is cleared in a layout effect the moment
+  // the re-render with the new centre commits, so there is no visible jump.
   function handleMapPointerMove(event) {
     if (treeDragRef.current) return;
     const gesture = mapGestureRef.current;
@@ -6374,17 +6386,26 @@ function FieldTabletPage() {
     if (!gesture.startCenterWorld || !gesture.startPointer) return;
     const dx = event.clientX - gesture.startPointer.x;
     const dy = event.clientY - gesture.startPointer.y;
-    setMapCenterOverride(worldToLatLng(gesture.startCenterWorld.x - dx, gesture.startCenterWorld.y - dy, mapZoom));
+    gesture.panDelta = { dx, dy };
+    if (panLayerRef.current) panLayerRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
   }
 
   function handleMapPointerEnd(event) {
     if (treeDragRef.current) return;
-    mapGestureRef.current.pointers.delete(event.pointerId);
-    if (mapGestureRef.current.pointers.size === 0) {
-      mapGestureRef.current.startCenterWorld = null;
-      mapGestureRef.current.startPointer = null;
-      mapGestureRef.current.startDistance = 0;
-      mapGestureRef.current.startZoom = mapZoom;
+    const gesture = mapGestureRef.current;
+    gesture.pointers.delete(event.pointerId);
+    if (gesture.pointers.size > 0) return;
+    const delta = gesture.panDelta;
+    const startCenterWorld = gesture.startCenterWorld;
+    gesture.startCenterWorld = null;
+    gesture.startPointer = null;
+    gesture.startDistance = 0;
+    gesture.startZoom = mapZoom;
+    gesture.panDelta = null;
+    if (delta && startCenterWorld && (delta.dx !== 0 || delta.dy !== 0)) {
+      setMapCenterOverride(worldToLatLng(startCenterWorld.x - delta.dx, startCenterWorld.y - delta.dy, mapZoom));
+    } else if (panLayerRef.current) {
+      panLayerRef.current.style.transform = "";
     }
   }
 
@@ -6397,6 +6418,12 @@ function FieldTabletPage() {
   function stopMapControlEvent(event) {
     event.stopPropagation();
   }
+
+  // Once a committed centre change has been painted, drop the drag transform in the same frame
+  // (runs before paint, so tiles/markers are already at the new centre → no flash back to old).
+  useLayoutEffect(() => {
+    if (panLayerRef.current) panLayerRef.current.style.transform = "";
+  }, [mapCenter.lat, mapCenter.lng]);
 
   function shouldDragMarkerPosition(event) {
     return Boolean(event.target?.closest?.(".field-marker-dot"));
@@ -6549,6 +6576,52 @@ function FieldTabletPage() {
     );
   }
 
+  // Rigidly translates the whole standard setup — exam centre + every tree in the row — so the
+  // centre lands on the current GPS fix while all relative offsets (the row geometry) are kept.
+  function moveEntireSetupToGps() {
+    const targetLat = Number(gpsPosition?.lat);
+    const targetLng = Number(gpsPosition?.lng);
+    if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) {
+      setError(tt("moveAllNoGps"));
+      return;
+    }
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
+      setError(tt("moveAllNoCentre"));
+      return;
+    }
+    const dLat = targetLat - centerLat;
+    const dLng = targetLng - centerLng;
+    if (!window.confirm(tt("moveAllConfirm").replace("{count}", String(fieldTrees.length)))) return;
+    const treesSnapshot = fieldTrees.map((tree) => ({
+      key: fieldTreeKey(tree),
+      lat: Number(tree.latitude),
+      lng: Number(tree.longitude),
+    }));
+    updateDraft((current) => {
+      const treeNotes = { ...(current.treeNotes || {}) };
+      treesSnapshot.forEach(({ key, lat, lng }) => {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        treeNotes[key] = {
+          ...(treeNotes[key] || {}),
+          latitude: Number((lat + dLat).toFixed(8)),
+          longitude: Number((lng + dLng).toFixed(8)),
+        };
+      });
+      return {
+        ...current,
+        examCenter: {
+          ...(fieldPackage?.examCenter || {}),
+          ...(current.examCenter || {}),
+          latitude: Number(targetLat.toFixed(8)),
+          longitude: Number(targetLng.toFixed(8)),
+        },
+        treeNotes,
+      };
+    });
+    setMapCenterOverride({ lat: targetLat, lng: targetLng });
+    setStatus(tt("moveAllDone"));
+  }
+
   function updateSelectedManagementData(patch) {
     if (!selectedTree) return;
     const base = selectedTree.practicingTreeAData || {};
@@ -6685,11 +6758,8 @@ function FieldTabletPage() {
                       <button type="button" className={activeTabletLevel === "Both" ? "active" : ""} onClick={() => switchTabletLevel("Both")}>{tt("both")}</button>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
-                      <button type="button" className="field-icon-button" onClick={() => setMapCenterOverride(defaultMapCenter)} title={tt("find")} aria-label={tt("find")}><Search className="h-4 w-4" /></button>
-                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
-                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
-                      <button type="button" className="field-icon-button" onClick={locateTablet} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
+                      {gpsPosition && <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>}
                       <button type="button" className={mapLayer === "cuzk" ? "active" : ""} onClick={() => setMapLayer("cuzk")} title={tt("cuzk")}><Layers className="h-3.5 w-3.5" />{tt("cuzk")}</button>
                       <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")} title={tt("osm")}><Layers className="h-3.5 w-3.5" />{tt("osm")}</button>
                     </div>
@@ -6710,26 +6780,33 @@ function FieldTabletPage() {
                   </div>
                 <div className="field-real-map" onPointerDown={handleMapPointerDown} onPointerMove={handleMapPointerMove} onPointerUp={handleMapPointerEnd} onPointerCancel={handleMapPointerEnd} onWheel={handleMapWheel}>
                   {error && <div className="field-map-message error"><AlertTriangle className="h-4 w-4" />{error}</div>}
-                  <div className="field-tile-layer" aria-hidden="true">
-                    {mapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
+                  <div className="field-pan-layer" ref={panLayerRef}>
+                    <div className="field-tile-layer" aria-hidden="true">
+                      {mapTiles.map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
+                    </div>
+                    {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
+                      const p = mapPoint(centerLat, centerLng);
+                      return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
+                    })()}
+                    {gpsPosition && (() => {
+                      const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
+                      return <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>;
+                    })()}
+                    {visibleFieldTrees.map((tree) => {
+                      const p = mapPoint(tree.latitude, tree.longitude);
+                      const key = fieldTreeKey(tree);
+                      const selected = fieldTreeKey(selectedTree || {}) === key;
+                      const visited = Boolean(draft?.treeNotes?.[key]?.visited);
+                      const direction = draft?.treeNotes?.[key]?.labelDirection || tree.labelDirection || "n";
+                      return <div key={key} className={`field-map-marker tree ${selected ? "selected" : ""} ${visited ? "visited" : ""}`} style={{ ...p, ...fieldMarkerVisualStyle(direction, tree.labelOffsetX, tree.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={(event) => startTreeMarkerDrag(key, event)} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>{fieldTreeLabel(tree.level, tree.code)}</button></div>;
+                    })}
+                  </div>
+                  <div className="field-map-overlay-controls" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
+                    <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
+                    <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
+                    <button type="button" className="field-map-overlay-button" onClick={locateTablet} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
                   </div>
                   <div className="field-map-attribution">{mapLayer === "cuzk" ? "© CUZK orthophoto" : "© OpenStreetMap contributors"}</div>
-                  {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
-                    const p = mapPoint(centerLat, centerLng);
-                    return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
-                  })()}
-                  {gpsPosition && (() => {
-                    const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
-                    return <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>;
-                  })()}
-                  {visibleFieldTrees.map((tree) => {
-                    const p = mapPoint(tree.latitude, tree.longitude);
-                    const key = fieldTreeKey(tree);
-                    const selected = fieldTreeKey(selectedTree || {}) === key;
-                    const visited = Boolean(draft?.treeNotes?.[key]?.visited);
-                    const direction = draft?.treeNotes?.[key]?.labelDirection || tree.labelDirection || "n";
-                    return <div key={key} className={`field-map-marker tree ${selected ? "selected" : ""} ${visited ? "visited" : ""}`} style={{ ...p, ...fieldMarkerVisualStyle(direction, tree.labelOffsetX, tree.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={(event) => startTreeMarkerDrag(key, event)} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>{fieldTreeLabel(tree.level, tree.code)}</button></div>;
-                  })}
                 </div>
               </div>
             </div>
