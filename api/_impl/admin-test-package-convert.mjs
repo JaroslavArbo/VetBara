@@ -6,22 +6,19 @@ import { makeCertificationPackage } from "./pdf-package.mjs";
 // client sends each PDF base64-encoded (no multipart), so it is verifiable and
 // portable to Vercel. Admin session required.
 //
-// pdf-parse is imported lazily (only when a PDF is actually decoded) so it never
-// loads on the auth/empty-payload paths and so any load/runtime failure surfaces
-// as a JSON error inside the handler's try/catch instead of a platform 500.
+// Text extraction via unpdf — a serverless-friendly pdfjs build (no DOM globals
+// like DOMMatrix, which crash pdf-parse/pdfjs on Vercel's Node runtime). Imported
+// lazily so it never loads on the auth/empty-payload paths and any failure
+// surfaces as a JSON error inside the handler's try/catch.
 async function pdfText(base64) {
   if (!base64) return "";
   const b64 = String(base64).includes(",") ? String(base64).split(",").pop() : base64;
   const buffer = Buffer.from(b64, "base64");
   if (!buffer.length) return "";
-  const { PDFParse } = await import("pdf-parse");
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return result?.text || "";
-  } finally {
-    await parser.destroy?.();
-  }
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const { text } = await extractText(pdf, { mergePages: true });
+  return text || "";
 }
 
 export default async function handler(request, response) {
