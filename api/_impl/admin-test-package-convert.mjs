@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import { envReady, supabase, sendJson, resolveAdminSession } from "../_lib/backend.mjs";
 import { summarizeCertificationPackage } from "../_lib/packages.mjs";
 import { makeCertificationPackage } from "./pdf-package.mjs";
@@ -6,11 +5,16 @@ import { makeCertificationPackage } from "./pdf-package.mjs";
 // Convert 4 exam PDFs into a certification package. Clean JSON transport: the
 // client sends each PDF base64-encoded (no multipart), so it is verifiable and
 // portable to Vercel. Admin session required.
+//
+// pdf-parse is imported lazily (only when a PDF is actually decoded) so it never
+// loads on the auth/empty-payload paths and so any load/runtime failure surfaces
+// as a JSON error inside the handler's try/catch instead of a platform 500.
 async function pdfText(base64) {
   if (!base64) return "";
   const b64 = String(base64).includes(",") ? String(base64).split(",").pop() : base64;
   const buffer = Buffer.from(b64, "base64");
   if (!buffer.length) return "";
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
