@@ -541,6 +541,7 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "examiner.identity.title": "Confirm Examiner identity",
+  "examiner.identity.idLabel": "Examiner ID",
   "examiner.identity.name": "Examiner name",
   "examiner.identity.registrationId": "Registration ID",
   "examiner.identity.confirmed": "Identity confirmed",
@@ -616,6 +617,7 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "examiner.identity.title": "Potvrzení identity zkoušejícího",
+  "examiner.identity.idLabel": "ID zkoušejícího",
   "examiner.identity.name": "Jméno zkoušejícího",
   "examiner.identity.registrationId": "Registrační ID",
   "examiner.identity.confirmed": "Identita potvrzena",
