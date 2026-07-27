@@ -70,6 +70,24 @@ export default async function handler(request, response) {
       return sendJson(response, 200, { ok: true, syncId: latest.syncId || null, fieldPreparationUpdated: true, fieldPreparation: merged });
     }
 
+    // Scan-inbox: phone (scan-capture) uploads photos; Centre polls + deletes.
+    if (route === "scan-inbox" && request.method === "POST") {
+      const dataUrl = request.body?.dataUrl;
+      if (typeof dataUrl !== "string" || !dataUrl) return sendJson(response, 400, { error: "Missing dataUrl" });
+      const id = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+      await supabase("scan_inbox", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ id, exam_id: examId, data_url: dataUrl, captured_at: request.body?.capturedAt || new Date().toISOString(), received_at: new Date().toISOString() }) });
+      return sendJson(response, 200, { ok: true, id });
+    }
+    if (route === "scan-inbox" && request.method === "GET") {
+      const rows = await supabase(`scan_inbox?exam_id=eq.${encodeURIComponent(examId)}&select=id,data_url,captured_at,received_at&order=received_at.asc`);
+      return sendJson(response, 200, { items: rows.map((r) => ({ id: r.id, dataUrl: r.data_url, capturedAt: r.captured_at, receivedAt: r.received_at })) });
+    }
+    if (route.startsWith("scan-inbox/") && request.method === "DELETE") {
+      const id = decodeURIComponent(route.split("/")[1] || "");
+      await supabase(`scan_inbox?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      return sendJson(response, 200, { ok: true });
+    }
+
     if (request.method === "POST" && route === "field-tablet-sync") {
       const body = request.body;
       if (!body || typeof body !== "object") return sendJson(response, 400, { error: "Invalid tablet sync payload" });
