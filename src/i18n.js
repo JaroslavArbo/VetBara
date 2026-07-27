@@ -1995,6 +1995,12 @@ Object.assign(translations.en, {
   "centre.activePackage.loadingFile": "Loading {name}...",
   "centre.activePackage.invalidFile": "The file does not look like a valid Admin.vet package.",
   "centre.activePackage.loadFailed": "Loading the file failed.",
+  "vet.readError.empty": "The selected file could not be read (it came through empty). If it is stored in OneDrive/iCloud as an \"online-only\" file, right-click it → \"Always keep on this device\" (or open it once to download it), then pick it again. A local copy (e.g. in Downloads) always works.",
+  "vet.readError.unreadable": "The file could not be read from disk. If it is a OneDrive/iCloud \"online-only\" file, download it first (right-click → \"Always keep on this device\") or use a local copy, then try again.",
+  "vet.readError.badzip": "The .vet archive could not be opened — it may be corrupted or only partially downloaded. Re-download it and try again.",
+  "vet.readError.badjson": "The .vet file is damaged (its contents are not valid). Re-export it from Admin or use another copy.",
+  "vet.readError.nopackage": "This .vet archive does not contain an exam package.",
+  "vet.readError.generic": "The file could not be loaded.",
   "centre.activePackage.readFailed": "The file could not be read.",
   "centre.activePackage.loadButton": "Load Admin.vet"
 });
@@ -2297,6 +2303,12 @@ Object.assign(translations.cs, {
   "centre.activePackage.loadingFile": "Načítám {name}...",
   "centre.activePackage.invalidFile": "Soubor nevypadá jako platný Admin.vet balíček.",
   "centre.activePackage.loadFailed": "Načtení souboru selhalo.",
+  "vet.readError.empty": "Soubor se nepodařilo přečíst (přišel prázdný). Pokud je v OneDrive/iCloudu jako „pouze online“, klikni na něj pravým tlačítkem → „Vždy ponechat v tomto zařízení“ (nebo ho jednou otevři, ať se stáhne) a vyber ho znovu. Lokální kopie (např. ve Stažených) funguje vždy.",
+  "vet.readError.unreadable": "Soubor se nepodařilo přečíst z disku. Jde-li o „pouze online“ soubor z OneDrive/iCloudu, nejprve ho stáhni (pravý klik → „Vždy ponechat v tomto zařízení“) nebo použij lokální kopii a zkus to znovu.",
+  "vet.readError.badzip": "Archiv .vet se nepodařilo otevřít — může být poškozený nebo stažený jen zčásti. Stáhni ho znovu a zkus to znovu.",
+  "vet.readError.badjson": "Soubor .vet je poškozený (jeho obsah není platný). Vyexportuj ho znovu z Admina nebo použij jinou kopii.",
+  "vet.readError.nopackage": "Tento archiv .vet neobsahuje zkušební balíček.",
+  "vet.readError.generic": "Soubor se nepodařilo načíst.",
   "centre.activePackage.readFailed": "Soubor se nepodařilo přečíst.",
   "centre.activePackage.loadButton": "Načíst Admin.vet"
 });

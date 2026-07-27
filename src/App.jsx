@@ -620,6 +620,22 @@ function parseTestPackage(text, fileName = "", mimeType = "") {
   return { ...imported, questionCount };
 }
 
+// Maps a readVetPackage() failure to a localized, actionable message. The technical detail is
+// kept so a genuinely malformed file stays debuggable. The most common cause is an unreadable
+// file (a OneDrive/iCloud "online-only" copy handed to the browser empty), not a bad package.
+function vetReadErrorMessage(error, t) {
+  const byCode = {
+    empty: t("vet.readError.empty"),
+    unreadable: t("vet.readError.unreadable"),
+    badzip: t("vet.readError.badzip"),
+    badjson: t("vet.readError.badjson"),
+    nopackage: t("vet.readError.nopackage"),
+  };
+  const base = error?.code && byCode[error.code];
+  if (base) return error?.message ? `${base} (${error.message})` : base;
+  return error?.message || t("vet.readError.generic");
+}
+
 function nowStamp() { return new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 export function tomorrowIsoDate() {
   const d = new Date();
@@ -3403,7 +3419,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
       loadFromPackage(data);
       setLocalStatus(tf("admin.authoring.loadedFromFile", { fileName: file.name, packageId: data.packageId || t("admin.authoring.packageNoId") }));
     } catch (error) {
-      setLocalError(error.message || t("admin.authoring.fileLoadFailed"));
+      setLocalError(vetReadErrorMessage(error, t));
       setLocalStatus("");
     }
   }
@@ -7138,7 +7154,7 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
       }
       applyActivePackageData(data);
     } catch (error) {
-      setActivePackagePreviewError(error.message || t("centre.activePackage.loadFailed"));
+      setActivePackagePreviewError(vetReadErrorMessage(error, t));
       setActivePackagePreviewStatus("");
     }
   }
