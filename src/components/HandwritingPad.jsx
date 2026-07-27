@@ -82,6 +82,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const [color, setColor] = useState(COLORS[0].value);
   const [size, setSize] = useState(SIZES[1].value);
   const [eraserMode, setEraserMode] = useState(false);
+  const [maximized, setMaximized] = useState(false);
 
   // touch-action:none on an <svg> is not honoured by every tablet browser, and React's
   // onTouch*/onPointer* handlers are passive — neither can stop the browser's touch-scroll.
@@ -226,16 +227,21 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const currentPath = currentPoints && currentPoints.length > 1 ? getSvgPathFromStroke(getStroke(currentPoints, { ...STROKE_OPTIONS, size })) : "";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="flex max-h-[95vh] w-full max-w-4xl flex-col overflow-auto rounded-2xl bg-white p-4 shadow-xl">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 ${maximized ? "p-0" : "p-4"}`}>
+      <div className={`flex w-full flex-col overflow-auto bg-white shadow-xl ${maximized ? "h-full max-h-none max-w-none rounded-none p-3" : "max-h-[95vh] max-w-4xl rounded-2xl p-4"}`}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
             {helperText && <p className="mt-1 text-sm text-slate-600">{helperText}</p>}
           </div>
-          <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
-            <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" onClick={() => setMaximized((v) => !v)} variant="outline" className="rounded-2xl">
+              {maximized ? tr(t, "handwriting.restore", "Restore") : tr(t, "handwriting.maximize", "Maximize")}
+            </Button>
+            <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
+              <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
+            </Button>
+          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -284,7 +290,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`h-[420px] w-full rounded-2xl border bg-white ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
+          className={`w-full rounded-2xl border bg-white ${maximized ? "min-h-0 flex-1" : "h-[420px]"} ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
           style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none" }}
         >
           {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} preserveAspectRatio="xMidYMid meet" />}

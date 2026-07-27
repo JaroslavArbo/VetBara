@@ -1649,7 +1649,9 @@ Object.assign(translations.en, {
   "handwriting.eraser": "Eraser",
   "handwriting.undo": "Undo",
   "handwriting.clearAll": "Clear all",
-  "handwriting.save": "Save"
+  "handwriting.save": "Save",
+  "handwriting.maximize": "Full screen",
+  "handwriting.restore": "Restore"
 });
 
 Object.assign(translations.en, {
@@ -1710,7 +1712,9 @@ Object.assign(translations.cs, {
   "handwriting.eraser": "Guma",
   "handwriting.undo": "Zpět",
   "handwriting.clearAll": "Smazat vše",
-  "handwriting.save": "Uložit"
+  "handwriting.save": "Uložit",
+  "handwriting.maximize": "Celá obrazovka",
+  "handwriting.restore": "Zmenšit"
 });
 
 Object.assign(translations.cs, {
@@ -1998,6 +2002,11 @@ Object.assign(translations.en, {
   "candidateField.treePreparation": "Tree preparation",
   "candidateField.selectedTree": "Selected tree",
   "candidateField.candidateNotes": "Candidate notes",
+  "candidateField.sketch": "Sketch",
+  "candidateField.addSketch": "Add sketch",
+  "candidateField.editSketch": "Edit sketch",
+  "candidateField.removeSketch": "Remove sketch",
+  "candidateField.sketchHelper": "Draw with a stylus or finger. Use full screen for more space.",
   "candidateField.candidateNotesPlaceholder": "Write your own notes for this tree here.",
   "candidateField.noTreesAvailable": "No trees A-D are available in the field package for this level.",
   "report.locallySaved": "Saved locally",
@@ -2306,6 +2315,11 @@ Object.assign(translations.cs, {
   "candidateField.treePreparation": "Příprava stromů",
   "candidateField.selectedTree": "Vybraný strom",
   "candidateField.candidateNotes": "Poznámky kandidáta",
+  "candidateField.sketch": "Náčrt",
+  "candidateField.addSketch": "Přidat náčrt",
+  "candidateField.editSketch": "Upravit náčrt",
+  "candidateField.removeSketch": "Odebrat náčrt",
+  "candidateField.sketchHelper": "Kreslete stylusem nebo prstem. Pro více místa použijte celou obrazovku.",
   "candidateField.candidateNotesPlaceholder": "Sem napište své poznámky k tomuto stromu.",
   "candidateField.noTreesAvailable": "V terénním balíčku nejsou pro tuto úroveň dostupné žádné stromy A-D.",
   "report.locallySaved": "Lokálně uloženo",

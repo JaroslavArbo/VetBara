@@ -127,35 +127,23 @@ function objectPayload(value) {
 }
 
 // Every role opens on its own device, so the persisted Centre setup (which holds the imported
-// Admin.vet test package: written/outdoor banks + activeAdminPackageMeta) must travel with the
-// session bootstrap — otherwise an Examiner/Candidate sees "exam data not available yet" because
-// their client never received the package. Resolve the session subject's exam event, then return
-// that event's stored testPackage. Best-effort: any failure just yields null (demo/offline).
+// Admin.vet test package: written/outdoor banks + activeAdminPackageMeta + outdoor briefing) must
+// travel with the session bootstrap — otherwise an Examiner/Candidate sees "exam data not
+// available yet", or an out-of-date package.
+//
+// One exam runs at a time, so the source of truth is the most recently updated *current* exam
+// event that actually carries a test package. We deliberately do NOT key off a per-subject
+// exam_event lookup: a candidate/examiner row can linger under an older exam event (upserts key
+// on exam_event_id+id, so a new event makes a new row), which would pin them to a stale package
+// even after the Centre re-imported. Best-effort: any failure yields null (demo/offline).
 async function loadCentreSetupTestPackage(session) {
   try {
-    let examEventId = null;
-    if (session.role === "Examiner") {
-      const rows = await supabase(`examiners?id=eq.${encodeURIComponent(session.subjectId)}&select=exam_event_id&order=updated_at.desc&limit=1`);
-      examEventId = rows[0]?.exam_event_id ?? null;
-    } else if (session.role === "Candidate") {
-      const rows = await supabase(`candidates?id=eq.${encodeURIComponent(session.subjectId)}&select=exam_event_id&order=updated_at.desc&limit=1`);
-      examEventId = rows[0]?.exam_event_id ?? null;
-    } else if (session.role === "Centre") {
-      const rows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(session.subjectId)}&status=eq.current&select=id&limit=1`);
-      examEventId = rows[0]?.id ?? null;
+    const events = await supabase("exam_events?status=eq.current&select=payload,updated_at&order=updated_at.desc&limit=20");
+    for (const event of events) {
+      const testPackage = objectPayload(event?.payload).testPackage;
+      if (testPackage && typeof testPackage === "object") return testPackage;
     }
-
-    let payload = null;
-    if (examEventId) {
-      const events = await supabase(`exam_events?id=eq.${encodeURIComponent(examEventId)}&select=payload&limit=1`);
-      payload = events[0]?.payload ?? null;
-    } else {
-      // Fallback for single-centre deployments: the most recent current exam event.
-      const events = await supabase("exam_events?status=eq.current&select=payload&order=updated_at.desc&limit=1");
-      payload = events[0]?.payload ?? null;
-    }
-
-    return objectPayload(payload).testPackage ?? null;
+    return null;
   } catch (error) {
     console.warn("Bootstrap could not load Centre setup test package", error?.message || error);
     return null;
