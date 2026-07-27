@@ -7,6 +7,7 @@ function summary(row) {
 
 export default async function handler(request, response) {
   if (!envReady()) return sendJson(response, 200, { ok: true, history: [] });
+  if (!(await resolveAdminSession(request.headers?.["x-vetbara-session"] || request.body?.sessionToken))) return sendJson(response, 401, { ok: false, error: "Admin session required" });
   const raw = request.query?.path;
   const parts = (Array.isArray(raw) ? raw.join("/") : String(raw || "")).split("/").filter(Boolean);
   const tail = parts.slice(1); // drop "package-history"

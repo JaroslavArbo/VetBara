@@ -3339,7 +3339,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
 
   async function fetchJsonIfOk(url) {
     try {
-      const response = await fetch(url, { cache: "no-store" });
+      const response = await fetch(url, { cache: "no-store", headers: { "x-vetbara-session": admin?.sessionToken || "" } });
       const text = await response.text();
       let data = null;
       try {
@@ -3503,7 +3503,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   async function loadHistory() {
     setHistoryLoading(true);
     try {
-      const response = await fetch("/api/admin/package-history/list", { cache: "no-store" });
+      const response = await fetch("/api/admin/package-history/list", { cache: "no-store", headers: { "x-vetbara-session": admin?.sessionToken || "" } });
       const data = await response.json();
       const entries = Array.isArray(data.history) ? data.history : [];
       entries.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
@@ -3545,7 +3545,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   async function copyHistoryEntry(id) {
     setLocalError("");
     try {
-      const response = await fetch(`/api/admin/package-history/${encodeURIComponent(id)}`, { cache: "no-store" });
+      const response = await fetch(`/api/admin/package-history/${encodeURIComponent(id)}`, { cache: "no-store", headers: { "x-vetbara-session": admin?.sessionToken || "" } });
       const data = await response.json();
       if (!response.ok || !data?.entry?.package) throw new Error(data.error || t("admin.authoring.historyLoadFailed"));
       loadFromPackage(data.entry.package);
@@ -4014,7 +4014,7 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
   async function loadCentreLinks() {
     setLinksLoading(true);
     try {
-      const response = await fetch("/api/admin/centre-links/list", { cache: "no-store" });
+      const response = await fetch("/api/admin/centre-links/list", { cache: "no-store", headers: { "x-vetbara-session": admin?.sessionToken || "" } });
       const data = await response.json();
       setLinks(Array.isArray(data.links) ? data.links : []);
     } catch {
