@@ -122,6 +122,46 @@ function buildBootstrapPackage(session) {
   return null;
 }
 
+function objectPayload(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+// Every role opens on its own device, so the persisted Centre setup (which holds the imported
+// Admin.vet test package: written/outdoor banks + activeAdminPackageMeta) must travel with the
+// session bootstrap — otherwise an Examiner/Candidate sees "exam data not available yet" because
+// their client never received the package. Resolve the session subject's exam event, then return
+// that event's stored testPackage. Best-effort: any failure just yields null (demo/offline).
+async function loadCentreSetupTestPackage(session) {
+  try {
+    let examEventId = null;
+    if (session.role === "Examiner") {
+      const rows = await supabase(`examiners?id=eq.${encodeURIComponent(session.subjectId)}&select=exam_event_id&order=updated_at.desc&limit=1`);
+      examEventId = rows[0]?.exam_event_id ?? null;
+    } else if (session.role === "Candidate") {
+      const rows = await supabase(`candidates?id=eq.${encodeURIComponent(session.subjectId)}&select=exam_event_id&order=updated_at.desc&limit=1`);
+      examEventId = rows[0]?.exam_event_id ?? null;
+    } else if (session.role === "Centre") {
+      const rows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(session.subjectId)}&status=eq.current&select=id&limit=1`);
+      examEventId = rows[0]?.id ?? null;
+    }
+
+    let payload = null;
+    if (examEventId) {
+      const events = await supabase(`exam_events?id=eq.${encodeURIComponent(examEventId)}&select=payload&limit=1`);
+      payload = events[0]?.payload ?? null;
+    } else {
+      // Fallback for single-centre deployments: the most recent current exam event.
+      const events = await supabase("exam_events?status=eq.current&select=payload&order=updated_at.desc&limit=1");
+      payload = events[0]?.payload ?? null;
+    }
+
+    return objectPayload(payload).testPackage ?? null;
+  } catch (error) {
+    console.warn("Bootstrap could not load Centre setup test package", error?.message || error);
+    return null;
+  }
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") return sendJson(response, 405, { error: "Method not allowed" });
 
@@ -146,10 +186,15 @@ export default async function handler(request, response) {
     const bootstrapPackage = buildBootstrapPackage(session);
     if (!bootstrapPackage) return sendJson(response, 404, { error: "Session subject not found" });
 
+    // Attach the persisted Centre setup's test package so every role receives the imported
+    // Admin.vet content (only when Supabase is configured; demo mode has no persistence).
+    const testPackage = envReady() ? await loadCentreSetupTestPackage(session) : null;
+
     return sendJson(response, 200, {
       role: session.role,
       subjectId: session.subjectId,
       package: bootstrapPackage,
+      centreSetup: testPackage ? { testPackage } : null,
     });
   } catch (error) {
     console.error("Session bootstrap failed", error);

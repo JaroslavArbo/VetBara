@@ -5980,6 +5980,13 @@ function FieldTabletPage() {
     };
   }, []);
 
+  // Auto-load the field package on open so the map is populated and "Poslat data do Centra" works
+  // without a separate offline-download step. Runs once; offline it keeps any local copy.
+  useEffect(() => {
+    if (!fieldPackage) downloadForOffline();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (fieldPackage && !draft) {
       const initialDraft = {
@@ -6166,13 +6173,15 @@ function FieldTabletPage() {
     };
   }
 
-  async function syncBack() {
+  // "Poslat data do Centra" — a single, always-available push of the current field-prep state to
+  // the Centre. Unlike the old sync it does not require the offline-download step first (it loads
+  // the package on demand) and it is not gated behind "all trees checked" — station prep must be
+  // sendable at any point.
+  async function sendDataToCentre() {
+    if (syncing) return;
     if (!fieldPackage || !draft) {
-      setError("Download the field package and store local data first.");
-      return;
-    }
-    if (!allRequiredChecked) {
-      setError("Sync is enabled only after all required trees are checked.");
+      await downloadForOffline();
+      setStatus(tt("packageLoadedNowSend"));
       return;
     }
     setSyncing(true);
@@ -6780,19 +6789,14 @@ function FieldTabletPage() {
                       <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")} title={tt("osm")}><Layers className="h-3.5 w-3.5" />{tt("osm")}</button>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("primaryActions")}>
-                      <button type="button" onClick={downloadForOffline} className="field-primary-button"><CloudOff className="h-4 w-4" />{tt("downloadOffline")}</button>
-                      <button type="button" onClick={openFieldMapsPdf} disabled={!readyOffline} className="field-ghost-button"><FileSpreadsheet className="h-4 w-4" />{tt("pdf")}</button>
-                      <button type="button" onClick={syncBack} disabled={syncing || !readyOffline || !allRequiredChecked} title={!allRequiredChecked ? tt("syncDisabledUntilChecked") : (lastSyncOk ? "Last sync succeeded." : "")} className={`field-ghost-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("syncing") : tt("sync")}</button>
+                      <button type="button" onClick={sendDataToCentre} disabled={syncing} className={`field-primary-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("sending") : tt("sendToCentre")}</button>
+                      <button type="button" onClick={openFieldMapsPdf} className="field-ghost-button"><FileSpreadsheet className="h-4 w-4" />{tt("pdf")}</button>
                     </div>
                     <div className="field-toolbar-group field-toolbar-lang" role="group" aria-label={tt("language")}>
                       <button type="button" className="field-icon-button" onClick={isFullscreen ? exitTabletFullscreen : requestTabletFullscreen} title={tt(isFullscreen ? "exitFullscreen" : "fullscreen")} aria-label={tt(isFullscreen ? "exitFullscreen" : "fullscreen")}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>
                       <button type="button" className={fieldTabletLocale === "en" ? "active" : ""} onClick={() => changeFieldTabletLocale("en")}>EN</button>
                       <button type="button" className={fieldTabletLocale === "cs" ? "active" : ""} onClick={() => changeFieldTabletLocale("cs")}>CS</button>
                     </div>
-                    <span className={`field-connectivity-pill ${online ? "online" : "warn"}`}>
-                      {online ? <Wifi className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
-                      {online ? tt("online") : tt("offline")}
-                    </span>
                   </div>
                 <div className="field-real-map" onPointerDown={handleMapPointerDown} onPointerMove={handleMapPointerMove} onPointerUp={handleMapPointerEnd} onPointerCancel={handleMapPointerEnd} onWheel={handleMapWheel}>
                   {error && <div className="field-map-message error"><AlertTriangle className="h-4 w-4" />{error}</div>}

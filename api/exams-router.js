@@ -62,12 +62,16 @@ export default async function handler(request, response) {
 
     if (request.method === "GET" && route === "field-tablet-sync/latest") {
       const current = await readPreparation(examId);
-      if (!current) return sendJson(response, 404, { error: "Field preparation not found" });
       const latest = await readLatestSync(examId);
-      if (!latest) return sendJson(response, 200, { ok: true, fieldPreparation: current, syncId: null, message: "No tablet sync package found" });
-      const merged = mergeTabletSyncIntoPreparation(current, latest, examId);
-      await writePreparation(examId, merged);
-      return sendJson(response, 200, { ok: true, syncId: latest.syncId || null, fieldPreparationUpdated: true, fieldPreparation: merged });
+      if (!latest) {
+        if (!current) return sendJson(response, 404, { error: "Field preparation not found" });
+        return sendJson(response, 200, { ok: true, fieldPreparation: current, syncId: null, message: "No tablet sync package found" });
+      }
+      // Works even when the Centre never saved a preparation first — the tablet's snapshot in the
+      // sync payload is enough to rebuild the whole preparation.
+      const merged = mergeTabletSyncIntoPreparation(current, latest, examId) || current;
+      if (merged) await writePreparation(examId, merged);
+      return sendJson(response, 200, { ok: true, syncId: latest.syncId || null, fieldPreparationUpdated: Boolean(merged), fieldPreparation: merged });
     }
 
     // Scan-inbox: phone (scan-capture) uploads photos; Centre polls + deletes.
@@ -96,12 +100,11 @@ export default async function handler(request, response) {
       const stored = { ...body, examId: body.examId || examId, syncId, receivedAt };
       await supabase("field_tablet_syncs", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ sync_id: syncId, exam_id: examId, payload: stored, received_at: receivedAt }) });
       const current = await readPreparation(examId);
-      let fieldPreparation = current;
-      if (current) {
-        fieldPreparation = mergeTabletSyncIntoPreparation(current, stored, examId);
-        await writePreparation(examId, fieldPreparation);
-      }
-      return sendJson(response, 200, { ok: true, syncId, receivedAt, fieldPreparationUpdated: Boolean(current), fieldPreparation });
+      // Merge into (or create from) the stored preparation so the Centre can always load it back,
+      // even if it had not saved a preparation before the tablet synced.
+      const fieldPreparation = mergeTabletSyncIntoPreparation(current, stored, examId) || current;
+      if (fieldPreparation) await writePreparation(examId, fieldPreparation);
+      return sendJson(response, 200, { ok: true, syncId, receivedAt, fieldPreparationUpdated: Boolean(fieldPreparation), fieldPreparation });
     }
 
     return sendJson(response, 405, { error: "Method not allowed" });
