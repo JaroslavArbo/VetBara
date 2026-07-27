@@ -1,0 +1,7 @@
+#!/bin/bash
+URL="https://vet-bara.vercel.app/?role=Centre"
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+EDGE="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+if [ -x "$CHROME" ]; then exec "$CHROME" --app="$URL"
+elif [ -x "$EDGE" ]; then exec "$EDGE" --app="$URL"
+else exec open "$URL"; fi

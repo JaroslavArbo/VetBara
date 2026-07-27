@@ -1,3 +1,6 @@
 #!/bin/bash
-# Otevře VetBara Centrum v prohlížeči. Spusť: bash "Spustit Centrum - Linux.sh"
-xdg-open "https://vet-bara.vercel.app/?role=Centre" >/dev/null 2>&1 &
+URL="https://vet-bara.vercel.app/?role=Centre"
+for B in google-chrome google-chrome-stable chromium chromium-browser microsoft-edge; do
+  if command -v "$B" >/dev/null 2>&1; then exec "$B" --app="$URL"; fi
+done
+xdg-open "$URL" >/dev/null 2>&1 &
