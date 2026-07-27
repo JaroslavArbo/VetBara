@@ -9553,6 +9553,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const tree = draft[activeReportTree];
   const [photoStatus, setPhotoStatus] = useState("");
   const [reportStep, setReportStep] = useState("field");
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [photoViewer, setPhotoViewer] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -9660,8 +9661,13 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   }
 
   function handleSubmitReport() {
-    const confirmed = window.confirm(t("report.submitConfirmation"));
-    if (!confirmed) return;
+    // In-app confirmation modal instead of window.confirm — native dialogs are silently
+    // suppressed in some tablet/in-app browsers, which made the submit button look dead.
+    setSubmitConfirmOpen(true);
+  }
+
+  function confirmSubmitReport() {
+    setSubmitConfirmOpen(false);
     submitReport();
   }
 
@@ -9829,9 +9835,6 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         )}
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={saveFieldDataLocally} variant="outline" className="rounded-2xl">
-            {t("report.saveFieldDataLocally")}
-          </Button>
           <Button onClick={() => setReportStep("write")} className="rounded-2xl">
             {t("report.continueWriting")}
           </Button>
@@ -9939,6 +9942,19 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   return (
     <>
       {reportStep === "field" ? FieldCollectionStep() : ReportWritingStep()}
+
+      {submitConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t("report.submitAndClose")}</h3>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{t("report.submitConfirmation")}</div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button type="button" onClick={() => setSubmitConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+              <Button type="button" onClick={confirmSubmitReport} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" />{t("report.submitAndClose")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {photoViewer && (
         <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950 p-4 text-white">
