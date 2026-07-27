@@ -636,6 +636,36 @@ function vetReadErrorMessage(error, t) {
   return error?.message || t("vet.readError.generic");
 }
 
+// Written question text imported from PDFs mixes two kinds of line breaks: genuine structure
+// (bulleted sub-items, numbered/lettered lists, a list intro ending in a colon, blank-line
+// paragraph breaks) and accidental ones (the source PDF wrapped a sentence across lines). This
+// keeps the genuine breaks and rejoins the accidental mid-sentence wraps, so questions read as
+// clean paragraphs while real lists still stack. Shared by the candidate test and the examiner
+// review so both show the same thing. Pair with `whitespace-pre-wrap` in the markup.
+function cleanQuestionText(text) {
+  const raw = String(text ?? "");
+  if (!raw.includes("\n")) return raw.trim();
+  const lines = raw.split(/\r?\n/).map((line) => line.trim());
+  // A line that begins a list item: •/‣/◦/▪/·, or "- "/"* " (dash/star + space), or an
+  // enumerator like "1." "2)" "a)" "(i)" — i.e. a real, intentional new line.
+  const listStart = /^(?:[•‣◦▪·]|[-–*]\s|\(?[0-9]{1,3}[.)]\s|\(?[a-z][.)]\s|\(?[ivxlcdm]{1,4}[.)]\s)/i;
+  // A previous line that legitimately ends a line: sentence punctuation or a list-intro colon.
+  const keepBreakAfter = /[.!?:;]$/;
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (i === 0) { out.push(line); continue; }
+    const prev = out.length ? out[out.length - 1] : "";
+    if (line === "" || prev === "" || listStart.test(line) || keepBreakAfter.test(prev)) {
+      out.push(line);
+    } else {
+      // Accidental mid-sentence wrap → rejoin with the previous line.
+      out[out.length - 1] = `${prev} ${line}`.replace(/\s{2,}/g, " ").trim();
+    }
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function nowStamp() { return new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 export function tomorrowIsoDate() {
   const d = new Date();
@@ -4660,10 +4690,33 @@ function formatHalfPointScore(value) {
   return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
 }
 
+// Fixed running order for the outdoor session, regardless of the order sections happen to sit
+// in the imported package: general oral questions first, then any numbered "Part/Část N"
+// (incl. plain "Exercise N"), then the per-tree sections A → B → C → D, then anything else, with
+// the catch-all "generic" bucket last. Ties keep their original order (e.g. two Tree B parts).
+function outdoorSectionRank(section) {
+  const s = String(section || "").toLowerCase();
+  if (/oral/.test(s)) return 0;
+  const tree = s.match(/(?:^|[^\p{L}])(?:tree|strom)\s*([a-d])(?![\p{L}])/u);
+  if (tree) return 200 + (tree[1].charCodeAt(0) - 97);
+  // Word-start prefix instead of \b: \b does not work before non-ASCII words like "část".
+  const part = s.match(/(?:^|[^\p{L}])(?:part|část|cast|čast|exercise|cvičení|cviceni|úkol|ukol)\s*(\d+)/u);
+  if (part) return 100 + Number(part[1]);
+  if (s === "generic") return 900;
+  return 500;
+}
+
+function sortOutdoorSections(sections) {
+  return sections
+    .map((section, index) => ({ section, index, rank: outdoorSectionRank(section) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.section);
+}
+
 function effectiveOutdoorSectionsForLevel(activeOutdoorItems, level) {
   const levelItems = effectiveOutdoorItemsForLevel(activeOutdoorItems, level);
   const sections = Object.keys(levelItems);
-  return sections.length ? sections : OUTDOOR_SECTIONS[level] ?? [];
+  return sections.length ? sortOutdoorSections(sections) : OUTDOOR_SECTIONS[level] ?? [];
 }
 
 function outdoorSectionTitle(section) {
@@ -9143,6 +9196,24 @@ function activePackageSummary(pkg) {
   };
 }
 
+// The per-level outdoor briefing (title/preface/candidateIntro) is dropped by the outdoor bank
+// normalization, so carry it here — this meta object is the one thing that survives all the way
+// from the Centre's Admin.vet import through centre-setup persistence and the session bootstrap
+// to the Examiner, with no extra plumbing.
+function outdoorIntroFromPackage(pkg) {
+  const outdoor = pkg?.outdoor && typeof pkg.outdoor === "object" ? pkg.outdoor : {};
+  const result = {};
+  for (const level of ["Practicing", "Consulting"]) {
+    const lvl = outdoor[level];
+    if (!lvl || typeof lvl !== "object") continue;
+    const title = String(lvl.title || "").trim();
+    const preface = String(lvl.preface || "").trim();
+    const candidateIntro = String(lvl.candidateIntro || "").trim();
+    if (title || preface || candidateIntro) result[level] = { title, preface, candidateIntro };
+  }
+  return result;
+}
+
 function activePackageRuntimeMeta(pkg) {
   if (!pkg?.packageId) return null;
 
@@ -9163,6 +9234,7 @@ function activePackageRuntimeMeta(pkg) {
       Practicing: levelMeta("Practicing"),
       Consulting: levelMeta("Consulting"),
     },
+    outdoorIntro: outdoorIntroFromPackage(pkg),
   };
 }
 
@@ -9382,7 +9454,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
           {questions.map((q, i) => (
             <div key={q.id} className="rounded-xl border p-3">
               <div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div>
-              <div className="mt-1 whitespace-pre-wrap font-medium leading-relaxed">{q.text}</div>
+              <div className="mt-1 whitespace-pre-wrap font-medium leading-relaxed">{cleanQuestionText(q.text)}</div>
               {Array.isArray(q.options) && q.options.length > 0 ? (
                 <div className="mt-2 space-y-2">
                   {q.options.map((option, optionIndex) => {
@@ -11294,7 +11366,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                   </div>
                 </div>
 
-                <div className="font-medium">{question.text}</div>
+                <div className="whitespace-pre-wrap font-medium leading-relaxed">{cleanQuestionText(question.text)}</div>
 
                 {isSectionAChoice && isChoice ? (
                   <div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm">
@@ -11991,6 +12063,17 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }
   }, [activeOutdoorSection, effectiveActiveOutdoorSection, outdoorSections, setActiveOutdoorSection]);
 
+  // "Text to read at the start of the outdoor session" (package preface + candidate intro for
+  // this level). Shown in a dismissable panel that auto-opens when the examiner opens a
+  // candidate's outdoor form, and can be reopened from the header.
+  const outdoorIntro = activeAdminPackageMeta?.outdoorIntro?.[selectedCandidate.level] || null;
+  const outdoorIntroText = outdoorIntro ? [outdoorIntro.preface, outdoorIntro.candidateIntro].filter(Boolean).join("\n\n") : "";
+  const [introOpen, setIntroOpen] = useState(false);
+  useEffect(() => {
+    setIntroOpen(Boolean(outdoorIntroText));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCandidate.id, selectedCandidate.level, outdoorIntroText]);
+
   if (!activeAdminPackageMeta || isOutdoorFallback) {
     return (
       <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
@@ -12004,6 +12087,24 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
 
   const total = outdoorSections.reduce((sum, section) => sum + outdoorTotal(selectedCandidate.id, selectedCandidate.level, section), 0);
   const max = outdoorSections.reduce((sum, section) => sum + outdoorMax(selectedCandidate.level, section), 0) || scoreLimits(selectedCandidate.level).outdoorMax;
+
+  const introModal = introOpen && outdoorIntroText ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-auto rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("outdoor.intro.eyebrow")}</div>
+            <h3 className="text-lg font-semibold">{outdoorIntro?.title || t("outdoor.intro.title")}</h3>
+          </div>
+          <Button type="button" onClick={() => setIntroOpen(false)} variant="outline" className="rounded-2xl"><X className="mr-1 h-4 w-4" />{t("common.close")}</Button>
+        </div>
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{outdoorIntroText}</div>
+        <div className="mt-4 flex justify-end">
+          <Button type="button" onClick={() => setIntroOpen(false)} className="rounded-2xl">{t("outdoor.intro.acknowledge")}</Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   function printOutdoorPdf() {
     const scores = outdoor[selectedCandidate.id] ?? {};
@@ -12035,7 +12136,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><Button onClick={() => setActivePage("landing")} variant="outline" className="mb-3 rounded-2xl">{t("outdoor.backToLanding")}</Button><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div></div>;
+  return <div>{introModal}<OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl">{t("outdoor.backToLanding")}</Button>{outdoorIntroText && <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button>}</div><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill><StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div></div>;
 }
 
 export default function VetBaraApp() {

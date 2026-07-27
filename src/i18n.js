@@ -560,6 +560,10 @@ Object.assign(translations.en, {
   "examiner.role.secondary": "secondary",
 
   "outdoor.backToLanding": "Back to landing",
+  "outdoor.intro.eyebrow": "Before you start",
+  "outdoor.intro.title": "Outdoor session briefing",
+  "outdoor.intro.acknowledge": "Got it, start",
+  "outdoor.intro.reopen": "Show briefing",
   "outdoor.candidateBinding": "Candidate binding",
   "outdoor.activeRecord": "Active record",
   "outdoor.level": "Level",
@@ -636,6 +640,10 @@ Object.assign(translations.cs, {
   "examiner.role.secondary": "secondary",
 
   "outdoor.backToLanding": "Zpět na úvodní stránku",
+  "outdoor.intro.eyebrow": "Před zahájením",
+  "outdoor.intro.title": "Úvod k terénní části",
+  "outdoor.intro.acknowledge": "Rozumím, začít",
+  "outdoor.intro.reopen": "Zobrazit úvod",
   "outdoor.candidateBinding": "Vazba na kandidáta",
   "outdoor.activeRecord": "Aktivní záznam",
   "outdoor.level": "Úroveň",
