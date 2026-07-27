@@ -9382,7 +9382,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
           {questions.map((q, i) => (
             <div key={q.id} className="rounded-xl border p-3">
               <div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div>
-              <div className="mt-1 font-medium">{q.text}</div>
+              <div className="mt-1 whitespace-pre-wrap font-medium leading-relaxed">{q.text}</div>
               {Array.isArray(q.options) && q.options.length > 0 ? (
                 <div className="mt-2 space-y-2">
                   {q.options.map((option, optionIndex) => {
