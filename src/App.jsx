@@ -6359,9 +6359,11 @@ function FieldTabletPage() {
   const [fieldPackage, setFieldPackage] = useState(() => readJsonLocalStorage(packageKey, null));
   const [draft, setDraft] = useState(() => readJsonLocalStorage(draftKey, null));
   const [selectedTreeCode, setSelectedTreeCode] = useState(() => firstFieldTabletTreeCode(readJsonLocalStorage(packageKey, null), normalizedLevel));
-  const [status, setStatus] = useState(fieldPackage ? "The package is stored locally on this device." : "The package is not stored offline yet.");
+  const [status, setStatus] = useState(fieldPackage ? "The package is stored locally on this device." : "");
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const loadAttemptRef = useRef(0);
+  const loadRetryTimerRef = useRef(null);
   const [lastSyncOk, setLastSyncOk] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [activeTabletLevel, setActiveTabletLevel] = useState(normalizedLevel);
@@ -6438,7 +6440,7 @@ function FieldTabletPage() {
 
   async function downloadForOffline() {
     setError("");
-    setStatus("Stahuji field package...");
+    setStatus(tt("loadingData"));
     try {
       const fetchPackage = async (pkgLevel) => {
         const response = await fetch(`/api/exams/${encodeURIComponent(examId)}/field-package/${pkgLevel.toLowerCase()}`);
@@ -6446,9 +6448,16 @@ function FieldTabletPage() {
         if (!response.ok) throw new Error(data?.error || `Field package ${pkgLevel} could not be downloaded.`);
         return data;
       };
-      const [practicing, consulting] = await Promise.all([fetchPackage("Practicing"), fetchPackage("Consulting")]);
+      // Tolerate one level being absent (a prep may only have Practicing or only Consulting trees);
+      // only treat it as "not found" when NEITHER level is available.
+      const [practicing, consulting] = await Promise.all([
+        fetchPackage("Practicing").catch(() => null),
+        fetchPackage("Consulting").catch(() => null),
+      ]);
+      if (!practicing && !consulting) throw new Error(tt("packageMissingText"));
+      const base = practicing || consulting || {};
       const data = {
-        ...practicing,
+        ...base,
         level: "ALL",
         levels: ["Practicing", "Consulting"],
         treesByLevel: {
@@ -6489,7 +6498,14 @@ function FieldTabletPage() {
       setStatus("Package downloaded and stored for offline use.");
     } catch (err) {
       setError(err.message || "Field package could not be downloaded.");
-      setStatus(fieldPackage ? "Using the last locally stored package." : "Package is not available.");
+      setStatus(fieldPackage ? "Using the last locally stored package." : "");
+      // Auto-retry transient failures (field tablet on flaky field Wi-Fi) a few times before
+      // surfacing a manual retry, so the operator doesn't have to tap "download" themselves.
+      if (!fieldPackage && loadAttemptRef.current < 4) {
+        loadAttemptRef.current += 1;
+        window.clearTimeout(loadRetryTimerRef.current);
+        loadRetryTimerRef.current = window.setTimeout(() => { downloadForOffline(); }, 3000);
+      }
     }
   }
 
@@ -7246,10 +7262,14 @@ function FieldTabletPage() {
       <section className="field-tablet-workspace">
         {!fieldPackage ? (
           <section className="field-empty-package">
-            <h2>{tt("packageMissingTitle")}</h2>
-            <p>{tt("packageMissingText")}</p>
-            <button type="button" onClick={downloadForOffline} className="field-primary-button">{tt("downloadOffline")}</button>
-            {error && <div className="field-tablet-status error"><AlertTriangle className="h-4 w-4" />{error}</div>}
+            {error ? (
+              <>
+                <div className="field-tablet-status error"><AlertTriangle className="h-4 w-4" />{error}</div>
+                <button type="button" onClick={() => { loadAttemptRef.current = 0; downloadForOffline(); }} className="field-primary-button"><RefreshCw className="h-4 w-4" />{tt("retryLoad")}</button>
+              </>
+            ) : (
+              <div className="field-tablet-status"><RefreshCw className="h-4 w-4" />{tt("loadingData")}</div>
+            )}
           </section>
         ) : (
           <section className="field-tablet-main-grid">
@@ -7265,9 +7285,9 @@ function FieldTabletPage() {
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
                       <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>
                       <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} title={tt("mapControls")} className="rounded-xl border bg-white px-2 py-1.5 text-sm font-semibold text-slate-700">
-                        <option value="cuzk">{t("map.layer.cuzk")}</option>
-                        <option value="esri">{t("map.layer.esri")}</option>
-                        <option value="osm">{t("map.layer.osm")}</option>
+                        <option value="cuzk">{fieldT("map.layer.cuzk")}</option>
+                        <option value="esri">{fieldT("map.layer.esri")}</option>
+                        <option value="osm">{fieldT("map.layer.osm")}</option>
                       </select>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("primaryActions")}>
