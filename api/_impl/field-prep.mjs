@@ -67,6 +67,7 @@ function applyFieldPreparationSnapshot(prep, syncPayload, examId) {
         labelDirection: tree.labelDirection || "n",
         labelOffsetX: Number(tree.labelOffsetX || 0),
         labelOffsetY: Number(tree.labelOffsetY || 0),
+        photos: Array.isArray(tree.photos) ? tree.photos.filter((photo) => photo && (photo.url || photo.dataUrl)) : [],
       };
     }),
   };

@@ -737,6 +737,71 @@ function isBackendPersistenceUnavailable(error) {
   return error?.status === 503 || /503/.test(message) || /Backend persistence is not configured/i.test(message);
 }
 
+function approxDataUrlBytes(dataUrl) {
+  const comma = String(dataUrl).indexOf(",");
+  const b64 = comma >= 0 ? String(dataUrl).slice(comma + 1) : String(dataUrl);
+  return Math.ceil((b64.length * 3) / 4);
+}
+
+// Downscale + recompress any captured image (a File or a data URL) so it stays well under ~1 MB
+// before it is stored/uploaded — modern phone/tablet cameras produce 3–8 MB JPEGs that bloat the
+// draft, the sync payload and Supabase Storage. Long edge is capped and JPEG quality is stepped
+// down until the byte budget is met. Used by every photo capture path (report, field tablet,
+// examiner archive, handwriting export).
+async function compressImageToDataUrl(source, { maxBytes = 1_000_000, maxDim = 2000 } = {}) {
+  const sourceDataUrl = typeof source === "string"
+    ? source
+    : await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(source);
+      });
+  let img;
+  try {
+    img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = sourceDataUrl;
+    });
+  } catch {
+    return sourceDataUrl; // not a decodable image (or HEIC without support) — keep original
+  }
+  const naturalW = img.naturalWidth || img.width;
+  const naturalH = img.naturalHeight || img.height;
+  if (!naturalW || !naturalH) return sourceDataUrl;
+  const draw = (scale) => {
+    const w = Math.max(1, Math.round(naturalW * scale));
+    const h = Math.max(1, Math.round(naturalH * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas;
+  };
+  let scale = Math.min(1, maxDim / Math.max(naturalW, naturalH));
+  let canvas = draw(scale);
+  let quality = 0.85;
+  let out = canvas.toDataURL("image/jpeg", quality);
+  // First lower quality, then shrink dimensions, until under budget (bounded loop).
+  for (let i = 0; i < 6 && approxDataUrlBytes(out) > maxBytes; i += 1) {
+    if (quality > 0.45) {
+      quality -= 0.12;
+    } else {
+      scale *= 0.75;
+      canvas = draw(scale);
+      quality = 0.7;
+    }
+    out = canvas.toDataURL("image/jpeg", quality);
+  }
+  // Only use the recompressed version if it is actually smaller than the source.
+  return approxDataUrlBytes(out) < approxDataUrlBytes(sourceDataUrl) ? out : sourceDataUrl;
+}
+
 // Synchronously renders a QR code to a standalone <svg>...</svg> markup string, for embedding
 // into print windows built via document.write (a separate document, so React components/props
 // can't be handed to it directly — only raw HTML/markup).
@@ -2511,21 +2576,18 @@ function VetBaraPrototype() {
     if (!loggedExaminer || selectedCandidate.level !== "Practicing") return;
     const fileList = Array.from(files ?? []);
     if (!fileList.length) return;
-    fileList.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setPracticingArchive((prev) => ({
-          ...prev,
-          [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), {
-            id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`,
-            capturedBy: loggedExaminer.name,
-            capturedAt: new Date().toISOString(),
-            name: file.name || `management-plan-${Date.now()}.jpg`,
-            dataUrl: reader.result,
-          }],
-        }));
-      };
-      reader.readAsDataURL(file);
+    fileList.forEach(async (file) => {
+      const dataUrl = await compressImageToDataUrl(file);
+      setPracticingArchive((prev) => ({
+        ...prev,
+        [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), {
+          id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`,
+          capturedBy: loggedExaminer.name,
+          capturedAt: new Date().toISOString(),
+          name: file.name || `management-plan-${Date.now()}.jpg`,
+          dataUrl,
+        }],
+      }));
     });
   }
   function updateScore(field, value, options = {}) {
@@ -5847,6 +5909,17 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
                 <Printer className="mr-1 h-4 w-4" />{t("fieldPrep.printPdf")}
               </Button>
             </div>
+            {selectedTree && Array.isArray(selectedTree.photos) && selectedTree.photos.length > 0 && (
+              <div className="mt-3 rounded-2xl border bg-white p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.treePhotos")} · {selectedTree.name}</div>
+                <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {selectedTree.photos.map((photo, index) => {
+                    const src = photo.url || photo.dataUrl;
+                    return src ? <a key={photo.id || index} href={src} target="_blank" rel="noreferrer" className="block"><img src={src} alt={photo.caption || photo.fileName || ""} className="h-20 w-full rounded-lg border object-cover" /></a> : null;
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -5860,7 +5933,6 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
                 <label className="text-sm font-medium">Longitude<input type="number" value={prep.examCenter?.point?.lng ?? ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, point: { ...prep.examCenter.point, lng: Number(event.target.value) } } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               </div>
               <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={prep.examCenter?.candidateNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, candidateNote: event.target.value } })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={prep.examCenter?.internalNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, internalNote: event.target.value } })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
             </div>
           ) : selectedTree ? (
             <div className="rounded-2xl border bg-white p-4">
@@ -5882,7 +5954,6 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
                 </div>)}
               </div>
               <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={selectedTree.internalNote || ""} onChange={(event) => updateTree(selectedTree.id, { internalNote: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
                 <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
                 <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
@@ -6190,7 +6261,7 @@ function FieldTabletPage() {
     const uploaded = await Promise.all(list.map(async (file) => ({
       id: vetbaraUid("field-photo"),
       fileName: file.name,
-      url: await readFileAsDataUrl(file),
+      url: await compressImageToDataUrl(file),
       caption: "",
       uploadedAt: new Date().toISOString(),
     })));
@@ -6244,6 +6315,7 @@ function FieldTabletPage() {
         labelOffsetY: Number(local.labelOffsetY ?? tree.labelOffsetY ?? 0),
         practicingTreeAData: data,
         managementData: data,
+        photos: (local.photos ?? tree.photos ?? []).map((photo) => ({ id: photo.id, fileName: photo.fileName || photo.name, url: photo.url || photo.dataUrl, caption: photo.caption || "" })).filter((photo) => photo.url),
         checked: Boolean(local.visited),
       };
     });
@@ -6941,6 +7013,12 @@ function FieldTabletPage() {
                     <div className="field-tile-layer" aria-hidden="true">
                       {mapTiles.map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
                     </div>
+                    {/* Markers live in their own layer that remounts (via key) whenever the map
+                        recenters/zooms — iOS Safari otherwise keeps the composited tile+marker
+                        layer's cached texture and leaves repositioned markers unpainted (trees
+                        "vanish" right after Move-all). The key does NOT change during a transform
+                        pan, so dragging stays smooth. */}
+                    <div className="field-marker-layer" key={`${mapCenter.lat}:${mapCenter.lng}:${mapZoom}:${activeTabletLevel}`}>
                     {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
                       const p = mapPoint(centerLat, centerLng);
                       return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
@@ -6957,6 +7035,7 @@ function FieldTabletPage() {
                       const direction = draft?.treeNotes?.[key]?.labelDirection || tree.labelDirection || "n";
                       return <div key={key} className={`field-map-marker tree ${selected ? "selected" : ""} ${visited ? "visited" : ""}`} style={{ ...p, ...fieldMarkerVisualStyle(direction, tree.labelOffsetX, tree.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={(event) => startTreeMarkerDrag(key, event)} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>{fieldTreeLabel(tree.level, tree.code)}</button></div>;
                     })}
+                    </div>
                   </div>
                   <div className="field-map-overlay-controls" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
                     <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
@@ -9710,36 +9789,25 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     let loaded = 0;
     let failed = 0;
 
-    files.forEach((file) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
+    Promise.all(files.map(async (file) => {
+      try {
+        const dataUrl = await compressImageToDataUrl(file);
         addReportPhoto(activeReportTree, {
           name: file.name || `photo-${Date.now()}`,
-          type: file.type || "image/*",
-          size: file.size,
-          dataUrl: reader.result,
+          type: "image/jpeg",
+          size: approxDataUrlBytes(dataUrl),
+          dataUrl,
           description: "",
           useInReport: true,
           createdAt: new Date().toISOString(),
         });
-
         loaded += 1;
-        if (loaded + failed === files.length) {
-          setPhotoStatus(loaded === 1 ? t("report.photoAdded") : t("report.photosAddedCount").replace("{count}", loaded));
-          input.value = "";
-        }
-      };
-
-      reader.onerror = () => {
+      } catch {
         failed += 1;
-        if (loaded + failed === files.length) {
-          setPhotoStatus(failed ? t("report.photoError") : t("report.photoAdded"));
-          input.value = "";
-        }
-      };
-
-      reader.readAsDataURL(file);
+      }
+    })).then(() => {
+      setPhotoStatus(failed && !loaded ? t("report.photoError") : (loaded === 1 ? t("report.photoAdded") : t("report.photosAddedCount").replace("{count}", loaded)));
+      input.value = "";
     });
   }
 

@@ -154,6 +154,10 @@
   position: absolute;
   inset: 0;
 }
+.field-marker-layer {
+  position: absolute;
+  inset: 0;
+}
 .field-map-overlay-controls {
   position: absolute;
   left: 18px;
