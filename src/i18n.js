@@ -319,6 +319,9 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "common.back": "Back",
+  "map.layer.cuzk": "ČÚZK ortofoto (CZ)",
+  "map.layer.esri": "Ortofoto (Europe)",
+  "map.layer.osm": "OSM map",
   "common.offlineRetry": "If offline, visible local work remains and sync will retry when session/backend is available.",
   "common.opened": "Opened",
   "common.closed": "Closed",
@@ -328,6 +331,7 @@ Object.assign(translations.en, {
   "candidate.identity.idLabel": "Candidate ID",
   "candidate.identity.detailsTitle": "Confirm personal details",
   "candidate.identity.name": "Candidate name",
+  "candidate.identity.email": "E-mail",
   "candidate.identity.birthDate": "Date of birth",
   "candidate.identity.documentId": "Document / registration ID",
   "candidate.identity.examLevel": "Exam level",
@@ -430,6 +434,9 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "common.back": "Zpět",
+  "map.layer.cuzk": "ČÚZK ortofoto (CZ)",
+  "map.layer.esri": "Ortofoto (Evropa)",
+  "map.layer.osm": "Mapa OSM",
   "common.offlineRetry": "Pokud je zařízení offline, viditelná lokální práce zůstane zachována a sync se zkusí zopakovat, až bude dostupná session/backend.",
   "common.opened": "Otevřeno",
   "common.closed": "Uzavřeno",
@@ -439,6 +446,7 @@ Object.assign(translations.cs, {
   "candidate.identity.idLabel": "ID kandidáta",
   "candidate.identity.detailsTitle": "Potvrzení osobních údajů",
   "candidate.identity.name": "Jméno kandidáta",
+  "candidate.identity.email": "E-mail",
   "candidate.identity.birthDate": "Datum narození",
   "candidate.identity.documentId": "Doklad / registrační ID",
   "candidate.identity.examLevel": "Úroveň zkoušky",
@@ -545,6 +553,7 @@ Object.assign(translations.en, {
   "examiner.identity.title": "Confirm Examiner identity",
   "examiner.identity.idLabel": "Examiner ID",
   "examiner.identity.name": "Examiner name",
+  "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registration ID",
   "examiner.identity.confirmed": "Identity confirmed",
   "examiner.identity.confirm": "Confirm identity",
@@ -625,6 +634,7 @@ Object.assign(translations.cs, {
   "examiner.identity.title": "Potvrzení identity zkoušejícího",
   "examiner.identity.idLabel": "ID zkoušejícího",
   "examiner.identity.name": "Jméno zkoušejícího",
+  "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registrační ID",
   "examiner.identity.confirmed": "Identita potvrzena",
   "examiner.identity.confirm": "Potvrdit identitu",

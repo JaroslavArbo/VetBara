@@ -1129,7 +1129,7 @@ function VetBaraPrototype() {
 
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId) ?? candidates[0];
   const loggedCandidate = candidates.find((c) => c.id === loggedCandidateId) ?? null;
-  const loggedExaminer = EXAMINERS.find((e) => e.id === loggedExaminerId) ?? null;
+  const loggedExaminer = examiners.find((e) => e.id === loggedExaminerId) ?? null;
   const assignedCandidates = loggedExaminer ? candidates.filter((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(loggedExaminer.id)) : [];
   const selectedMode = loggedExaminer && assignments[selectedCandidate.id]?.primary === loggedExaminer.id ? "primary" : loggedExaminer && assignments[selectedCandidate.id]?.secondary === loggedExaminer.id ? "secondary" : "unassigned";
   const activeScoreLimits = useMemo(() => scoreLimitsForCandidate(selectedCandidate, variants, testBank, outdoorItemsByLevel), [selectedCandidate, variants, testBank, outdoorItemsByLevel]);
@@ -1235,6 +1235,92 @@ function VetBaraPrototype() {
     const intervalId = window.setInterval(pollRemoteAudit, 8000);
     return () => { cancelled = true; window.clearInterval(intervalId); };
   }, [role]);
+
+  // Centre runs on its own device, so the results overview (Section E) only ever saw work done
+  // in THIS browser (local state + localStorage). Outdoor assessments an examiner submits on a
+  // tablet, written answers a candidate saves on theirs, etc. live in the backend read-model and
+  // never reach the Centre's Section E on their own. Poll the per-candidate evaluation package
+  // and merge Outdoor / test / report results back into the state Section E reads, so every
+  // device's submissions show up here. Best-effort + polled, like the audit poll above.
+  const centreResultsRosterRef = useRef(candidates);
+  centreResultsRosterRef.current = candidates;
+  useEffect(() => {
+    if (role !== "Centre" || !activeSessionToken) return undefined;
+    let cancelled = false;
+    async function hydrateCentreResults() {
+      const roster = centreResultsRosterRef.current ?? [];
+      for (const candidate of roster) {
+        if (cancelled) return;
+        try {
+          const result = await fetchCandidateEvaluation(activeSessionToken, candidate.id);
+          if (cancelled) return;
+          // Each submitted Outdoor assessment (one per examiner/mode) → Centre results store,
+          // which drives the "closed" total shown per examiner in the Outdoor column.
+          (Array.isArray(result.outdoorAssessments) ? result.outdoorAssessments : [])
+            .filter((row) => row.submitted_at || row.submittedAt || row.payload?.submittedAt)
+            .forEach((row) => {
+              const p = row.payload ?? {};
+              writeOutdoorCentreResult({
+                candidateId: candidate.id,
+                candidateName: candidate.name,
+                level: candidate.level,
+                examinerId: row.examiner_id ?? row.examinerId ?? null,
+                mode: row.mode ?? p.mode ?? "primary",
+                role: row.mode ?? p.mode ?? "primary",
+                total: p.total ?? null,
+                value: p.total ?? null,
+                max: p.max ?? null,
+                scores: p.scores ?? {},
+                notes: p.notes ?? {},
+                submittedAt: row.submitted_at ?? row.submittedAt ?? p.submittedAt ?? null,
+                closedAt: p.closedAtLabel ?? null,
+                closed: true,
+                field: "outdoor",
+                updatedAt: row.updated_at ?? row.submitted_at ?? p.submittedAt ?? null,
+              });
+            });
+          // Per-item Outdoor scores (also covers in-progress, pre-submit editing).
+          const scoreRows = Array.isArray(result.outdoorScores) ? result.outdoorScores : [];
+          if (scoreRows.length) {
+            setOutdoor((prev) => ({
+              ...prev,
+              [candidate.id]: scoreRows.reduce((next, score) => {
+                const itemId = score.item_id ?? score.itemId;
+                const raw = score.score ?? score.payload?.score ?? "";
+                if (!itemId || raw === "" || raw === null || raw === undefined) return next;
+                const num = Number(raw);
+                return { ...next, [itemId]: Number.isFinite(num) ? num : raw };
+              }, { ...(prev[candidate.id] ?? {}) }),
+            }));
+          }
+          // Written answers → the auto test-result column.
+          const responseRows = Array.isArray(result.testResponses) ? result.testResponses : [];
+          if (responseRows.length) {
+            setTestResponses((prev) => ({
+              ...prev,
+              [candidate.id]: responseRows.reduce((next, row) => {
+                const questionId = row.question_id ?? row.questionId;
+                return questionId ? { ...next, [questionId]: storedAnswerValue(row) } : next;
+              }, { ...(prev[candidate.id] ?? {}) }),
+            }));
+          }
+          // Report draft → the Consulting report column.
+          if (result.reportDraft && typeof result.reportDraft === "object") {
+            setReportDrafts((prev) => ({
+              ...prev,
+              [candidate.id]: { ...createReportDraft(), ...result.reportDraft },
+            }));
+          }
+        } catch {
+          // Best-effort; the next tick retries. Dev server / no backend just no-ops here.
+        }
+      }
+    }
+    hydrateCentreResults();
+    const intervalId = window.setInterval(hydrateCentreResults, 12000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, activeSessionToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1515,6 +1601,44 @@ function VetBaraPrototype() {
     // sees its questions instead of an empty test bank.
     if (isObject(access.centreSetup?.testPackage)) {
       applyTestPackagePayload(access.centreSetup.testPackage);
+    }
+
+    // Apply the real Centre roster (names, e-mails, assignments) persisted server-side, so an
+    // Examiner/Candidate on their own device shows the actual people instead of the demo roster.
+    const centreRoster = access.centreSetup;
+    if (isObject(centreRoster)) {
+      if (Array.isArray(centreRoster.candidates) && centreRoster.candidates.length) {
+        setCandidates(centreRoster.candidates.map((candidate) => ({
+          id: candidate.id,
+          name: candidate.name || candidate.id,
+          level: candidate.level || "Practicing",
+          birthDate: candidate.birthDate ?? "",
+          documentId: candidate.documentId ?? "",
+          email: candidate.email ?? "",
+          status: "Ready",
+          written: null,
+          outdoor: null,
+          report: null,
+        })));
+      }
+      if (Array.isArray(centreRoster.examiners) && centreRoster.examiners.length) {
+        setExaminers(centreRoster.examiners.map((examiner) => ({
+          id: examiner.id,
+          name: examiner.name || examiner.id,
+          birthDate: examiner.birthDate ?? "",
+          registrationId: examiner.registrationId ?? "",
+          email: examiner.email ?? "",
+        })));
+      }
+      if (Array.isArray(centreRoster.assignments) && centreRoster.assignments.length) {
+        setAssignments(centreRoster.assignments.reduce((map, row) => {
+          const current = map[row.candidateId] ?? {};
+          if (row.role === "primary") current.primary = row.examinerId;
+          else if (row.role === "secondary") current.secondary = row.examinerId;
+          map[row.candidateId] = current;
+          return map;
+        }, {}));
+      }
     }
 
     if (access.role === "Centre") {
@@ -5338,13 +5462,14 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
   const [error, setError] = useState("");
   const [tabletLevel, setTabletLevel] = useState("Practicing");
   const [tabletSyncLoadedAt, setTabletSyncLoadedAt] = useState("");
-  const [mapLayer, setMapLayer] = useState(() => (isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "osm"));
+  const [mapLayer, setMapLayer] = useState(() => (isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "esri"));
   const mapLayerManualRef = useRef(false);
-  // CUZK only has Czech coverage; if the reference point moves outside CZ, switch to OSM
-  // automatically — unless the operator already picked a layer by hand, which always wins.
+  // ČÚZK only has Czech coverage; if the reference point moves outside CZ, switch to Esri World
+  // Imagery (orthophoto across Europe/globe) automatically — unless the operator already picked a
+  // layer by hand, which always wins.
   useEffect(() => {
     if (mapLayerManualRef.current) return;
-    setMapLayer(isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "osm");
+    setMapLayer(isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "esri");
   }, [prep.referenceLatitude, prep.referenceLongitude]);
   function selectMapLayer(layer) {
     mapLayerManualRef.current = true;
@@ -5669,6 +5794,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
 
   function centreTileUrl(x, y, z = 18) {
     if (mapLayer === "osm") return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    if (mapLayer === "esri") return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
@@ -5734,7 +5860,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
         const y = centerTileY + dy;
         const left = widthPx / 2 + dx * 256 - offsetX;
         const top = heightPx / 2 + dy * 256 - offsetY;
-        const src = layer === "osm" ? `https://tile.openstreetmap.org/${fit.zoom}/${x}/${y}.png` : `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${fit.zoom}/${y}/${x}`;
+        const src = layer === "osm" ? `https://tile.openstreetmap.org/${fit.zoom}/${x}/${y}.png` : layer === "esri" ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${fit.zoom}/${y}/${x}` : `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${fit.zoom}/${y}/${x}`;
         tileHtmlParts.push(`<img src="${src}" style="position:absolute;left:${left}px;top:${top}px;width:256px;height:256px" />`);
       }
     }
@@ -5878,10 +6004,11 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div><h3 className="font-semibold">{t("fieldPrep.mapPreviewTitle")}</h3></div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex overflow-hidden rounded-xl border text-xs font-medium">
-                  <button type="button" onClick={() => selectMapLayer("cuzk")} className={`px-2.5 py-1.5 ${mapLayer === "cuzk" ? "bg-slate-950 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>CUZK</button>
-                  <button type="button" onClick={() => selectMapLayer("osm")} className={`px-2.5 py-1.5 ${mapLayer === "osm" ? "bg-slate-950 text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>OSM</button>
-                </div>
+                <select value={mapLayer} onChange={(event) => selectMapLayer(event.target.value)} className="rounded-xl border bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700">
+                  <option value="cuzk">{t("map.layer.cuzk")}</option>
+                  <option value="esri">{t("map.layer.esri")}</option>
+                  <option value="osm">{t("map.layer.osm")}</option>
+                </select>
                 <div className="text-xs text-slate-500">{t("fieldPrep.reference")}: {Number(prep.referenceLatitude).toFixed(6)}, {Number(prep.referenceLongitude).toFixed(6)}</div>
               </div>
             </div>
@@ -5890,7 +6017,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
                 {centreMapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
               </div>
               <div className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">N ▲</div>
-              <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© CUZK orthophoto" : "© OpenStreetMap contributors"}</div>
+              <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
               <span aria-hidden="true" style={markerForPoint(prep.examCenter?.point)} className="pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 ring-2 ring-white" />
               <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
               {fieldEnsureArray(prep.trees).map((tree) => {
@@ -5977,14 +6104,6 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
               <div className="mt-2 grid grid-cols-3 gap-2">{(selectedTree.photos || []).map((photo) => <img key={photo.id} src={photo.url} alt={photo.caption || photo.fileName || "photo"} className="h-20 w-full rounded-xl object-cover" />)}</div>
             </div>
           ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">{t("fieldPrep.selectTreeOrCentre")}</div>}
-
-          <div className="rounded-2xl border bg-white p-4">
-            <h3 className="font-semibold">{t("fieldPrep.validation")}</h3>
-            <div className="mt-3 space-y-2 text-sm">
-              {issues.length === 0 && <div className="rounded-xl bg-emerald-50 p-3 text-emerald-900">{t("fieldPrep.preparationComplete")}</div>}
-              {issues.map((issue, index) => <div key={index} className={`rounded-xl p-3 ${issue.severity === "error" ? "bg-rose-50 text-rose-900" : "bg-amber-50 text-amber-900"}`}>{issue.message}</div>)}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -6498,6 +6617,7 @@ function FieldTabletPage() {
 
   function tileUrl(x, y, z = mapZoom) {
     if (mapLayer === "osm") return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    if (mapLayer === "esri") return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
@@ -6994,8 +7114,11 @@ function FieldTabletPage() {
                     <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
                       <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>
-                      <button type="button" className={mapLayer === "cuzk" ? "active" : ""} onClick={() => setMapLayer("cuzk")} title={tt("cuzk")}><Layers className="h-3.5 w-3.5" />{tt("cuzk")}</button>
-                      <button type="button" className={mapLayer === "osm" ? "active" : ""} onClick={() => setMapLayer("osm")} title={tt("osm")}><Layers className="h-3.5 w-3.5" />{tt("osm")}</button>
+                      <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} title={tt("mapControls")} className="rounded-xl border bg-white px-2 py-1.5 text-sm font-semibold text-slate-700">
+                        <option value="cuzk">{t("map.layer.cuzk")}</option>
+                        <option value="esri">{t("map.layer.esri")}</option>
+                        <option value="osm">{t("map.layer.osm")}</option>
+                      </select>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("primaryActions")}>
                       <button type="button" onClick={sendDataToCentre} disabled={syncing} className={`field-primary-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("sending") : tt("sendToCentre")}</button>
@@ -7042,7 +7165,7 @@ function FieldTabletPage() {
                     <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
                     <button type="button" className="field-map-overlay-button" onClick={locateTablet} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
                   </div>
-                  <div className="field-map-attribution">{mapLayer === "cuzk" ? "© CUZK orthophoto" : "© OpenStreetMap contributors"}</div>
+                  <div className="field-map-attribution">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
                 </div>
               </div>
             </div>
@@ -9087,6 +9210,7 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
 
   function tileUrl(x, y, z = zoom) {
     if (mapLayer === "osm") return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+    if (mapLayer === "esri") return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
@@ -9238,8 +9362,11 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
       <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? t("candidateSections.trees.title") : t("candidateSections.orientation.title")}</div>
       <Button onClick={locate} variant="outline" className="rounded-2xl">GPS</Button>
-      <Button onClick={() => setMapLayer("cuzk")} variant={mapLayer === "cuzk" ? "default" : "outline"} className="rounded-2xl">CUZK orthophoto</Button>
-      <Button onClick={() => setMapLayer("osm")} variant={mapLayer === "osm" ? "default" : "outline"} className="rounded-2xl">OSM</Button>
+      <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} className="rounded-2xl border bg-white px-3 py-2 text-sm font-medium text-slate-700">
+        <option value="cuzk">{t("map.layer.cuzk")}</option>
+        <option value="esri">{t("map.layer.esri")}</option>
+        <option value="osm">{t("map.layer.osm")}</option>
+      </select>
       {gpsStatus && <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{gpsStatus}</span>}
     </div>
   );
@@ -9355,7 +9482,7 @@ function CandidateLanding({ candidate, confirmed, confirmCandidate, sections, st
     return t("candidate.section.locked");
   }
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{!confirmed && [[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level]].map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{confirmed && <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="font-medium">{candidate.name}</div><div className="text-xs text-slate-500">{candidate.level}</div></div>}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{sectionTitle(t, section)}</h4><p className="mt-1 text-sm text-slate-600">{sectionDescription(t, section)}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? sectionTitle(t, section) : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{[[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level], [t("candidate.identity.email"), candidate.email]].filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{sectionTitle(t, section)}</h4><p className="mt-1 text-sm text-slate-600">{sectionDescription(t, section)}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? sectionTitle(t, section) : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
 }
 
 
@@ -11990,17 +12117,12 @@ function ExaminerLanding({
           <div className="text-3xl font-bold tracking-tight">{examiner.id}</div>
         </div>
         <h3 className="font-semibold">{t("examiner.identity.title")}</h3>
-        {!confirmed && [[t("examiner.identity.name"), examiner.name]].map(([k, v]) => (
+        {[[t("examiner.identity.name"), examiner.name], [t("examiner.identity.email"), examiner.email]].filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => (
           <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
             <div className="text-xs text-slate-500">{k}</div>
             <div className="font-medium">{v}</div>
           </div>
         ))}
-        {confirmed && (
-          <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
-            <div className="font-medium">{examiner.name}</div>
-          </div>
-        )}
         <Button onClick={confirmExaminer} disabled={confirmed} className="mt-4 w-full rounded-2xl">
           <BadgeCheck className="mr-2 h-4 w-4" />
           {confirmed ? t("examiner.identity.confirmed") : t("examiner.identity.confirm")}

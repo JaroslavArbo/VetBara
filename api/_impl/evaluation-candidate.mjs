@@ -77,7 +77,11 @@ function isAssignedExaminer(examinerId, candidateId) {
 function canReadCandidate(session, candidateId) {
   if (session.role === "Candidate") return session.subject_id === candidateId;
   if (session.role === "Examiner") return isAssignedExaminer(session.subject_id, candidateId);
-  if (session.role === "Centre") return Boolean(CANDIDATES.find((candidate) => candidate.id === candidateId));
+  // A Centre session is already authenticated and scoped to its own exam event, so it may read
+  // any candidate's results — including a real roster whose ids are not in the demo CANDIDATES
+  // list. Restricting to the hardcoded demo ids would 403 the Centre results overview for real
+  // exams and Outdoor scores submitted on examiner tablets would never appear in Section E.
+  if (session.role === "Centre") return Boolean(candidateId);
   return false;
 }
 

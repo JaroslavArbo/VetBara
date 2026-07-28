@@ -136,16 +136,31 @@ function objectPayload(value) {
 // exam_event lookup: a candidate/examiner row can linger under an older exam event (upserts key
 // on exam_event_id+id, so a new event makes a new row), which would pin them to a stale package
 // even after the Centre re-imported. Best-effort: any failure yields null (demo/offline).
-async function loadCentreSetupTestPackage(session) {
+async function loadCentreSetupForBootstrap() {
   try {
-    const events = await supabase("exam_events?status=eq.current&select=payload,updated_at&order=updated_at.desc&limit=20");
-    for (const event of events) {
-      const testPackage = objectPayload(event?.payload).testPackage;
-      if (testPackage && typeof testPackage === "object") return testPackage;
-    }
-    return null;
+    const events = await supabase("exam_events?status=eq.current&select=id,payload,updated_at&order=updated_at.desc&limit=20");
+    // Prefer the most-recent current event that actually carries a saved test package.
+    const event = events.find((e) => objectPayload(e?.payload).testPackage) || events[0];
+    if (!event) return null;
+    const examEventId = event.id;
+    const testPackage = objectPayload(event.payload).testPackage ?? null;
+    const [candidateRows, examinerRows, assignmentRows] = await Promise.all([
+      supabase(`candidates?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id,name,level,payload&order=id.asc`),
+      supabase(`examiners?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id,name,payload&order=id.asc`),
+      supabase(`examiner_assignments?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=candidate_id,examiner_id,role&order=candidate_id.asc`),
+    ]);
+    const candidates = candidateRows.map((row) => {
+      const p = objectPayload(row.payload);
+      return { id: row.id, name: row.name || p.name || row.id, level: row.level || p.level || "Practicing", birthDate: p.birthDate || "", documentId: p.documentId || "", email: p.email || "" };
+    });
+    const examiners = examinerRows.map((row) => {
+      const p = objectPayload(row.payload);
+      return { id: row.id, name: row.name || p.name || row.id, registrationId: p.registrationId || p.registration_id || "", email: p.email || "" };
+    });
+    const assignments = assignmentRows.map((row) => ({ candidateId: row.candidate_id, examinerId: row.examiner_id, role: row.role }));
+    return { testPackage, candidates, examiners, assignments };
   } catch (error) {
-    console.warn("Bootstrap could not load Centre setup test package", error?.message || error);
+    console.warn("Bootstrap could not load Centre setup", error?.message || error);
     return null;
   }
 }
@@ -174,15 +189,17 @@ export default async function handler(request, response) {
     const bootstrapPackage = buildBootstrapPackage(session);
     if (!bootstrapPackage) return sendJson(response, 404, { error: "Session subject not found" });
 
-    // Attach the persisted Centre setup's test package so every role receives the imported
-    // Admin.vet content (only when Supabase is configured; demo mode has no persistence).
-    const testPackage = envReady() ? await loadCentreSetupTestPackage(session) : null;
+    // Attach the persisted Centre setup (test package + real candidate/examiner roster) so every
+    // role receives the imported Admin.vet content AND the real names/emails — not the demo
+    // roster. Only when Supabase is configured; demo mode has no persistence.
+    const centreSetup = envReady() ? await loadCentreSetupForBootstrap() : null;
+    const hasCentreSetup = centreSetup && (centreSetup.testPackage || centreSetup.candidates?.length || centreSetup.examiners?.length);
 
     return sendJson(response, 200, {
       role: session.role,
       subjectId: session.subjectId,
       package: bootstrapPackage,
-      centreSetup: testPackage ? { testPackage } : null,
+      centreSetup: hasCentreSetup ? centreSetup : null,
     });
   } catch (error) {
     console.error("Session bootstrap failed", error);
