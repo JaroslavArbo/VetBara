@@ -5279,7 +5279,7 @@ function createFieldAssignment(level = "Practicing", code = "A") {
 function createFieldTree(index = 1, assignment = createFieldAssignment("Practicing", "A")) {
   return {
     id: vetbaraUid("field-tree"),
-    name: `Strom ${index}`,
+    name: `Tree ${index}`,
     point: { x: Math.min(86, 20 + index * 12), y: Math.min(78, 22 + index * 8), lat: 49.406706323273454 + index * 0.00008, lng: 15.129055089456797 + index * 0.00008 },
     candidateNote: "",
     internalNote: "",
@@ -5305,7 +5305,7 @@ function createDefaultFieldPreparation({ examId = "ARBOR-2026", centre = "Arbori
     kind: "vetbara.fieldPreparation.v1",
     id: vetbaraUid("field-prep"),
     examId,
-    siteName: `${centre} - terénní stanoviště`,
+    siteName: `${centre} - field site`,
     referenceLatitude: 49.406706323273454,
     referenceLongitude: 15.129055089456797,
     mapProvider: "CUZK_ORTHO",
@@ -5315,9 +5315,9 @@ function createDefaultFieldPreparation({ examId = "ARBOR-2026", centre = "Arbori
     updatedBy: "Centre",
     examCenter: {
       id: vetbaraUid("field-center"),
-      name: "Zkušební centrum / registrace",
+      name: "Exam centre / registration",
       point: { x: 12, y: 18, lat: 49.405888298283934, lng: 15.128912434693621 },
-      candidateNote: "Sraz kandidátů.",
+      candidateNote: "Candidate meeting point.",
       internalNote: "",
       photos: [],
     },
@@ -5534,9 +5534,8 @@ function normalizeFieldPreparationForCentreMap(preparation) {
 }
 
 
-function CentreFieldPreparationModule({ centreCode, language, sessionToken, t }) {
+function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, sessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
-  const [prep, setPrep] = useState(() => createDefaultFieldPreparation({ examId: centreCode || CENTRE_QR_ID, language }));
   const [selectedTreeId, setSelectedTreeId] = useState(() => fieldEnsureArray(prep.trees)[0]?.id || "");
   const [coordinateInput, setCoordinateInput] = useState(`${prep.referenceLatitude}, ${prep.referenceLongitude}`);
   const [status, setStatus] = useState("");
@@ -5592,6 +5591,26 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
   function removeTree(treeId) {
     setPrep((current) => ({ ...current, updatedAt: new Date().toISOString(), trees: fieldEnsureArray(current.trees).filter((tree) => tree.id !== treeId) }));
     setSelectedTreeId(centreFieldTrees.find((tree) => tree.id !== treeId)?.id || "");
+  }
+
+  // Add an extra tree — e.g. a SECOND instance of an exercise (two candidates working the same
+  // Practicing/Consulting code on separate trees). Duplicates the selected tree's assignment and
+  // offsets its position; unlike the old addTree() this always adds (it never blocks once all the
+  // required A–D trees exist), which is what the Centre operator needs to place a second tree.
+  function addAnotherTree() {
+    const base = selectedTree && selectedTree.id !== "__center__" ? selectedTree : centreFieldTrees[centreFieldTrees.length - 1] || null;
+    const index = centreFieldTrees.length + 1;
+    const assignment = base?.assignments?.[0]
+      ? createFieldAssignment(base.assignments[0].level, base.assignments[0].code)
+      : createFieldAssignment("Practicing", "A");
+    const template = createFieldTree(index, assignment);
+    const point = base?.point
+      ? { x: Math.min(92, Number(base.point.x ?? 40) + 6), y: Math.min(84, Number(base.point.y ?? 40) + 6), lat: Number(base.point.lat ?? prep.referenceLatitude) + 0.00006, lng: Number(base.point.lng ?? prep.referenceLongitude) + 0.00006 }
+      : template.point;
+    const tree = { ...template, point };
+    setPrep((current) => ({ ...current, updatedAt: new Date().toISOString(), trees: [...fieldEnsureArray(current.trees), tree] }));
+    setSelectedTreeId(tree.id);
+    setError("");
   }
 
   async function loadFieldPreparation() {
@@ -6112,7 +6131,10 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
                 return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
               })}
             </div>
-            <div className="mt-3 flex justify-end">
+            <div className="mt-3 flex flex-wrap justify-between gap-2">
+              <Button type="button" onClick={addAnotherTree} variant="outline" className="rounded-2xl">
+                <MapPin className="mr-1 h-4 w-4" />{t("fieldPrep.addTree")}
+              </Button>
               <Button type="button" onClick={printFieldPreparationPdf} variant="outline" className="rounded-2xl">
                 <Printer className="mr-1 h-4 w-4" />{t("fieldPrep.printPdf")}
               </Button>
@@ -8469,6 +8491,11 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
 function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
+  // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
+  // dashboard sections mount their children only while open — switching to Candidates/Examiners
+  // would otherwise unmount the module and discard unsaved site-prep edits. CentreView stays
+  // mounted for the whole Centre session, so the draft survives section navigation.
+  const [fieldPrep, setFieldPrep] = useState(() => createDefaultFieldPreparation({ examId: centreCode || CENTRE_QR_ID, language }));
   // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
   // default; switching to a local base URL is explicit, session-only, and never silently
   // rewrites links unless a validated local URL is set.
@@ -8751,7 +8778,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
-          <CentreFieldPreparationModule centreCode={centreCode || CENTRE_QR_ID} language={language} sessionToken={activeSessionToken} t={t} />
+          <CentreFieldPreparationModule prep={fieldPrep} setPrep={setFieldPrep} centreCode={centreCode || CENTRE_QR_ID} language={language} sessionToken={activeSessionToken} t={t} />
         </AdminDashboardSection>
 
         <AdminDashboardSection
