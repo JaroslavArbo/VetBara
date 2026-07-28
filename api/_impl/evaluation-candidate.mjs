@@ -101,6 +101,39 @@ async function readReportEvents(candidateId) {
   return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
 }
 
+// Examiner-entered written/report scores travel as plain sync_events (no dedicated table), so
+// read them here and keep only the latest value per examiner+field. The Centre reads these back
+// into Section E — without them, an examiner's written/report score never leaves their tablet.
+async function readExaminerScoreEvents(candidateId) {
+  if (!envReady()) return [];
+  const types = encodeURIComponent("examiner_score.saved");
+  return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
+}
+
+function buildExaminerScores(events) {
+  const byKey = {};
+  for (const event of events) {
+    const p = event.payload ?? {};
+    const field = p.field;
+    if (!field) continue;
+    const examinerId = p.examinerId ?? event.subject_id ?? null;
+    byKey[`${examinerId}:${field}`] = {
+      candidateId: event.candidate_id,
+      examinerId,
+      field,
+      value: p.value ?? null,
+      max: p.max ?? null,
+      mode: p.mode ?? p.role ?? null,
+      role: p.role ?? p.mode ?? null,
+      closed: Boolean(p.closed),
+      closedAt: p.closedAt ?? null,
+      submittedAt: p.submittedAt ?? null,
+      updatedAt: p.updatedAt ?? event.created_at ?? null,
+    };
+  }
+  return Object.values(byKey);
+}
+
 function createReportDraft() {
   return {
     "Tree A": { fieldNotes: "", photos: [], finalSections: {} },
@@ -229,16 +262,18 @@ export default async function handler(request, response) {
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
     if (!canReadCandidate(session, candidateId)) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
-    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents] = await Promise.all([
+    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents] = await Promise.all([
       readRows("candidate_sections", candidateId),
       readRows("test_responses", candidateId),
       readRows("outdoor_assessments", candidateId),
       readRows("outdoor_scores", candidateId),
       readReportEvents(candidateId),
+      readExaminerScoreEvents(candidateId),
     ]);
 
     const reportDraft = buildReportDraft(reportEvents);
     const reportSummary = buildReportSummary(reportDraft, reportEvents, sections);
+    const examinerScores = buildExaminerScores(examinerScoreEvents);
 
     return sendJson(response, 200, {
       ok: true,
@@ -252,6 +287,7 @@ export default async function handler(request, response) {
       reportEvents,
       reportDraft,
       reportSummary,
+      examinerScores,
       summary: buildSummary(sections, testResponses, outdoorScores),
     });
   } catch (error) {

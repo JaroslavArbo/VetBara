@@ -1675,7 +1675,8 @@ Object.assign(translations.en, {
   "handwriting.clearAll": "Clear all",
   "handwriting.save": "Save",
   "handwriting.maximize": "Full screen",
-  "handwriting.restore": "Restore"
+  "handwriting.restore": "Restore",
+  "handwriting.fingerScrollHint": "Draw with the stylus. Drag with a finger to scroll down for more writing space."
 });
 
 Object.assign(translations.en, {
@@ -1738,7 +1739,8 @@ Object.assign(translations.cs, {
   "handwriting.clearAll": "Smazat vše",
   "handwriting.save": "Uložit",
   "handwriting.maximize": "Celá obrazovka",
-  "handwriting.restore": "Zmenšit"
+  "handwriting.restore": "Zmenšit",
+  "handwriting.fingerScrollHint": "Kreslete stylusem. Prstem táhněte pro posun dolů a více místa na psaní."
 });
 
 Object.assign(translations.cs, {

@@ -186,6 +186,31 @@ const ROLES = ["Admin", "Centre", "Candidate", "Examiner"];
 const CENTRES = ["Arboricultural Academy", "VETcert Centre Poland", "VETcert Centre Germany", "VETcert Centre Netherlands"];
 export const CENTRE_ACCESS_TOKEN = "VETBARA-CENTRE-ARBOR-2026";
 export const CENTRE_QR_ID = "ARBOR-2026";
+
+// The exam id is used as a single path segment in /api/exams/<examId>/<route>. If it ever becomes
+// a whole URL (e.g. an operator pastes a Centre access link into the unlock/Exam-ID field, or a
+// bad value gets persisted), the embedded "/" ":" "?" "&" split the path and NO route matches, so
+// the field-tablet / field-preparation calls return "Method not allowed" (405). Normalise it to a
+// safe, stable single segment: pull the token/id out of a pasted URL first, then keep only URL/
+// path-safe characters. Idempotent, and a no-op for already-clean ids (e.g. "ARBOR-2026").
+export function safeExamId(value, depth = 0) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return CENTRE_QR_ID;
+  // Pasted links can nest (examId=<a URL that itself carries token=/id=/examId=>). Peel the URL
+  // to its token/id/examId and recurse a bounded number of times before slugging what's left.
+  if (/^https?:\/\//i.test(raw) && depth < 4) {
+    try {
+      const url = new URL(raw);
+      const inner = url.searchParams.get("token") || url.searchParams.get("id") || url.searchParams.get("examId");
+      if (inner) return safeExamId(inner, depth + 1);
+      const path = url.pathname.replace(/\//g, "-");
+      if (path && path !== "-") return safeExamId(path, depth + 1);
+    } catch { /* fall through to slugging the raw string */ }
+  }
+  const slug = raw.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || CENTRE_QR_ID;
+}
+
 const DEMO_QR_TOKENS = {
   Centre: CENTRE_ACCESS_TOKEN,
   Candidate: "VETBARA-CANDIDATE-C-001-2026",
@@ -1309,6 +1334,48 @@ function VetBaraPrototype() {
             setReportDrafts((prev) => ({
               ...prev,
               [candidate.id]: { ...createReportDraft(), ...result.reportDraft },
+            }));
+          }
+          // Examiner-entered written/report scores (submitted on the examiner's own tablet) →
+          // the examiner-results store that Section E / the results overview read.
+          (Array.isArray(result.examinerScores) ? result.examinerScores : []).forEach((row) => {
+            if (!row?.field) return;
+            writeExaminerResultLocal({
+              candidateId: candidate.id,
+              candidateName: candidate.name,
+              level: candidate.level,
+              examinerId: row.examinerId ?? null,
+              role: row.role ?? row.mode ?? null,
+              mode: row.mode ?? row.role ?? null,
+              field: row.field,
+              value: row.value,
+              max: row.max,
+              closed: Boolean(row.closed),
+              closedAt: row.closedAt ?? null,
+              submittedAt: row.submittedAt ?? null,
+              updatedAt: row.updatedAt ?? null,
+            });
+          });
+          // Candidate section status/times (opened/closed on the candidate's device) → the
+          // Section E review status table, which reads candidateStatus/candidateTimes.
+          const sectionRows = Array.isArray(result.sections) ? result.sections : [];
+          if (sectionRows.length) {
+            setCandidateStatus((prev) => ({
+              ...prev,
+              [candidate.id]: sectionRows.reduce((next, section) => {
+                const sectionKey = section.section_key ?? section.sectionKey;
+                return sectionKey ? { ...next, [sectionKey]: section.status || next[sectionKey] || "locked" } : next;
+              }, { ...(prev[candidate.id] ?? createSectionStatus(candidate.level ?? "Practicing")) }),
+            }));
+            setCandidateTimes((prev) => ({
+              ...prev,
+              [candidate.id]: sectionRows.reduce((next, section) => {
+                const sectionKey = section.section_key ?? section.sectionKey;
+                if (!sectionKey) return next;
+                const openedAt = section.opened_at ?? section.openedAt ?? next[sectionKey]?.openedAt ?? "";
+                const closedAt = section.closed_at ?? section.closedAt ?? next[sectionKey]?.closedAt ?? "";
+                return { ...next, [sectionKey]: { ...(next[sectionKey] ?? {}), openedAt, openedAtIso: openedAt, closedAt, closedAtIso: closedAt } };
+              }, { ...(prev[candidate.id] ?? {}) }),
             }));
           }
         } catch {
@@ -2729,7 +2796,7 @@ function VetBaraPrototype() {
     }));
 
     if (loggedExaminer && selectedCandidate?.id) {
-      saveExaminerResultToLocalServer({
+      const examinerScoreRecord = {
         candidateId: selectedCandidate.id,
         candidateName: selectedCandidate.name,
         level: selectedCandidate.level,
@@ -2744,6 +2811,20 @@ function VetBaraPrototype() {
         closedAt,
         submittedAt: options.closed ? updatedAt : null,
         updatedAt,
+      };
+      // Local/LAN copy (offline runtime) …
+      saveExaminerResultToLocalServer(examinerScoreRecord);
+      // … PLUS the backend sync event, so the examiner's written/report score reaches the Centre
+      // over Supabase (the Centre runs on another device and reads it back via the evaluation
+      // read-model into Section E). Without this the score only ever lived on this tablet.
+      sendSyncEvent({
+        clientEventId: localEventId(`examiner-score-saved-${selectedCandidate.id}-${loggedExaminer.id}-${field}`),
+        type: "examiner_score.saved",
+        entityType: "examiner_score",
+        entityId: `${selectedCandidate.id}:${field}`,
+        candidateId: selectedCandidate.id,
+        payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, field, value: numericValue, max, closed: Boolean(options.closed), closedAt, submittedAt: options.closed ? updatedAt : null, updatedAt },
+        createdAt: updatedAt,
       });
     }
 
@@ -5371,7 +5452,7 @@ function fieldTabletUrl({ examId, level = "Practicing", token = CENTRE_ACCESS_TO
   url.search = "";
   url.hash = "";
   url.searchParams.set("mode", "field-tablet");
-  url.searchParams.set("examId", examId || CENTRE_QR_ID);
+  url.searchParams.set("examId", safeExamId(examId));
   url.searchParams.set("level", level);
   url.searchParams.set("token", token || CENTRE_ACCESS_TOKEN);
   return url.toString();
@@ -5517,7 +5598,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
     setStatus("");
     setError("");
     try {
-      const response = await fetch(`/api/exams/${encodeURIComponent(prep.examId || centreCode || CENTRE_QR_ID)}/field-preparation`);
+      const response = await fetch(`/api/exams/${encodeURIComponent(safeExamId(prep.examId || centreCode || CENTRE_QR_ID))}/field-preparation`);
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || t("fieldPrep.loadFailed"));
       const loaded = normalizeFieldPreparationForCentreMap(data.fieldPreparation || data);
@@ -5534,7 +5615,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
     setStatus("");
     setError("");
     try {
-      const response = await fetch(`/api/exams/${encodeURIComponent(prep.examId || centreCode || CENTRE_QR_ID)}/field-tablet-sync/latest`);
+      const response = await fetch(`/api/exams/${encodeURIComponent(safeExamId(prep.examId || centreCode || CENTRE_QR_ID))}/field-tablet-sync/latest`);
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || t("fieldPrep.tabletChangesLoadFailed"));
       const loaded = normalizeFieldPreparationForCentreMap(data.fieldPreparation || data);
@@ -5553,7 +5634,7 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
     setStatus("");
     setError("");
     try {
-      const response = await fetch(`/api/exams/${encodeURIComponent(prep.examId || centreCode || CENTRE_QR_ID)}/field-preparation`, {
+      const response = await fetch(`/api/exams/${encodeURIComponent(safeExamId(prep.examId || centreCode || CENTRE_QR_ID))}/field-preparation`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fieldPreparation: prep }),
@@ -6193,7 +6274,7 @@ function FieldCollapsibleSection({ title, defaultOpen = true, className = "", ch
 
 function FieldTabletPage() {
   const query = new URLSearchParams(window.location.search);
-  const examId = query.get("examId") || CENTRE_QR_ID;
+  const examId = safeExamId(query.get("examId") || CENTRE_QR_ID);
   const level = query.get("level") || "Practicing";
   const token = query.get("token") || "";
   const normalizedLevel = normalizeFieldLevel(level);
@@ -8988,7 +9069,7 @@ async function fetchCandidateFieldPackage(candidate) {
   let lastError = null;
   for (const examId of candidateFieldExamIds()) {
     try {
-      const response = await fetch(`/api/exams/${encodeURIComponent(examId)}/field-package/${level}`);
+      const response = await fetch(`/api/exams/${encodeURIComponent(safeExamId(examId))}/field-package/${level}`);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
       const normalized = normalizeCandidateFieldPackage(data, candidate);
@@ -12362,7 +12443,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div>{introModal}<OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl">{t("outdoor.backToLanding")}</Button>{outdoorIntroText && <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button>}</div><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button><StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : selectedMode === "secondary" ? t("outdoor.mode.secondary") : t("outdoor.mode.unassigned")}</StatusPill></div></div></div></div>;
+  return <div>{introModal}<OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl">{t("outdoor.backToLanding")}</Button>{outdoorIntroText && <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button>}</div><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => <button key={section} onClick={() => setActiveOutdoorSection(section)} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"}`}><div className="font-medium">{outdoorSectionTitle(section)}</div><div className="text-xs text-slate-500">{outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / {outdoorMax(selectedCandidate.level, section)} {t("outdoor.points")}</div></button>)}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas templateText={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? "" : (item.notes || "")} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}</div></div></div></div>;
 }
 
 export default function VetBaraApp() {

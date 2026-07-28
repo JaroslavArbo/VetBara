@@ -59,23 +59,48 @@ function strokeHitTest(stroke, point, threshold) {
   return false;
 }
 
+const TEMPLATE_FONT_SIZE = 30;
+const TEMPLATE_LINE_HEIGHT = 42;
+const TEMPLATE_MARGIN_X = 44;
+const TEMPLATE_MARGIN_TOP = 54;
+const TEMPLATE_MAX_CHARS = 96;
+
+// Word-wrap the item's helper texts into canvas lines, preserving the author's own line breaks.
+// Rendered light-grey onto the sketch as a template the examiner annotates over (Task 1).
+function wrapTemplateLines(text, maxChars) {
+  const lines = [];
+  for (const paragraph of String(text).split(/\r?\n/)) {
+    if (!paragraph.trim()) { lines.push(""); continue; }
+    let current = "";
+    for (const word of paragraph.split(/\s+/)) {
+      if (current && (current + " " + word).length > maxChars) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = current ? current + " " + word : word;
+      }
+    }
+    if (current) lines.push(current);
+  }
+  return lines;
+}
+
 // Shared handwriting/sketch tool for stylus input, used both by the Candidate's field
-// report notes and the Examiner's outdoor scoring notes. Pen-only (see pointerType checks)
-// so resting a hand on the tablet while writing doesn't add stray marks. Strokes are kept as
-// vector point data (not baked into the canvas immediately) so color/thickness/eraser/undo
-// all just add or remove entries from `strokes` — the visible ink is only ever a re-render.
-export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, t, Button, CloseIcon, EraserIcon, UndoIcon }) {
+// report notes and the Examiner's outdoor scoring notes.
+//
+// Input policy (deliberate, see the examiner request): only a *pen/stylus* (or a desktop mouse)
+// draws. A finger (pointerType "touch") never draws — instead a finger drag scrolls the pad's
+// scroll container, so the examiner can reach the lower part of the (taller, `tallCanvas`) writing
+// area without leaving stray ink from a resting hand. Strokes are kept as vector point data (not
+// baked into the canvas immediately) so color/thickness/eraser/undo all just add or remove entries
+// from `strokes` — the visible ink is only ever a re-render.
+export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, templateText = "", t, Button, CloseIcon, EraserIcon, UndoIcon }) {
   const svgRef = useRef(null);
+  const scrollRef = useRef(null);
+  // Active finger-scroll gesture: { pointerId, startClientY, startScrollTop }. Only ever set for
+  // pointerType "touch"; a pen/mouse leaves it null so those keep drawing.
+  const touchScrollRef = useRef(null);
   const drawingRef = useRef(false);
-  // Tracks which single pointer (by id) is currently drawing, and whether it was a genuine
-  // pen. Real palm rejection needs this instead of a blanket "pointerType !== pen -> ignore":
-  // plenty of real styluses (especially on Android/Chrome, and some Bluetooth/EMR pens) never
-  // report pointerType "pen" at all, so a hard pen-only gate silently drops every event from
-  // them — the event then falls through unconsumed and the browser pans/scrolls the page
-  // instead of drawing, which is exactly the "draws one dot, then the window just moves" bug.
-  // Instead: accept whichever pointer starts a stroke first (pen, touch, or mouse), always
-  // consume its events so the page can never take over, and only reject a *second* pointer
-  // that shows up while the first one is still down (that's the actual palm-while-writing case).
   const activePointerIdRef = useRef(null);
   const [strokes, setStrokes] = useState([]);
   const [currentPoints, setCurrentPoints] = useState(null);
@@ -84,12 +109,27 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const [eraserMode, setEraserMode] = useState(false);
   const [maximized, setMaximized] = useState(false);
 
-  // touch-action:none on an <svg> is not honoured by every tablet browser, and React's
-  // onTouch*/onPointer* handlers are passive — neither can stop the browser's touch-scroll.
-  // Once scrolling starts the browser fires pointercancel, the stroke ends, and the rest of
-  // the gesture just pans the page ("draws a short line, then the viewport moves"). A native
-  // non-passive touchmove/touchstart listener that preventDefaults on the drawing surface is
-  // the only reliable way to keep the whole stylus gesture as drawing.
+  // `tallCanvas` doubles the vertical writing area (a genuinely taller viewBox, not just a
+  // letterboxed box), giving ~2× the room the examiner asked for; the extra height overflows the
+  // dialog and is reached by scrolling (with a finger — see the touch branch below).
+  const canvasHeight = tallCanvas ? CANVAS_HEIGHT * 2 : CANVAS_HEIGHT;
+
+  // Task 1: the item's helper texts (without the question text) are copied into the sketch as a
+  // light-grey template the examiner annotates over. It is part of the drawing (not the stripped
+  // background <image>), so it bakes into the saved PNG.
+  const templateLines = templateText ? wrapTemplateLines(templateText, TEMPLATE_MAX_CHARS) : [];
+
+  function isDrawingPointer(event) {
+    // Pen and mouse draw; touch (finger) does not. Some Bluetooth/EMR styluses on Android report
+    // "touch" rather than "pen", but on the tablets this exam runs on (iPad + Apple Pencil) the
+    // Pencil reports "pen" reliably and finger palm-rejection is the actual requirement.
+    return event.pointerType !== "touch";
+  }
+
+  // A finger on the drawing surface must scroll (not draw and not let the browser hijack the
+  // gesture). touch-action:none keeps the browser from scrolling on its own, so we move the scroll
+  // container by hand from the touch delta. The native non-passive touch listeners below stop the
+  // browser's default touch handling that React's passive handlers can't.
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return undefined;
@@ -106,12 +146,10 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
     // The <svg> keeps its default preserveAspectRatio ("xMidYMid meet"), so unless the
-    // element's on-screen box happens to have exactly the CANVAS_WIDTH:CANVAS_HEIGHT ratio,
+    // element's on-screen box happens to have exactly the CANVAS_WIDTH:canvasHeight ratio,
     // the viewBox content is letterboxed (centered, with blank padding on two sides) inside
-    // that box. Mapping clientX/Y linearly against the full bounding rect — ignoring that
-    // padding — is what made the ink drift away from the actual stylus tip as you drew
-    // further from the center. Reproduce the same "meet" fit here so the two agree exactly.
-    const viewBoxAspect = CANVAS_WIDTH / CANVAS_HEIGHT;
+    // that box. Reproduce the same "meet" fit here so the ink lands under the stylus tip.
+    const viewBoxAspect = CANVAS_WIDTH / canvasHeight;
     const rectAspect = rect.width / rect.height;
     let renderWidth = rect.width;
     let renderHeight = rect.height;
@@ -125,7 +163,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
       offsetY = (rect.height - renderHeight) / 2;
     }
     const x = ((event.clientX - rect.left - offsetX) / renderWidth) * CANVAS_WIDTH;
-    const y = ((event.clientY - rect.top - offsetY) / renderHeight) * CANVAS_HEIGHT;
+    const y = ((event.clientY - rect.top - offsetY) / renderHeight) * canvasHeight;
     const pressure = event.pressure > 0 ? event.pressure : 0.5;
     return [x, y, pressure];
   }
@@ -135,14 +173,21 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   }
 
   function handlePointerDown(event) {
-    // A second pointer arriving while the first is still drawing is the real palm-rejection
-    // case (e.g. a hand resting on the tablet while the stylus is down) — ignore it, but don't
-    // preventDefault it either, so it doesn't interfere with the pointer that's already active.
+    // Finger: start a scroll-drag instead of drawing. Don't preventDefault (the native touch
+    // listener already did) and don't capture — we just track the delta and move scrollTop.
+    if (!isDrawingPointer(event)) {
+      touchScrollRef.current = {
+        pointerId: event.pointerId,
+        startClientY: event.clientY,
+        startScrollTop: scrollRef.current ? scrollRef.current.scrollTop : 0,
+      };
+      return;
+    }
+    // A second pointer arriving while the first is still drawing is the real palm-rejection case
+    // (a hand resting on the tablet while the stylus is down) — ignore it.
     if (drawingRef.current && activePointerIdRef.current !== event.pointerId) return;
     event.preventDefault();
-    // Pointer capture can fail (e.g. the pointer id isn't recognized as active) on some
-    // browser/input combinations; that must not stop the stroke from being drawn, it just
-    // means a move that leaves the SVG bounds won't keep tracking until pointerup.
+    // Pointer capture can fail on some browser/input combinations; that must not stop the stroke.
     try { svgRef.current?.setPointerCapture?.(event.pointerId); } catch { /* not fatal */ }
     drawingRef.current = true;
     activePointerIdRef.current = event.pointerId;
@@ -152,6 +197,13 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   }
 
   function handlePointerMove(event) {
+    // Finger scroll-drag: translate the vertical finger movement into scrollTop.
+    if (touchScrollRef.current && event.pointerId === touchScrollRef.current.pointerId) {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = touchScrollRef.current.startScrollTop - (event.clientY - touchScrollRef.current.startClientY);
+      }
+      return;
+    }
     if (!drawingRef.current || event.pointerId !== activePointerIdRef.current) return;
     event.preventDefault();
     const point = svgPoint(event);
@@ -160,6 +212,10 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   }
 
   function handlePointerUp(event) {
+    if (touchScrollRef.current && event.pointerId === touchScrollRef.current.pointerId) {
+      touchScrollRef.current = null;
+      return;
+    }
     if (event.pointerId !== activePointerIdRef.current) return;
     drawingRef.current = false;
     activePointerIdRef.current = null;
@@ -185,9 +241,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   async function handleSave() {
     const svg = svgRef.current;
     // Strip the background <image> (existingImage, if any) from the serialized SVG before
-    // rasterizing it — it's drawn separately onto the canvas below via drawImage, using the
-    // original data URL directly, so it doesn't need a second network/decode round trip through
-    // an SVG <image> element (which can also be blocked by canvas tainting in some browsers).
+    // rasterizing it — it's drawn separately onto the canvas below via drawImage.
     const svgClone = svg.cloneNode(true);
     const bg = svgClone.querySelector("[data-handwriting-bg]");
     if (bg) bg.remove();
@@ -212,11 +266,11 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
       ]);
       const canvas = document.createElement("canvas");
       canvas.width = CANVAS_WIDTH;
-      canvas.height = CANVAS_HEIGHT;
+      canvas.height = canvasHeight;
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      if (background) ctx.drawImage(background, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.fillRect(0, 0, CANVAS_WIDTH, canvasHeight);
+      if (background) ctx.drawImage(background, 0, 0, CANVAS_WIDTH, canvasHeight);
       ctx.drawImage(strokesImage, 0, 0);
       onSave(canvas.toDataURL("image/png"));
     } finally {
@@ -225,10 +279,14 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   }
 
   const currentPath = currentPoints && currentPoints.length > 1 ? getSvgPathFromStroke(getStroke(currentPoints, { ...STROKE_OPTIONS, size })) : "";
+  // Non-maximized tall canvas: give the <svg> its true aspect ratio so the doubled height is real
+  // drawing space (which then overflows the dialog and scrolls) rather than a letterboxed band.
+  const svgSizeClass = maximized ? "min-h-0 flex-1" : tallCanvas ? "w-full" : "h-[420px]";
+  const svgSizeStyle = !maximized && tallCanvas ? { aspectRatio: `${CANVAS_WIDTH} / ${canvasHeight}`, height: "auto" } : {};
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 ${maximized ? "p-0" : "p-4"}`}>
-      <div className={`flex w-full flex-col overflow-auto bg-white shadow-xl ${maximized ? "h-full max-h-none max-w-none rounded-none p-3" : "max-h-[95vh] max-w-4xl rounded-2xl p-4"}`}>
+      <div ref={scrollRef} className={`flex w-full flex-col overflow-auto bg-white shadow-xl ${maximized ? "h-full max-h-none max-w-none rounded-none p-3" : "max-h-[95vh] max-w-4xl rounded-2xl p-4"}`}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
@@ -283,17 +341,26 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           </Button>
         </div>
 
+        {tallCanvas && <p className="mb-2 text-xs text-slate-500">{tr(t, "handwriting.fingerScrollHint", "Draw with the stylus; drag with a finger to scroll for more writing space.")}</p>}
+
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+          viewBox={`0 0 ${CANVAS_WIDTH} ${canvasHeight}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`w-full rounded-2xl border bg-white ${maximized ? "min-h-0 flex-1" : "h-[420px]"} ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
-          style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none" }}
+          className={`shrink-0 rounded-2xl border bg-white ${svgSizeClass} ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
+          style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none", ...svgSizeStyle }}
         >
-          {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} preserveAspectRatio="xMidYMid meet" />}
+          {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={canvasHeight} preserveAspectRatio="xMidYMid meet" />}
+          {templateLines.length > 0 && (
+            <text x={TEMPLATE_MARGIN_X} y={TEMPLATE_MARGIN_TOP} fill="#94a3b8" fontSize={TEMPLATE_FONT_SIZE} fontFamily="ui-sans-serif, system-ui, sans-serif">
+              {templateLines.map((line, index) => (
+                <tspan key={index} x={TEMPLATE_MARGIN_X} dy={index === 0 ? 0 : TEMPLATE_LINE_HEIGHT}>{line || " "}</tspan>
+              ))}
+            </text>
+          )}
           {strokes.map((stroke, index) => (
             <path key={index} d={pathFor(stroke)} fill={stroke.color} />
           ))}
@@ -301,7 +368,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
         </svg>
 
         <div className="mt-3 flex justify-end">
-          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length && !existingImage}>
+          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length && !existingImage && templateLines.length === 0}>
             {tr(t, "handwriting.save", "Save")}
           </Button>
         </div>

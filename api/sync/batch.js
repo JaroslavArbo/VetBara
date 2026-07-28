@@ -11,6 +11,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "outdoor_assessment.opened",
   "outdoor_assessment.submitted",
   "outdoor_score.saved",
+  "examiner_score.saved",
 ]);
 
 const EVENT_TYPES_BY_ROLE = {
@@ -27,6 +28,7 @@ const EVENT_TYPES_BY_ROLE = {
     "outdoor_assessment.opened",
     "outdoor_assessment.submitted",
     "outdoor_score.saved",
+    "examiner_score.saved",
   ]),
 };
 
