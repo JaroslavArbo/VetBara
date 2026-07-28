@@ -5829,11 +5829,17 @@ function CentreFieldPreparationModule({ centreCode, language, sessionToken, t })
               </div>
               <div className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">N ▲</div>
               <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© CUZK orthophoto" : "© OpenStreetMap contributors"}</div>
-              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
+              <span aria-hidden="true" style={markerForPoint(prep.examCenter?.point)} className="pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 ring-2 ring-white" />
+              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
               {fieldEnsureArray(prep.trees).map((tree) => {
                 const selected = tree.id === selectedTreeId;
                 const labels = fieldTreeLabels(tree);
-                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
+                return <span key={`${tree.id}-dot`} aria-hidden="true" style={markerForPoint(tree.point)} className={`pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white ${selected ? "bg-slate-950" : "bg-slate-700"}`} />;
+              })}
+              {fieldEnsureArray(prep.trees).map((tree) => {
+                const selected = tree.id === selectedTreeId;
+                const labels = fieldTreeLabels(tree);
+                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
               })}
             </div>
             <div className="mt-3 flex justify-end">

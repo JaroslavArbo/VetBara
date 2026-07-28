@@ -153,7 +153,6 @@
 .field-pan-layer {
   position: absolute;
   inset: 0;
-  will-change: transform;
 }
 .field-map-overlay-controls {
   position: absolute;
@@ -265,8 +264,9 @@
 .field-map-marker.center .field-marker-stem,
 .field-map-marker.center .field-marker-dot { background: #e7334d; border-color: #fff; }
 /* The GPS marker is purely informational — never let it swallow a drag meant for the
-   Exam-centre or a tree dot it happens to overlap. */
-.field-map-marker.gps { pointer-events: none; }
+   Exam-centre or a tree dot it happens to overlap, and nudge it slightly aside so it does not
+   sit exactly on the Exam-centre dot (which would make the centre impossible to grab). */
+.field-map-marker.gps { pointer-events: none; transform: translate(24px, -24px); }
 .field-map-marker.gps .field-marker-label { background: #2563eb; color: #fff; border-color: rgba(255,255,255,.92); box-shadow: 0 0 0 6px rgba(37,99,235,.18), 0 7px 20px rgba(20,50,30,.18); }
 .field-map-marker.gps .field-marker-dot { background: #2563eb; border-color: #fff; box-shadow: 0 0 0 6px rgba(37,99,235,.18), 0 2px 7px rgba(20,50,30,.28); }
 .field-map-marker.tree.selected .field-marker-label { background: #07111f; color: #ffffff; border-color: #07111f; transform: translate(var(--label-x, 0px), var(--label-y, -54px)) translate(-50%, -50%) scale(1.08); }
