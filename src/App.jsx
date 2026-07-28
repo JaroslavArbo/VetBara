@@ -4660,7 +4660,33 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
 
 const OUTDOOR_CENTRE_RESULT_KEY = "vetbara.outdoorCentreResults.v1";
 const EXAMINER_RESULT_KEY = "vetbara.examinerResults.v1";
+const WRITTEN_QUESTION_SCORES_KEY = "vetbara.writtenQuestionScores.v1";
 const EXAMINER_FORM_UNLOCK_PASSWORD = "Vetarbo";
+
+// Per-question written-test marks the examiner enters, kept per candidate so they survive leaving
+// and re-opening the review (otherwise the local component state reset to {} and every mark showed
+// as 0 on return).
+function readWrittenQuestionScores(candidateId) {
+  if (typeof window === "undefined" || !candidateId) return {};
+  try {
+    const all = JSON.parse(window.localStorage.getItem(WRITTEN_QUESTION_SCORES_KEY) || "{}");
+    const row = all?.[candidateId];
+    return row && typeof row === "object" && !Array.isArray(row) ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeWrittenQuestionScores(candidateId, scores) {
+  if (typeof window === "undefined" || !candidateId) return;
+  try {
+    const all = JSON.parse(window.localStorage.getItem(WRITTEN_QUESTION_SCORES_KEY) || "{}");
+    const next = { ...(all && typeof all === "object" && !Array.isArray(all) ? all : {}), [candidateId]: scores || {} };
+    window.localStorage.setItem(WRITTEN_QUESTION_SCORES_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore quota/serialization errors — the in-memory copy still works this session */
+  }
+}
 
 function readExaminerResultsLocal() {
   if (typeof window === "undefined") return {};
@@ -4940,6 +4966,22 @@ function normalizeAdminOutdoorLevel(outdoorLevel, level) {
           .filter((item) => item.text || item.notes);
         if (normalizedItems.length > 0) grouped[section] = normalizedItems;
       });
+  }
+
+  // Guard against duplicate item ids across sections. Some authored packages copy-paste an
+  // exercise and keep the same id (e.g. Consulting had C-OUT-Q1 three times). Scores are keyed by
+  // item.id, so a duplicate makes a score entered in one section show up in every item that shares
+  // that id — "type a mark in section 1 and it appears in sections 2 and 3" — and corrupts the
+  // total. Give every colliding item a unique, stable runtime id (deterministic by encounter order
+  // so saved scores still line up on reload).
+  const seenIds = new Map();
+  for (const section of Object.keys(grouped)) {
+    grouped[section] = grouped[section].map((item) => {
+      const baseId = item.id || "item";
+      const seen = seenIds.get(baseId) ?? 0;
+      seenIds.set(baseId, seen + 1);
+      return seen === 0 ? item : { ...item, id: `${baseId}#${seen + 1}` };
+    });
   }
 
   return grouped;
@@ -5802,6 +5844,13 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
     });
   }
 
+  function removeIntervention(treeId, interventionId) {
+    const data = selectedTree?.practicingTreeAData || createPracticingTreeAData();
+    updatePracticingAData(treeId, {
+      interventions: (data.interventions || []).filter((item) => item.id !== interventionId),
+    });
+  }
+
   function handlePhotoUpload(treeId, files) {
     const fileList = Array.from(files ?? []);
     if (!fileList.length) return;
@@ -6241,7 +6290,7 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
                 </div>
                 <div className="mt-3 flex items-center justify-between"><h5 className="font-semibold">{t("fieldPrep.interventionTechnology")}</h5><Button onClick={() => addIntervention(selectedTree.id)} variant="outline" className="rounded-xl">{t("fieldPrep.addTechnology")}</Button></div>
                 <div className="mt-2 space-y-2">
-                  {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /></div>)}
+                  {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /><div className="mt-2 flex justify-end"><Button onClick={() => removeIntervention(selectedTree.id, intervention.id)} variant="outline" className="rounded-xl text-rose-700"><X className="mr-1 h-4 w-4" />{t("fieldPrep.remove")}</Button></div></div>)}
                 </div>
               </div>
               <div className="mt-4">
@@ -6368,6 +6417,10 @@ function FieldTabletPage() {
   const [online, setOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [activeTabletLevel, setActiveTabletLevel] = useState(normalizedLevel);
   const [mapLayer, setMapLayer] = useState("cuzk");
+  // ČÚZK orthophoto only covers the Czech Republic (blank tiles elsewhere — the "map disappears"
+  // when the site is abroad, e.g. Italy). Auto-pick Esri World Imagery outside CZ; a manual choice
+  // via the layer dropdown always wins from then on.
+  const mapLayerManualRef = useRef(false);
   const [mapZoom, setMapZoom] = useState(18);
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
@@ -6753,6 +6806,11 @@ function FieldTabletPage() {
     lng: Number.isFinite(centerLng) ? centerLng : Number(fieldTrees[0]?.longitude) || 15.128912,
   };
   const mapCenter = mapCenterOverride || defaultMapCenter;
+
+  useEffect(() => {
+    if (mapLayerManualRef.current) return;
+    setMapLayer(isWithinCzechRepublic(mapCenter.lat, mapCenter.lng) ? "cuzk" : "esri");
+  }, [mapCenter.lat, mapCenter.lng]);
 
   function clampMapZoom(value) {
     const zoom = Math.round(Number(value));
@@ -7150,6 +7208,11 @@ function FieldTabletPage() {
     updateSelectedManagementData({ interventions });
   }
 
+  function removeSelectedIntervention(index) {
+    const interventions = selectedInterventions().filter((item, itemIndex) => itemIndex !== index);
+    updateSelectedManagementData({ interventions });
+  }
+
   function buildPrintableFieldMap(levelName) {
     const trees = fieldTrees.filter((tree) => normalizeFieldLevel(tree.level) === levelName);
     const centre = { lat: centerLat, lng: centerLng };
@@ -7284,7 +7347,7 @@ function FieldTabletPage() {
                     <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
                       <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>
-                      <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} title={tt("mapControls")} className="rounded-xl border bg-white px-2 py-1.5 text-sm font-semibold text-slate-700">
+                      <select value={mapLayer} onChange={(event) => { mapLayerManualRef.current = true; setMapLayer(event.target.value); }} title={tt("mapControls")} className="rounded-xl border bg-white px-2 py-1.5 text-sm font-semibold text-slate-700">
                         <option value="cuzk">{fieldT("map.layer.cuzk")}</option>
                         <option value="esri">{fieldT("map.layer.esri")}</option>
                         <option value="osm">{fieldT("map.layer.osm")}</option>
@@ -7396,7 +7459,7 @@ function FieldTabletPage() {
                   )}
                 </div>
               )}
-              <FieldCollapsibleSection title={tt("treeOverviewTitle")} className="field-assignment-box" defaultOpen={false}>
+              <FieldCollapsibleSection title={tt("treeOverviewTitle")} className="field-assignment-box" defaultOpen>
                 <div className="field-extra-tree-toggles">
                   {FIELD_EXTRA_TREE_TOGGLE_KEYS.map((toggleKey) => {
                     const [level, rawCode] = toggleKey.split("-");
@@ -11561,7 +11624,18 @@ function examinerChoiceAutoScore(question, candidate, index, value) {
 
 function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResponses, importedCandidatePackages, scoringLimits, updateScore, setActivePage, examinerName, activeAdminPackageMeta, t }) {
   const [showExamInfo, setShowExamInfo] = useState(false);
-  const [questionScores, setQuestionScores] = useState({});
+  // Seed from the per-candidate persisted marks so re-opening the review shows what was entered,
+  // not zeros. Reloaded when the candidate changes and written back on every edit below.
+  const [questionScores, setQuestionScores] = useState(() => readWrittenQuestionScores(selectedCandidate?.id));
+  const writtenScoresCandidateRef = useRef(selectedCandidate?.id);
+  useEffect(() => {
+    if (writtenScoresCandidateRef.current === selectedCandidate?.id) return;
+    writtenScoresCandidateRef.current = selectedCandidate?.id;
+    setQuestionScores(readWrittenQuestionScores(selectedCandidate?.id));
+  }, [selectedCandidate?.id]);
+  useEffect(() => {
+    if (selectedCandidate?.id) writeWrittenQuestionScores(selectedCandidate.id, questionScores);
+  }, [questionScores, selectedCandidate?.id]);
   // Manual scores only live in local state until the examiner clicks the final "submit and
   // close" button — there's no per-question save request to confirm. Flash a brief "Uloženo"
   // next to a question right after its score changes, so entering a number visibly registers.
