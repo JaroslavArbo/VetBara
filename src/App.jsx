@@ -795,6 +795,56 @@ function parseOfflineCandidatePackage(payload) {
 
 function QrScannerPanel({ title, onScan, onClose, t }) {
   const [manualPayload, setManualPayload] = useState("");
+  const [cameraError, setCameraError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const videoRef = useRef(null);
+  const scannedRef = useRef(false);
+
+  // Live camera QR scanning (HTTPS secure context is verified in production, so getUserMedia is
+  // available). Falls back to manual paste only if the camera can't be opened.
+  useEffect(() => {
+    let stream = null;
+    let raf = 0;
+    let cancelled = false;
+    const canvas = document.createElement("canvas");
+
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) { setCameraError(t("qrScanner.cameraUnavailable")); return; }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        setScanning(true);
+        const tick = () => {
+          if (cancelled || scannedRef.current) return;
+          const v = videoRef.current;
+          if (v && v.videoWidth) {
+            canvas.width = v.videoWidth;
+            canvas.height = v.videoHeight;
+            canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+            try {
+              const data = decodeAllQrCodes(canvas, 1)?.[0]?.data;
+              if (data) { scannedRef.current = true; onScan(String(data)); return; }
+            } catch { /* keep scanning */ }
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      } catch {
+        setCameraError(t("qrScanner.cameraError"));
+      }
+    }
+    start();
+    return () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function submitManualPayload() {
     const value = manualPayload.trim();
@@ -802,7 +852,6 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
       window.alert(t("qrScanner.enterPayloadAlert"));
       return;
     }
-
     onScan(value);
   }
 
@@ -812,27 +861,23 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
-            <p className="text-sm text-slate-600">
-              {t("qrScanner.cameraDisabledHelper")}
-            </p>
+            <p className="text-sm text-slate-600">{t("qrScanner.helper")}</p>
           </div>
           <Button onClick={onClose} variant="outline" className="rounded-2xl">
             <X className="mr-1 h-4 w-4" />{t("common.close")}
           </Button>
         </div>
 
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="font-semibold">{t("qrScanner.fallbackModeTitle")}</div>
-          <p className="mt-1">
-            {t("qrScanner.fallbackModeHelper")}
-          </p>
+        <div className="overflow-hidden rounded-2xl border bg-slate-950">
+          <video ref={videoRef} playsInline muted className="h-72 w-full bg-black object-cover" />
         </div>
+        {cameraError
+          ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{cameraError}</div>
+          : <p className="mt-2 text-center text-xs text-slate-500">{scanning ? t("qrScanner.scanning") : t("qrScanner.starting")}</p>}
 
-        <div className="mt-4 rounded-2xl border bg-white p-4">
-          <h4 className="font-semibold">{t("qrScanner.manualPayloadTitle")}</h4>
-          <p className="mt-1 text-sm text-slate-600">
-            {t("qrScanner.manualPayloadHelper")}
-          </p>
+        <details className="mt-4 rounded-2xl border bg-white p-4" open={Boolean(cameraError)}>
+          <summary className="cursor-pointer font-semibold">{t("qrScanner.manualPayloadTitle")}</summary>
+          <p className="mt-1 text-sm text-slate-600">{t("qrScanner.manualPayloadHelper")}</p>
           <textarea
             value={manualPayload}
             onChange={(e) => setManualPayload(e.target.value)}
@@ -843,14 +888,10 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
             spellCheck="false"
           />
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={submitManualPayload} className="rounded-2xl">
-              {t("qrScanner.loadPayload")}
-            </Button>
-            <Button onClick={() => setManualPayload("")} variant="outline" className="rounded-2xl">
-              {t("qrScanner.clearPayload")}
-            </Button>
+            <Button onClick={submitManualPayload} className="rounded-2xl">{t("qrScanner.loadPayload")}</Button>
+            <Button onClick={() => setManualPayload("")} variant="outline" className="rounded-2xl">{t("qrScanner.clearPayload")}</Button>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   );
@@ -1446,14 +1487,6 @@ function VetBaraPrototype() {
   // by comparing the token to the single hardcoded CENTRE_ACCESS_TOKEN client-side.
 
   async function handleQrScan(text) {
-    const offlinePackage = parseOfflineCandidatePackage(text);
-
-    if (offlinePackage) {
-      importOfflineCandidatePackage(offlinePackage);
-      setScannerMode(null);
-      return;
-    }
-
     const p = { ...parseQrPayload(text), raw: text };
     const access = await resolveAccessWithFallback(p, "QR accepted");
     if (access) applyResolvedAccess(access, "QR accepted");
@@ -5990,6 +6023,7 @@ function FieldTabletPage() {
   const [mapZoom, setMapZoom] = useState(18);
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
+  const [moveConfirm, setMoveConfirm] = useState(null);
   const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18, panDelta: null });
   const treeDragRef = useRef(null);
   const panLayerRef = useRef(null);
@@ -6667,7 +6701,6 @@ function FieldTabletPage() {
     }
     const dLat = targetLat - centerLat;
     const dLng = targetLng - centerLng;
-    if (!window.confirm(tt("moveAllConfirm").replace("{count}", String(fieldTrees.length)))) return;
     const treesSnapshot = fieldTrees.map((tree) => ({
       key: fieldTreeKey(tree),
       lat: Number(tree.latitude),
@@ -6698,22 +6731,37 @@ function FieldTabletPage() {
     setStatus(tt("moveAllDone"));
   }
 
-  // Always available. If there is no GPS fix yet, acquire one first (so the button never
-  // "disappears" behind a missing position), then move the whole setup onto it.
+  // "Move all trees here" — always works. Prefer a fresh GPS fix; if GPS is denied/unavailable
+  // (common on tablets), fall back to the current map centre so the operator can pan the map to
+  // the real spot and still relocate the whole setup. Confirmation is an in-app modal (native
+  // window.confirm is silently suppressed in some tablet browsers, which made this look dead).
   async function moveEntireSetupToGps() {
-    let target = gpsPosition;
-    if (!target || !Number.isFinite(Number(target.lat)) || !Number.isFinite(Number(target.lng))) {
-      setError("");
-      setStatus(tt("moveAllLocating"));
-      try {
-        target = await requestGpsPosition();
-        setGpsPosition(target);
-      } catch {
-        setError(tt("moveAllNoGps"));
-        return;
-      }
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
+      setError(tt("moveAllNoCentre"));
+      return;
     }
-    applyMoveEntireSetup(Number(target.lat), Number(target.lng));
+    setError("");
+    setStatus(tt("moveAllLocating"));
+    let target;
+    try {
+      const pos = await requestGpsPosition();
+      setGpsPosition(pos);
+      target = { lat: Number(pos.lat), lng: Number(pos.lng), source: "gps" };
+    } catch {
+      target = { lat: Number(mapCenter.lat), lng: Number(mapCenter.lng), source: "map" };
+    }
+    if (!Number.isFinite(target.lat) || !Number.isFinite(target.lng)) {
+      setError(tt("moveAllNoGps"));
+      return;
+    }
+    setStatus("");
+    setMoveConfirm(target);
+  }
+
+  function confirmMoveEntireSetup() {
+    const target = moveConfirm;
+    setMoveConfirm(null);
+    if (target) applyMoveEntireSetup(Number(target.lat), Number(target.lng));
   }
 
   function updateSelectedManagementData(patch) {
@@ -6833,6 +6881,20 @@ function FieldTabletPage() {
 
   return (
     <main className="field-tablet-shell">
+      {moveConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{tt("moveAllHere")}</h3>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+              {(moveConfirm.source === "gps" ? tt("moveAllConfirm") : tt("moveAllConfirmMap")).replace("{count}", String(fieldTrees.length))}
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setMoveConfirm(null)} className="field-ghost-button">{tt("cancel")}</button>
+              <button type="button" onClick={confirmMoveEntireSetup} className="field-primary-button">{tt("moveAllHere")}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <section className="field-tablet-workspace">
         {!fieldPackage ? (
           <section className="field-empty-package">
@@ -8900,7 +8962,7 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} updatePreparationSketch={updateCandidateTreePreparationSketch} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} t={t} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{t("candidate.offlineHandoff.title")}</h4><p className="mt-1 text-sm text-slate-600">{t("candidate.offlineHandoff.qrDisabled")}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={saveOfflineCandidatePackageToLan} disabled={lanPackageSaving || lanPackageSaved} className="rounded-2xl">{lanPackageSaving ? t("candidate.offlineHandoff.saving") : lanPackageSaved ? t("candidate.offlineHandoff.saved") : t("candidate.offlineHandoff.saveToLan")}</Button><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">{t("candidate.offlineHandoff.downloadBackup")}</Button></div>{lanPackageStatus && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{lanPackageStatus}</div>}<p className="mt-2 text-xs text-slate-500">{tf("candidate.offlineHandoff.packageContains", { count: candidateQuestionSnapshot.length })}</p></div>}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},
@@ -9093,7 +9155,6 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <Button onClick={locate} variant="outline" className="rounded-2xl">GPS</Button>
       <Button onClick={() => setMapLayer("cuzk")} variant={mapLayer === "cuzk" ? "default" : "outline"} className="rounded-2xl">CUZK orthophoto</Button>
       <Button onClick={() => setMapLayer("osm")} variant={mapLayer === "osm" ? "default" : "outline"} className="rounded-2xl">OSM</Button>
-      {fieldStatus && <span className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{fieldStatus}</span>}
       {gpsStatus && <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{gpsStatus}</span>}
     </div>
   );
@@ -9123,11 +9184,12 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {toolbar}
-      <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="min-h-0 border-r bg-slate-100">
-          <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={18} maxZoom={20} title={t("candidateField.treePreparation")} showHeader={false} />
-        </div>
-        <div className="min-h-0 overflow-y-auto bg-white p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
+        <div className="grid h-full gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="h-64 border-b bg-slate-100 lg:h-full lg:border-b-0 lg:border-r">
+            <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={18} maxZoom={20} title={t("candidateField.treePreparation")} showHeader={false} />
+          </div>
+          <div className="bg-white p-4 lg:min-h-0 lg:overflow-y-auto">
           <div className="mb-4 flex flex-wrap gap-2">
             {FIELD_TREE_CODES.map((code) => {
               const available = orderedTrees.some((tree) => String(tree.code || "").toUpperCase() === code);
@@ -9151,7 +9213,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
               </div>
               <label className="block">
                 <span className="text-sm font-semibold">{t("candidateField.candidateNotes")}</span>
-                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={16} placeholder={t("candidateField.candidateNotesPlaceholder")} className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
+                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={6} placeholder={t("candidateField.candidateNotesPlaceholder")} className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
               </label>
               {updatePreparationSketch && (() => {
                 const sketch = candidateTreePreparationSketch(preparationDraft, selectedTree);
@@ -9184,6 +9246,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("candidateField.noTreesAvailable")}</div>
           )}
+          </div>
         </div>
       </div>
     </div>
@@ -9466,6 +9529,7 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
 }
 
 function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, introAccepted, acceptIntro, t }) {
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const requestedVariantCode = String(selectedVariantCode || "");
   const effectiveVariantCode = variantCodeMatchesCandidateLevel(candidate, requestedVariantCode)
     ? requestedVariantCode
@@ -9541,9 +9605,22 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
         </div>
       )}
 
-      <Button onClick={submitTest} disabled={questions.length === 0} className="mt-4 rounded-2xl">
+      <Button onClick={() => setSubmitConfirmOpen(true)} disabled={questions.length === 0} className="mt-4 rounded-2xl">
         <Lock className="mr-2 h-4 w-4" /> {t("test.submit")}
       </Button>
+
+      {submitConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t("test.submit")}</h3>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{t("test.submitConfirm")}</div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button type="button" onClick={() => setSubmitConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+              <Button type="button" onClick={() => { setSubmitConfirmOpen(false); submitTest(); }} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" />{t("test.submit")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -10036,20 +10113,6 @@ function ExaminerView({
           />
           <VetCertRulesReference t={t} />
           <ExaminerQuickHelp t={t} />
-          {loggedExaminer && (
-            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h3 className="font-semibold">{t("examiner.offlinePackage.title")}</h3>
-                  <p className="mt-1 text-sm text-slate-600">{t("examiner.offlinePackage.helper")}</p>
-                </div>
-                <label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
-                  {t("examiner.offlinePackage.importButton")}
-                  <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" />
-                </label>
-              </div>
-            </div>
-          )}
           <div className="grid gap-4 lg:grid-cols-3">
             {!loggedExaminer && (
               <div className="rounded-2xl border bg-white p-4">
@@ -11837,74 +11900,9 @@ function ExaminerLanding({
   examinerTimes = {},
   t,
 }) {
-  const [lanPackages, setLanPackages] = useState([]);
-  const [lanLoading, setLanLoading] = useState(false);
-  const [lanStatus, setLanStatus] = useState("");
 
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
 
-  async function loadLanPackages() {
-    setLanLoading(true);
-    setLanStatus(t("examiner.lan.loading"));
-    try {
-      const response = await fetch("/api/local-exchange/packages", { cache: "no-store" });
-      const raw = await response.text();
-      let data = null;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
-      }
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      const loaded = Array.isArray(data.packages) ? data.packages : Array.isArray(data) ? data : [];
-      setLanPackages(loaded);
-      setLanStatus(tf("examiner.lan.loaded", { count: loaded.length, time: new Date().toLocaleTimeString("cs-CZ") }));
-    } catch (error) {
-      console.error("LAN package list failed", error);
-      setLanStatus(tf("examiner.lan.loadFailed", { message: error.message || t("common.unknownError") }));
-    } finally {
-      setLanLoading(false);
-    }
-  }
-
-  async function importLanPackage(packageId) {
-    setLanLoading(true);
-    setLanStatus(tf("examiner.lan.importing", { packageId }));
-    try {
-      const response = await fetch(`/api/local-exchange/packages/${encodeURIComponent(packageId)}`);
-      const raw = await response.text();
-      let data = null;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
-      }
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      if (!data?.candidateId) throw new Error(tf("examiner.lan.missingCandidateIdError", { keys: Object.keys(data || {}).join(", ") }));
-      if (data?.kind !== "vetbara.offlineCandidatePackage.v1") throw new Error(tf("examiner.lan.invalidKindError", { kind: data?.kind || t("examiner.lan.missingKind") }));
-
-      const normalizedImportedPackage = normalizeOfflineCandidatePackageForImport(data, testBank);
-      const imported = importOfflineCandidatePackageData(normalizedImportedPackage);
-      if (imported === false) throw new Error(t("examiner.lan.importFunctionFailed"));
-
-      setImportedCandidatePackages?.((prev) => ({
-        ...prev,
-        [data.candidateId]: normalizedImportedPackage,
-      }));
-      setSelectedCandidateId?.(data.candidateId);
-      setLanStatus(tf("examiner.lan.imported", { name: data.candidateName || data.candidateId, level: data.level || "-" }));
-      setActivePage?.("writtenReview");
-    } catch (error) {
-      console.error("LAN package import failed", error);
-      setLanStatus(tf("examiner.lan.importFailed", { message: error.message || t("common.unknownError") }));
-    } finally {
-      setLanLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (confirmed) loadLanPackages();
-  }, [confirmed]);
 
   function candidateOutdoorClosed(candidateId) {
     return Boolean(examinerTimes?.[candidateId]?.outdoor?.closedAt);
@@ -11933,10 +11931,6 @@ function ExaminerLanding({
           <BadgeCheck className="mr-2 h-4 w-4" />
           {confirmed ? t("examiner.identity.confirmed") : t("examiner.identity.confirm")}
         </Button>
-        <label className={`mt-3 block rounded-2xl border bg-white px-4 py-2 text-center text-sm font-medium ${confirmed ? "hover:bg-slate-50" : "pointer-events-none opacity-50"}`}>
-          JSON
-          <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" disabled={!confirmed} />
-        </label>
       </div>
 
       <div className="rounded-2xl border bg-white p-4 lg:col-span-2">
@@ -11945,13 +11939,7 @@ function ExaminerLanding({
             <h3 className="font-semibold">{t("examiner.worklist.title")}</h3>
             <p className="mt-1 text-sm text-slate-600">{t("examiner.worklist.helper")}</p>
           </div>
-          {confirmed && (
-            <Button onClick={loadLanPackages} disabled={lanLoading} variant="outline" className="rounded-2xl">
-              {lanLoading ? t("examiner.lan.loadingShort") : t("examiner.lan.loadButton")}
-            </Button>
-          )}
         </div>
-        {lanStatus && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{lanStatus}</div>}
         {assignedCandidates.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <div className="font-semibold">{t("examiner.worklist.emptyTitle")}</div>
@@ -11961,9 +11949,6 @@ function ExaminerLanding({
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {assignedCandidates.map((c) => {
               const isPrimary = assignments[c.id]?.primary === examiner.id;
-              const candidatePackages = lanPackages
-                .filter((pkg) => pkg.candidateId === c.id)
-                .sort((a, b) => String(b.storedAt || b.createdAt || "").localeCompare(String(a.storedAt || a.createdAt || "")));
               return (
                 <div key={c.id} className="rounded-2xl border bg-white p-4">
                   <div className="flex justify-between gap-3">
@@ -11990,23 +11975,6 @@ function ExaminerLanding({
                     </Button>
                     {c.level === "Consulting" && <Button onClick={() => openReportReview(c.id)} disabled={!confirmed} variant="outline" className="rounded-2xl">REPORT</Button>}
                   </div>
-                  {candidatePackages.length > 0 && (
-                    <div className="mt-4 rounded-2xl border bg-slate-50 p-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("examiner.lan.packages")}</div>
-                      <div className="mt-2 space-y-2">
-                        {candidatePackages.map((pkg) => (
-                          <div key={pkg.packageId} className="rounded-xl border bg-white p-3 text-sm">
-                            <div className="font-medium">{pkg.variantCode || t("examiner.lan.candidatePackage")}</div>
-                            <div className="mt-1 text-xs text-slate-500">{t("examiner.lan.stored")}: {pkg.storedAt || pkg.createdAt || "-"}</div>
-                            <div className="mt-1 text-xs text-slate-500">{t("fieldPrep.photos")}: {pkg.reportPhotoCount ?? 0}</div>
-                            <Button onClick={() => importLanPackage(pkg.packageId)} disabled={lanLoading || !confirmed} className="mt-2 rounded-2xl">
-                              {t("common.import")}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
