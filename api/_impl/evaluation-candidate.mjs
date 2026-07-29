@@ -89,7 +89,15 @@ async function sessionExamEventId(session) {
     if (session.qr_token_id) {
       const rows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}&select=label&limit=1`);
       const eventId = String(rows[0]?.label || "").trim().split(/\s+/).pop() || "";
-      return eventId.startsWith("EXAM-") ? eventId : "";
+      if (eventId.startsWith("EXAM-")) return eventId;
+    }
+    // Fallback (same order bootstrap.js uses): the subject's own roster row knows its exam event.
+    // Without this, a token whose label predates the `role subject examEvent` format would write
+    // unscoped rows that the Centre — which resolves a real event id — would never read back.
+    if (session.role === "Candidate" || session.role === "Examiner") {
+      const table = session.role === "Candidate" ? "candidates" : "examiners";
+      const rows = await supabase(`${table}?id=eq.${encodeURIComponent(session.subject_id)}&select=exam_event_id,updated_at&order=updated_at.desc&limit=1`);
+      return rows[0]?.exam_event_id || "";
     }
   } catch { /* best-effort */ }
   return "";
