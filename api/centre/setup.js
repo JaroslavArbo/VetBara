@@ -350,6 +350,23 @@ async function saveSetup(request, centreId, body) {
   const examinerIds = new Set(examiners.map((examiner) => examiner.id));
   const assignmentRows = validateAssignments(assignments, candidateIds, examinerIds).map((assignment) => toAssignmentRow(assignment, centreId, examEventId));
 
+  // The operator's saved lists are authoritative for THIS exam event only: rows the operator
+  // removed in the Centre UI must also be removed from this event's roster tables. Upsert alone
+  // left them lingering, so a "deleted" candidate kept coming back on the next load and a roster
+  // accidentally copied into the wrong certification could never be cleaned up. Scoped strictly
+  // to exam_event_id; other certifications' events are untouched.
+  const removeRowsAbsentFromSave = (table, keptIds) => supabase(
+    `${table}?exam_event_id=eq.${encode(examEventId)}${keptIds.length ? `&id=not.in.(${keptIds.map(encode).join(",")})` : ""}`,
+    { method: "DELETE", headers: { Prefer: "return=minimal" } },
+  );
+  if (Array.isArray(body.candidates)) await removeRowsAbsentFromSave("candidates", [...candidateIds]);
+  if (Array.isArray(body.examiners)) await removeRowsAbsentFromSave("examiners", [...examinerIds]);
+  // Assignments are replaced wholesale for this event (then re-upserted below), so a removed
+  // secondary examiner does not linger either.
+  if (Array.isArray(body.assignments)) {
+    await supabase(`examiner_assignments?exam_event_id=eq.${encode(examEventId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+  }
+
   const setupWrites = [
     candidates.length ? supabase("candidates?on_conflict=exam_event_id,id", upsertOptions(candidates)) : [],
     examiners.length ? supabase("examiners?on_conflict=exam_event_id,id", upsertOptions(examiners)) : [],

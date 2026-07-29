@@ -131,16 +131,54 @@ function objectPayload(value) {
 // travel with the session bootstrap — otherwise an Examiner/Candidate sees "exam data not
 // available yet", or an out-of-date package.
 //
-// One exam runs at a time, so the source of truth is the most recently updated *current* exam
-// event that actually carries a test package. We deliberately do NOT key off a per-subject
-// exam_event lookup: a candidate/examiner row can linger under an older exam event (upserts key
-// on exam_event_id+id, so a new event makes a new row), which would pin them to a stale package
-// even after the Centre re-imported. Best-effort: any failure yields null (demo/offline).
-async function loadCentreSetupForBootstrap() {
+// SCOPING MATTERS: several certifications (exam events) can exist at once — e.g. the same venue
+// on two different days, each with its own Centre link and roster. The roster attached to a
+// bootstrap must come from the SESSION'S OWN exam event; serving "the newest current event"
+// globally leaked one certification's candidates into the other Centre, whose autosave then
+// PERSISTED the copied roster ("the same participants appeared in both certifications").
+// Resolution order:
+//   1. Centre session → its subject id IS the centre id → that centre's current event only
+//      (a fresh certification with no event yet gets NO roster, never another cert's).
+//   2. Candidate/Examiner session → the qr_token label ends with the exam event id
+//      (`${role} ${subjectId} ${examEventId}` — written by ensureQrAccess), or, failing that,
+//      their newest roster row's exam_event_id.
+//   3. Legacy fallback for non-Centre roles only (demo/seeded tokens with no roster rows):
+//      the most recently updated current event that carries a test package.
+// Best-effort: any failure yields null (demo/offline).
+async function loadCentreSetupForBootstrap(session) {
   try {
-    const events = await supabase("exam_events?status=eq.current&select=id,payload,updated_at&order=updated_at.desc&limit=20");
-    // Prefer the most-recent current event that actually carries a saved test package.
-    const event = events.find((e) => objectPayload(e?.payload).testPackage) || events[0];
+    let event = null;
+
+    if (session?.role === "Centre") {
+      const rows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(session.subjectId)}&status=eq.current&select=id,payload,updated_at&order=updated_at.desc&limit=1`);
+      event = rows[0] ?? null;
+      if (!event) return null;
+    }
+
+    if (!event && session?.qrTokenId) {
+      const tokenRows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qrTokenId)}&select=label&limit=1`);
+      const label = String(tokenRows[0]?.label || "");
+      const eventId = label.split(/\s+/).pop();
+      if (eventId && eventId.startsWith("EXAM-")) {
+        const rows = await supabase(`exam_events?id=eq.${encodeURIComponent(eventId)}&select=id,payload,updated_at&limit=1`);
+        event = rows[0] ?? null;
+      }
+    }
+
+    if (!event && (session?.role === "Candidate" || session?.role === "Examiner")) {
+      const table = session.role === "Candidate" ? "candidates" : "examiners";
+      const rows = await supabase(`${table}?id=eq.${encodeURIComponent(session.subjectId)}&select=exam_event_id,updated_at&order=updated_at.desc&limit=1`);
+      const eventId = rows[0]?.exam_event_id;
+      if (eventId) {
+        const eventRows = await supabase(`exam_events?id=eq.${encodeURIComponent(eventId)}&select=id,payload,updated_at&limit=1`);
+        event = eventRows[0] ?? null;
+      }
+    }
+
+    if (!event) {
+      const events = await supabase("exam_events?status=eq.current&select=id,payload,updated_at&order=updated_at.desc&limit=20");
+      event = events.find((e) => objectPayload(e?.payload).testPackage) || events[0];
+    }
     if (!event) return null;
     const examEventId = event.id;
     const testPackage = objectPayload(event.payload).testPackage ?? null;
@@ -180,10 +218,10 @@ export default async function handler(request, response) {
       if (!demo || process.env.VETBARA_DEMO_MODE === "false") return sendJson(response, 401, { error: "Invalid demo session" });
       session = { role: demo.role, subjectId: demo.subjectId, id: null };
     } else {
-      const rows = await supabase(`app_sessions?token_hash=eq.${hash(rawSessionToken)}&revoked_at=is.null&select=id,role,subject_id,expires_at&limit=1`);
+      const rows = await supabase(`app_sessions?token_hash=eq.${hash(rawSessionToken)}&revoked_at=is.null&select=id,role,subject_id,qr_token_id,expires_at&limit=1`);
       const row = rows[0];
       if (!row || new Date(row.expires_at) <= new Date()) return sendJson(response, 401, { error: "Invalid or expired session" });
-      session = { id: row.id, role: row.role, subjectId: row.subject_id };
+      session = { id: row.id, role: row.role, subjectId: row.subject_id, qrTokenId: row.qr_token_id ?? null };
     }
 
     const bootstrapPackage = buildBootstrapPackage(session);
@@ -192,7 +230,7 @@ export default async function handler(request, response) {
     // Attach the persisted Centre setup (test package + real candidate/examiner roster) so every
     // role receives the imported Admin.vet content AND the real names/emails — not the demo
     // roster. Only when Supabase is configured; demo mode has no persistence.
-    const centreSetup = envReady() ? await loadCentreSetupForBootstrap() : null;
+    const centreSetup = envReady() ? await loadCentreSetupForBootstrap(session) : null;
     const hasCentreSetup = centreSetup && (centreSetup.testPackage || centreSetup.candidates?.length || centreSetup.examiners?.length);
 
     return sendJson(response, 200, {

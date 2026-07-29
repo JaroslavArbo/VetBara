@@ -739,7 +739,14 @@ function createReportDraft() { return REPORT_TREES.reduce((acc, tree) => ({ ...a
 function createSectionStatus(level) { return CANDIDATE_SECTIONS[level].reduce((acc, sec) => ({ ...acc, [sec.key]: "locked" }), {}); }
 function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, outdoorMax: 58, reportMax: 117 } : { writtenMax: 46, outdoorMax: 102, reportMax: 0 }; }
 function sumQuestionBankMax(questions) { return Array.isArray(questions) ? questions.reduce((sum, question) => sum + writtenQuestionMax(question), 0) : 0; }
-function sumOutdoorItemsMax(itemsBySection) { return Object.values(itemsBySection ?? {}).flat().reduce((sum, item) => sum + Number(item?.max ?? 0), 0); }
+// Either/or exercises (two sections sharing a base name, e.g. "…Threats exercise (halo)" vs
+// "(soil)") count only ONCE toward the outdoor maximum — the candidate does a single variant.
+function sumOutdoorItemsMax(itemsBySection) {
+  const sections = Object.keys(itemsBySection ?? {});
+  return sections
+    .filter((section) => !outdoorSectionExcluded(sections, undefined, section))
+    .reduce((sum, section) => sum + (itemsBySection[section] ?? []).reduce((s, item) => s + Number(item?.max ?? 0), 0), 0);
+}
 function scoreLimitsForCandidate(candidate, variants, testBank, outdoorItemsByLevel) {
   const fallback = scoreLimits(candidate?.level);
   const variantCode = variants?.[candidate?.level];
@@ -4080,10 +4087,13 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
             {sections.map((section) => {
               const sectionItems = items.filter((item) => (String(item.section || item.theme || "Unsectioned").trim() || "Unsectioned") === section);
               const sectionSummary = summarizeAuthoringItems(sectionItems);
+              // Outdoor either/or pairs (same base name, "(halo)" vs "(soil)"): flag both variants
+              // so it is obvious the examiner picks ONE at the exam and only one counts.
+              const isVariant = String(activeDocKey).startsWith("outdoor") && outdoorVariantGroups(sections).has(outdoorSectionBaseAndVariant(section).base);
               return (
                 <button key={section} type="button" onClick={() => { setActiveSectionFilter(section); const first = items.findIndex((item) => (String(item.section || item.theme || "Unsectioned").trim() || "Unsectioned") === section); setSelectedIndex(Math.max(0, first)); }} className={`rounded-xl border p-3 text-left text-sm ${activeSectionFilter === section ? "border-slate-950 bg-white" : "bg-white hover:bg-slate-100"}`}>
-                  <div className="font-semibold">{section}</div>
-                  <div className="mt-1 text-xs text-slate-600">{sectionSummary.count} {t("admin.authoring.questionsUnit")} / {sectionSummary.max} {t("common.points")}</div>
+                  <div className="flex items-start justify-between gap-2"><div className="font-semibold">{section}</div>{isVariant && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{t("admin.authoring.variantBadge")}</span>}</div>
+                  <div className="mt-1 text-xs text-slate-600">{sectionSummary.count} {t("admin.authoring.questionsUnit")} / {sectionSummary.max} {t("common.points")}{isVariant ? ` · ${t("admin.authoring.variantHint")}` : ""}</div>
                 </button>
               );
             })}
