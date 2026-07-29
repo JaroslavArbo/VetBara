@@ -122,6 +122,46 @@ function buildBootstrapPackage(session) {
   return null;
 }
 
+// The hardcoded CANDIDATES/EXAMINERS constants only ever covered the original 4-candidate/
+// 3-examiner demo roster. A real certification's 5th+ candidate or 4th+ examiner is invisible to
+// them, so candidateBootstrap/examinerBootstrap returned null and the handler 404'd with "Session
+// subject not found" BEFORE ever looking at the real roster — a 4th examiner (or 5th candidate)
+// could never log in at all, no matter how correct the rest of the roster/session plumbing was.
+// This mirrors the same shape from the real roster (centreSetup, already loaded for every
+// session) so the client needs no changes.
+function assignmentRoleFor(centreSetup, candidateId, examinerId) {
+  const row = (centreSetup.assignments || []).find((a) => a.candidateId === candidateId && a.examinerId === examinerId);
+  return row?.role ?? null;
+}
+
+function buildBootstrapPackageFromRoster(session, centreSetup) {
+  if (session.role === "Candidate") {
+    const candidate = (centreSetup.candidates || []).find((item) => item.id === session.subjectId);
+    if (!candidate) return null;
+    return {
+      candidate: { id: candidate.id, name: candidate.name, birthDate: candidate.birthDate || "", documentId: candidate.documentId || "", level: candidate.level || "Practicing", status: "Ready" },
+      sections: sectionsFor(candidate.level || "Practicing"),
+      allowedPortal: "Candidate",
+      sessionId: session.id ?? null,
+    };
+  }
+  if (session.role === "Examiner") {
+    const examiner = (centreSetup.examiners || []).find((item) => item.id === session.subjectId);
+    if (!examiner) return null;
+    const assignedCandidates = (centreSetup.candidates || []).flatMap((candidate) => {
+      const assignmentRole = assignmentRoleFor(centreSetup, candidate.id, examiner.id);
+      return assignmentRole ? [{ ...candidate, assignmentRole }] : [];
+    });
+    return {
+      examiner: { id: examiner.id, name: examiner.name, birthDate: examiner.birthDate || "", registrationId: examiner.registrationId || "" },
+      assignedCandidates,
+      allowedPortal: "Examiner",
+      sessionId: session.id ?? null,
+    };
+  }
+  return null;
+}
+
 function objectPayload(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -226,14 +266,17 @@ export default async function handler(request, response) {
       session = { id: row.id, role: row.role, subjectId: row.subject_id, qrTokenId: row.qr_token_id ?? null };
     }
 
-    const bootstrapPackage = buildBootstrapPackage(session);
-    if (!bootstrapPackage) return sendJson(response, 404, { error: "Session subject not found" });
-
     // Attach the persisted Centre setup (test package + real candidate/examiner roster) so every
     // role receives the imported Admin.vet content AND the real names/emails — not the demo
-    // roster. Only when Supabase is configured; demo mode has no persistence.
+    // roster. Only when Supabase is configured; demo mode has no persistence. Loaded BEFORE the
+    // subject-found gate below so a roster member beyond the hardcoded demo constants (5th+
+    // candidate, 4th+ examiner) can still be found via the real roster fallback.
     const centreSetup = envReady() ? await loadCentreSetupForBootstrap(session) : null;
     const hasCentreSetup = centreSetup && (centreSetup.testPackage || centreSetup.candidates?.length || centreSetup.examiners?.length);
+
+    let bootstrapPackage = buildBootstrapPackage(session);
+    if (!bootstrapPackage && centreSetup) bootstrapPackage = buildBootstrapPackageFromRoster(session, centreSetup);
+    if (!bootstrapPackage) return sendJson(response, 404, { error: "Session subject not found" });
 
     return sendJson(response, 200, {
       role: session.role,

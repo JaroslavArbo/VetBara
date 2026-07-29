@@ -2115,6 +2115,7 @@ Object.assign(translations.en, {
   "admin.authoring.saveNoteFailed": "Saving the note failed.",
   "admin.authoring.historyLoadFailed": "The material could not be loaded.",
   "fieldTablet.syncFailed": "Sync failed.",
+  "fieldTablet.syncTimedOut": "Sync is taking too long (weak connection?) and was cancelled.",
   "fieldTablet.syncedWithId": "Synced back to VetBara ({syncId}).",
   "fieldTablet.syncedNoId": "Synced back to VetBara. The local copy remains on the tablet as backup.",
   "fieldTablet.savedToLocalQueue": "Changes were saved to the local sync queue."
@@ -2430,6 +2431,7 @@ Object.assign(translations.cs, {
   "admin.authoring.saveNoteFailed": "Uložení poznámky se nezdařilo.",
   "admin.authoring.historyLoadFailed": "Podklad se nepodařilo načíst.",
   "fieldTablet.syncFailed": "Synchronizace selhala.",
+  "fieldTablet.syncTimedOut": "Synchronizace trvá příliš dlouho (slabé připojení?) a byla zrušena.",
   "fieldTablet.syncedWithId": "Synchronizováno zpět do VetBara ({syncId}).",
   "fieldTablet.syncedNoId": "Synchronizováno zpět do VetBara. Lokální kopie zůstává na tabletu jako záloha.",
   "fieldTablet.savedToLocalQueue": "Změny byly uloženy do lokální sync queue."

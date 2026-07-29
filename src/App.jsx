@@ -6809,11 +6809,24 @@ function FieldTabletPage() {
         draft,
         fieldPreparationSnapshot: buildFieldPreparationSnapshotForSync(),
       };
-      const response = await fetch(`/api/exams/${encodeURIComponent(examId)}/field-tablet-sync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // fetch() has NO built-in timeout — on a weak field connection with a large payload
+      // (several MB once tree photos are attached), the browser can sit uploading indefinitely
+      // with the button stuck on "Sending..." and no final message ever appearing. Abort after a
+      // bounded window so a stuck send fails fast, falls into the local queue below, and the
+      // useEffect above auto-retries once the tablet is back online.
+      const abortController = new AbortController();
+      const timeoutId = window.setTimeout(() => abortController.abort(), 45000);
+      let response;
+      try {
+        response = await fetch(`/api/exams/${encodeURIComponent(examId)}/field-tablet-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: abortController.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || tt("syncFailed"));
       // The snapshot we just sent reflects the CURRENT tablet state, so any older queued sends
@@ -6826,7 +6839,8 @@ function FieldTabletPage() {
       const queued = { id: vetbaraUid("field-sync"), examId, level: normalizedLevel, queuedAt: new Date().toISOString(), fieldPackage, draft };
       appendFieldTabletSyncQueue(queued);
       setLastSyncOk(false);
-      setError(`${err.message || tt("syncFailed")} ${tt("savedToLocalQueue")}`);
+      const message = err?.name === "AbortError" ? tt("syncTimedOut") : (err.message || tt("syncFailed"));
+      setError(`${message} ${tt("savedToLocalQueue")}`);
     } finally {
       setSyncing(false);
     }
