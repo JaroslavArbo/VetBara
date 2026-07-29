@@ -1198,7 +1198,9 @@ function VetBaraPrototype() {
   const lockedPortalRole = portalRole ?? authenticatedPortalRole;
   const localEventId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const knownCandidate = (id) => candidates.some((candidate) => candidate.id === id);
-  const knownExaminer = (id) => EXAMINERS.some((examiner) => examiner.id === id);
+  // Check the LIVE examiner roster, not the 3-entry demo constant — a fourth examiner added in
+  // the Centre could never log in against the constant ("QR role blocked" after scanning).
+  const knownExaminer = (id) => examiners.some((examiner) => examiner.id === id);
 
   // Session integrity monitoring: while a Candidate or Examiner is actively logged in, track
   // fullscreen exits and app/tab switching (both real signs someone left the exam interface).
@@ -1733,12 +1735,23 @@ function VetBaraPrototype() {
       return;
     }
 
+    // The known* checks read this render's (stale) state — the roster applied a few lines above
+    // has not flushed yet, so a subject that only exists in the freshly delivered roster (e.g. a
+    // 4th examiner or a 5th candidate added in the Centre) must be accepted via the roster in the
+    // access payload itself. A server-verified session (access.sessionToken) is trusted too: the
+    // backend already authenticated the QR, the local demo roster must not veto it.
+    const rosterHasCandidate = Array.isArray(access.centreSetup?.candidates) && access.centreSetup.candidates.some((candidate) => candidate.id === access.subjectId);
+    const rosterHasExaminer = Array.isArray(access.centreSetup?.examiners) && access.centreSetup.examiners.some((examiner) => examiner.id === access.subjectId);
+
     if (access.role === "Candidate") {
       if (access.profile && Object.values(access.profile).some((value) => String(value ?? "").trim())) {
         setCandidates((previous) => previous.map((candidate) => candidate.id === access.subjectId ? { ...candidate, ...Object.fromEntries(Object.entries(access.profile).filter(([, value]) => String(value ?? "").trim())) } : candidate));
       }
 
-      if (knownCandidate(access.subjectId)) {
+      if (knownCandidate(access.subjectId) || rosterHasCandidate || access.sessionToken) {
+        if (!knownCandidate(access.subjectId) && !rosterHasCandidate) {
+          setCandidates((prev) => prev.some((candidate) => candidate.id === access.subjectId) ? prev : [...prev, { id: access.subjectId, name: access.profile?.name || access.subjectId, level: access.profile?.level || "Practicing", status: "Ready", written: null, outdoor: null, report: null }]);
+        }
         setRole("Candidate");
         loginCandidate(access.subjectId);
         hydrateCandidateProgress(access.sessionToken, access.subjectId);
@@ -1746,7 +1759,10 @@ function VetBaraPrototype() {
       }
     }
 
-    if (access.role === "Examiner" && knownExaminer(access.subjectId)) {
+    if (access.role === "Examiner" && (knownExaminer(access.subjectId) || rosterHasExaminer || access.sessionToken)) {
+      if (!knownExaminer(access.subjectId) && !rosterHasExaminer) {
+        setExaminers((prev) => prev.some((examiner) => examiner.id === access.subjectId) ? prev : [...prev, { id: access.subjectId, name: access.subjectId, registrationId: "", email: "" }]);
+      }
       setRole("Examiner");
       loginExaminer(access.subjectId);
       hydrateExaminerOutdoorProgress(access.sessionToken, access.subjectId);
@@ -2282,7 +2298,11 @@ function VetBaraPrototype() {
   function toggleLevel(level) { setCentreSetupDirty(true); setEnabledLevels((prev) => prev.includes(level) && prev.length > 1 ? prev.filter((x) => x !== level) : prev.includes(level) ? prev : [...prev, level]); }
   function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
   function removeCandidate(candidateId) {
-    if (candidates.length <= 2) {
+    // Keep exactly one candidate as the floor: the UI reads selectedCandidate unconditionally in
+    // many places, so an empty roster would crash — but the operator must be able to clear out an
+    // old certification's people (the old minimum of 2 left "two candidates that cannot be
+    // deleted"). To replace everyone: delete down to one, overwrite that one's details, add the rest.
+    if (candidates.length <= 1) {
       window.alert(t("centre.people.minCandidatesAlert"));
       return;
     }
@@ -5607,6 +5627,15 @@ function appendFieldTabletSyncQueue(entry) {
   writeJsonLocalStorage(key, [...(Array.isArray(current) ? current : []), entry]);
 }
 
+function readFieldTabletSyncQueue() {
+  const value = readJsonLocalStorage(fieldTabletQueueKey(), []);
+  return Array.isArray(value) ? value : [];
+}
+
+function clearFieldTabletSyncQueue() {
+  writeJsonLocalStorage(fieldTabletQueueKey(), []);
+}
+
 function fieldEnsureArray(value) {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== "object") return [];
@@ -6517,6 +6546,23 @@ function FieldTabletPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A send that failed in the field parks its intent in the sync queue — replay it automatically
+  // once the tablet is online again by re-sending the CURRENT snapshot (which supersedes every
+  // queued payload; success clears the queue). The queue used to only ever grow, so an operator
+  // whose send failed offline lost their "last changes" without knowing.
+  const queueFlushAttemptsRef = useRef(0);
+  useEffect(() => {
+    if (!online || syncing || !fieldPackage || !draft) return undefined;
+    if (!readFieldTabletSyncQueue().length) return undefined;
+    if (queueFlushAttemptsRef.current >= 3) return undefined;
+    const timer = window.setTimeout(() => {
+      queueFlushAttemptsRef.current += 1;
+      sendDataToCentre();
+    }, 1500);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, syncing, fieldPackage, draft]);
+
   useEffect(() => {
     if (fieldPackage && !draft) {
       const initialDraft = {
@@ -6749,6 +6795,10 @@ function FieldTabletPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || tt("syncFailed"));
+      // The snapshot we just sent reflects the CURRENT tablet state, so any older queued sends
+      // are superseded — clear them, otherwise the queue lingers forever (it used to never
+      // replay at all, which is how "the last tablet changes never reached the Centre").
+      clearFieldTabletSyncQueue();
       setLastSyncOk(true);
       setStatus(data?.syncId ? tt("syncedWithId").replace("{syncId}", data.syncId) : tt("syncedNoId"));
     } catch (err) {
@@ -12307,7 +12357,9 @@ function examinerOutdoorSummary(candidate, outdoor, outdoorItemsByLevel) {
     return sum + (Number.isFinite(number) ? number : 0);
   }, 0);
   const answered = Object.values(values).filter((value) => value !== "" && value !== null && value !== undefined).length;
-  const max = sections.reduce((sum, section) => sum + outdoorMaxForSection(candidate.level, section, outdoorItemsByLevel), 0) || scoreLimits(candidate.level).outdoorMax;
+  // Either/or exercises (halo vs soil) count once in the maximum — the Centre doesn't know which
+  // variant the examiner picked, so it counts the first of each group (both carry the same max).
+  const max = sections.filter((section) => !outdoorSectionExcluded(sections, undefined, section)).reduce((sum, section) => sum + outdoorMaxForSection(candidate.level, section, outdoorItemsByLevel), 0) || scoreLimits(candidate.level).outdoorMax;
   return { total, max, answered };
 }
 

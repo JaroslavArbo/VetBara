@@ -129,7 +129,7 @@ function isAssignedExaminer(examinerId, candidateId) {
   return Boolean(assignment && (assignment.primary === examinerId || assignment.secondary === examinerId));
 }
 
-function scopeError(session, candidateId) {
+function scopeError(session, candidateId, dbAssignedCandidateIds) {
   if (!candidateId) return "Missing candidate id for scoped sync event";
 
   if (session.role === "Candidate") {
@@ -137,13 +137,17 @@ function scopeError(session, candidateId) {
   }
 
   if (session.role === "Examiner") {
-    return isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
+    // Real rosters live in examiner_assignments (fetched once per request); the hardcoded demo
+    // ASSIGNMENTS stay as a fallback so seeded/demo sessions keep working. Without the DB check a
+    // 4th examiner (E-004…) could log in but every score sync got 403.
+    const assignedInDb = Boolean(dbAssignedCandidateIds && dbAssignedCandidateIds.has(candidateId));
+    return assignedInDb || isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
   }
 
   return "Role cannot sync this event";
 }
 
-function validateEvent(session, event) {
+function validateEvent(session, event, dbAssignedCandidateIds) {
   if (!event || typeof event !== "object") return { status: 400, error: "Event must be an object" };
   if (!event.clientEventId) return { status: 400, error: "Missing clientEventId" };
   if (!SUPPORTED_EVENT_TYPES.has(event.type)) return { status: 400, error: "Unsupported event type" };
@@ -156,7 +160,7 @@ function validateEvent(session, event) {
   if (conflict) return { status: 400, error: "Conflicting candidate id references", details: conflict };
 
   const candidateId = candidateIdFor(event);
-  const error = scopeError(session, candidateId);
+  const error = scopeError(session, candidateId, dbAssignedCandidateIds);
   if (error) return { status: 403, error, candidateId };
 
   return { candidateId };
@@ -194,7 +198,54 @@ function clientTimestamp(event) {
   return value ? new Date(value).toISOString() : new Date().toISOString();
 }
 
-async function upsertNormalizedState(session, event, candidateId) {
+// Which exam event this session belongs to: Centre → its own current event; Candidate/Examiner →
+// the exam event id at the end of their qr_token label (`${role} ${subjectId} ${examEventId}`,
+// written by ensureQrAccess). Empty string when unknown (legacy/demo sessions) — those rows stay
+// unscoped, matching pre-migration data.
+async function sessionExamEventId(session) {
+  try {
+    if (!envReady()) return "";
+    if (session.role === "Centre") {
+      const rows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(session.subject_id)}&status=eq.current&select=id&order=updated_at.desc&limit=1`);
+      return rows[0]?.id || "";
+    }
+    if (session.qr_token_id) {
+      const rows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}&select=label&limit=1`);
+      const eventId = String(rows[0]?.label || "").trim().split(/\s+/).pop() || "";
+      return eventId.startsWith("EXAM-") ? eventId : "";
+    }
+  } catch { /* best-effort */ }
+  return "";
+}
+
+// Until migration 20260734 runs, the projection tables have no exam_event_id column and
+// PostgREST rejects the scoped write. Fall back to the legacy shape so the deploy order does
+// not matter (code first, migration later); the flag avoids re-trying on every call.
+let eventScopingAvailable = true;
+function isMissingEventColumnError(error) {
+  return /exam_event_id|PGRST204|ON CONFLICT/i.test(String(error?.message || error));
+}
+async function upsertProjection(table, conflictCols, row, examEventId) {
+  if (eventScopingAvailable) {
+    try {
+      return await supabase(`${table}?on_conflict=exam_event_id,${conflictCols}`, {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ ...row, exam_event_id: examEventId ?? "" }),
+      });
+    } catch (error) {
+      if (!isMissingEventColumnError(error)) throw error;
+      eventScopingAvailable = false;
+    }
+  }
+  return supabase(`${table}?on_conflict=${conflictCols}`, {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify(row),
+  });
+}
+
+async function upsertNormalizedState(session, event, candidateId, examEventId) {
   if (!envReady() || !session.id) return false;
 
   const payload = event.payload ?? {};
@@ -207,10 +258,7 @@ async function upsertNormalizedState(session, event, candidateId) {
     const status = closed ? "closed" : "open";
     const openedAt = payload.openedAt || payload.openedAtIso || (!closed ? event.createdAt : null);
     const closedAt = payload.closedAt || payload.closedAtIso || (closed ? event.createdAt : null);
-    await supabase("candidate_sections?on_conflict=candidate_id,section_key", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify({
+    await upsertProjection("candidate_sections", "candidate_id,section_key", {
         candidate_id: candidateId,
         section_key: sectionKey,
         status,
@@ -218,8 +266,7 @@ async function upsertNormalizedState(session, event, candidateId) {
         closed_at: closed ? closedAt : null,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
-      }),
-    });
+      }, examEventId);
     return true;
   }
 
@@ -233,17 +280,13 @@ async function upsertNormalizedState(session, event, candidateId) {
       variantCode: payload.variantCode ?? answerPayload.variantCode ?? null,
       updatedAt,
     };
-    await supabase("test_responses?on_conflict=candidate_id,question_id", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify({
+    await upsertProjection("test_responses", "candidate_id,question_id", {
         candidate_id: candidateId,
         question_id: questionId,
         answer,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
-      }),
-    });
+      }, examEventId);
     return true;
   }
 
@@ -251,10 +294,7 @@ async function upsertNormalizedState(session, event, candidateId) {
     const examinerId = examinerIdFor(session, event);
     const outdoorSection = sectionKey || payload.sectionKey || "outdoor";
     if (!candidateId || !examinerId) return false;
-    await supabase("outdoor_assessments?on_conflict=candidate_id,examiner_id,section_key", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify({
+    await upsertProjection("outdoor_assessments", "candidate_id,examiner_id,section_key", {
         candidate_id: candidateId,
         examiner_id: examinerId,
         mode: payload.mode || "primary",
@@ -263,8 +303,7 @@ async function upsertNormalizedState(session, event, candidateId) {
         submitted_at: event.type === "outdoor_assessment.submitted" ? payload.submittedAt ?? event.createdAt ?? new Date().toISOString() : null,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
-      }),
-    });
+      }, examEventId);
     return true;
   }
 
@@ -272,10 +311,7 @@ async function upsertNormalizedState(session, event, candidateId) {
     const examinerId = examinerIdFor(session, event);
     const itemId = itemIdFor(event);
     if (!candidateId || !examinerId || !itemId) return false;
-    await supabase("outdoor_scores?on_conflict=candidate_id,examiner_id,item_id", {
-      method: "POST",
-      headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-      body: JSON.stringify({
+    await upsertProjection("outdoor_scores", "candidate_id,examiner_id,item_id", {
         candidate_id: candidateId,
         examiner_id: examinerId,
         item_id: itemId,
@@ -284,15 +320,14 @@ async function upsertNormalizedState(session, event, candidateId) {
         payload,
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
-      }),
-    });
+      }, examEventId);
     return true;
   }
 
   return false;
 }
 
-async function storeEvent(session, event, candidateId) {
+async function storeEvent(session, event, candidateId, examEventId) {
   const createdAt = event.createdAt ? new Date(event.createdAt).toISOString() : new Date().toISOString();
 
   if (!envReady() || !session.id) {
@@ -302,9 +337,7 @@ async function storeEvent(session, event, candidateId) {
   const duplicate = await existingEvent(session.id, event.clientEventId);
   if (duplicate) return { id: duplicate.id, duplicate: true, normalized: false };
 
-  const rows = await supabase("sync_events", {
-    method: "POST",
-    body: JSON.stringify({
+  const syncEventRow = {
       client_event_id: event.clientEventId,
       session_id: session.id,
       role: session.role,
@@ -315,10 +348,16 @@ async function storeEvent(session, event, candidateId) {
       candidate_id: candidateId,
       payload: event.payload ?? {},
       created_at: createdAt,
-    }),
-  });
+  };
+  let rows;
+  try {
+    rows = await supabase("sync_events", { method: "POST", body: JSON.stringify({ ...syncEventRow, exam_event_id: examEventId ?? "" }) });
+  } catch (error) {
+    if (!isMissingEventColumnError(error)) throw error;
+    rows = await supabase("sync_events", { method: "POST", body: JSON.stringify(syncEventRow) });
+  }
 
-  const normalized = await upsertNormalizedState(session, event, candidateId);
+  const normalized = await upsertNormalizedState(session, event, candidateId, examEventId);
   return { id: rows[0]?.id ?? event.clientEventId, duplicate: false, normalized };
 }
 
@@ -332,7 +371,15 @@ export default async function handler(request, response) {
     const session = await resolveSession(sessionToken);
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
 
-    const validations = events.map((event) => ({ event, validation: validateEvent(session, event) }));
+    let dbAssignedCandidateIds = null;
+    if (session.role === "Examiner" && envReady()) {
+      try {
+        const rows = await supabase(`examiner_assignments?examiner_id=eq.${encodeURIComponent(session.subject_id)}&select=candidate_id`);
+        dbAssignedCandidateIds = new Set(rows.map((row) => row.candidate_id));
+      } catch { dbAssignedCandidateIds = null; }
+    }
+
+    const validations = events.map((event) => ({ event, validation: validateEvent(session, event, dbAssignedCandidateIds) }));
     const rejected = validations.find((item) => item.validation.error);
     if (rejected) {
       return sendJson(response, rejected.validation.status, {
@@ -347,9 +394,10 @@ export default async function handler(request, response) {
 
     const results = [];
     let accepted = 0;
+    const examEventId = await sessionExamEventId(session);
 
     for (const { event, validation } of validations) {
-      const stored = await storeEvent(session, event, validation.candidateId ?? null);
+      const stored = await storeEvent(session, event, validation.candidateId ?? null, examEventId);
       accepted += 1;
       results.push({ clientEventId: event.clientEventId, ok: true, id: stored.id, duplicate: stored.duplicate, normalized: stored.normalized });
     }

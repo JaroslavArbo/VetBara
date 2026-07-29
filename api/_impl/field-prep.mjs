@@ -89,7 +89,11 @@ export function mergeTabletSyncIntoPreparation(prep, syncPayload, examId) {
   }
   function noteFor(level, code) {
     const codeOnly = String(code || "").trim().toUpperCase();
-    return treeNotes[treeKey(level, codeOnly)] || treeNotes[codeOnly] || null;
+    const normalizedLevel = String(level || "Practicing").toLowerCase() === "consulting" ? "Consulting" : "Practicing";
+    // The tablet keys its draft notes "Level-CODE" (fieldTreeKey); accept that alongside the
+    // legacy "Level:CODE" and bare-code shapes — the colon-only lookup silently dropped every
+    // tablet note when a payload arrived without a full fieldPreparationSnapshot.
+    return treeNotes[`${normalizedLevel}:${codeOnly}`] || treeNotes[`${normalizedLevel}-${codeOnly}`] || treeNotes[codeOnly] || null;
   }
   function snapshotFor(level, code) {
     const wanted = treeKey(level, code);

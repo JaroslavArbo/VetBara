@@ -63,10 +63,47 @@ async function resolveSession(sessionToken) {
     return readDemoSessionToken(sessionToken);
   }
 
-  const rows = await supabase(`app_sessions?token_hash=eq.${hash(sessionToken)}&revoked_at=is.null&select=id,role,subject_id,expires_at&limit=1`);
+  const rows = await supabase(`app_sessions?token_hash=eq.${hash(sessionToken)}&revoked_at=is.null&select=id,role,subject_id,qr_token_id,expires_at&limit=1`);
   const session = rows[0];
   if (!session || new Date(session.expires_at) <= new Date()) return null;
   return session;
+}
+
+
+// Which exam event the requesting session belongs to (Centre → its current event; others → the
+// event id ending their qr_token label). '' = unknown/legacy. Reads are filtered by it so one
+// certification never sees another's (or a previous exam's) sections/answers/scores. If the
+// 20260734 migration has not run yet, the filtered read fails on the missing column and we fall
+// back to unscoped reads (deploy order stays free).
+let eventScopingAvailable = true;
+function isMissingEventColumnError(error) {
+  return /exam_event_id|PGRST204|42703/i.test(String(error?.message || error));
+}
+async function sessionExamEventId(session) {
+  try {
+    if (!envReady()) return "";
+    if (session.role === "Centre") {
+      const rows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(session.subject_id)}&status=eq.current&select=id&order=updated_at.desc&limit=1`);
+      return rows[0]?.id || "";
+    }
+    if (session.qr_token_id) {
+      const rows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}&select=label&limit=1`);
+      const eventId = String(rows[0]?.label || "").trim().split(/\s+/).pop() || "";
+      return eventId.startsWith("EXAM-") ? eventId : "";
+    }
+  } catch { /* best-effort */ }
+  return "";
+}
+async function scopedRead(buildPath, examEventId) {
+  if (eventScopingAvailable && examEventId !== undefined) {
+    try {
+      return await supabase(buildPath(`&exam_event_id=eq.${encodeURIComponent(examEventId ?? "")}`));
+    } catch (error) {
+      if (!isMissingEventColumnError(error)) throw error;
+      eventScopingAvailable = false;
+    }
+  }
+  return supabase(buildPath(""));
 }
 
 function isAssignedExaminer(examinerId, candidateId) {
@@ -89,25 +126,25 @@ function candidateFor(candidateId) {
   return CANDIDATES.find((candidate) => candidate.id === candidateId) ?? { id: candidateId, name: candidateId, level: null };
 }
 
-async function readRows(table, candidateId, orderBy = "updated_at.desc") {
+async function readRows(table, candidateId, examEventId, orderBy = "updated_at.desc") {
   if (!envReady()) return [];
   const order = orderBy ? `&order=${orderBy}` : "";
-  return supabase(`${table}?candidate_id=eq.${encodeURIComponent(candidateId)}&select=*${order}`);
+  return scopedRead((scope) => `${table}?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&select=*${order}`, examEventId);
 }
 
-async function readReportEvents(candidateId) {
+async function readReportEvents(candidateId, examEventId) {
   if (!envReady()) return [];
   const types = encodeURIComponent("report_draft.saved,report_photo.added");
-  return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
+  return scopedRead((scope) => `sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&event_type=in.(${types})&select=*&order=created_at.asc`, examEventId);
 }
 
 // Examiner-entered written/report scores travel as plain sync_events (no dedicated table), so
 // read them here and keep only the latest value per examiner+field. The Centre reads these back
 // into Section E — without them, an examiner's written/report score never leaves their tablet.
-async function readExaminerScoreEvents(candidateId) {
+async function readExaminerScoreEvents(candidateId, examEventId) {
   if (!envReady()) return [];
   const types = encodeURIComponent("examiner_score.saved");
-  return supabase(`sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}&event_type=in.(${types})&select=*&order=created_at.asc`);
+  return scopedRead((scope) => `sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&event_type=in.(${types})&select=*&order=created_at.asc`, examEventId);
 }
 
 function buildExaminerScores(events) {
@@ -260,15 +297,25 @@ export default async function handler(request, response) {
 
     const session = await resolveSession(sessionToken);
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
-    if (!canReadCandidate(session, candidateId)) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
+    let allowed = canReadCandidate(session, candidateId);
+    if (!allowed && session.role === "Examiner" && envReady()) {
+      // Real rosters live in examiner_assignments — the hardcoded demo ASSIGNMENTS only cover
+      // E-001..E-003, which locked a 4th examiner out of reading their assigned candidates.
+      try {
+        const rows = await supabase(`examiner_assignments?examiner_id=eq.${encodeURIComponent(session.subject_id)}&candidate_id=eq.${encodeURIComponent(candidateId)}&select=candidate_id&limit=1`);
+        allowed = rows.length > 0;
+      } catch { /* keep denied */ }
+    }
+    if (!allowed) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
+    const examEventId = await sessionExamEventId(session);
     const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents] = await Promise.all([
-      readRows("candidate_sections", candidateId),
-      readRows("test_responses", candidateId),
-      readRows("outdoor_assessments", candidateId),
-      readRows("outdoor_scores", candidateId),
-      readReportEvents(candidateId),
-      readExaminerScoreEvents(candidateId),
+      readRows("candidate_sections", candidateId, examEventId),
+      readRows("test_responses", candidateId, examEventId),
+      readRows("outdoor_assessments", candidateId, examEventId),
+      readRows("outdoor_scores", candidateId, examEventId),
+      readReportEvents(candidateId, examEventId),
+      readExaminerScoreEvents(candidateId, examEventId),
     ]);
 
     const reportDraft = buildReportDraft(reportEvents);
