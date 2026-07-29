@@ -5287,6 +5287,31 @@ function findMissingFieldAssignment(prep) {
   return FIELD_REQUIRED_ASSIGNMENTS.find(({ level, code }) => !trees.some((tree) => fieldEnsureArray(tree.assignments).some((assignment) => assignment.level === level && assignment.code === code))) || null;
 }
 
+// Standard row layout of the 8 required trees around the exam centre (degrees). Used for
+// placeholder trees and as the recovery layout in "Move all trees here" when a tree's stored
+// coordinates are corrupt or absurdly far from the centre.
+const FIELD_STANDARD_TREE_OFFSETS = {
+  "Practicing-A": { lat: 0.00025, lng: 0.00025 },
+  "Practicing-B": { lat: 0.00045, lng: 0.00055 },
+  "Practicing-C": { lat: 0.00015, lng: 0.00078 },
+  "Practicing-D": { lat: -0.00018, lng: 0.00055 },
+  "Consulting-A": { lat: 0.00005, lng: -0.00025 },
+  "Consulting-B": { lat: 0.00033, lng: -0.00048 },
+  "Consulting-C": { lat: -0.00012, lng: -0.00062 },
+  "Consulting-D": { lat: -0.00038, lng: -0.00028 },
+};
+
+// Fallback offset for any tree key, including second-tree instances ("Practicing-A2" → the base
+// "Practicing-A" offset nudged slightly aside so the two don't overlap).
+function fieldStandardOffsetForKey(key) {
+  const direct = FIELD_STANDARD_TREE_OFFSETS[key];
+  if (direct) return direct;
+  const match = String(key || "").match(/^(Practicing|Consulting)-([A-D])\d*$/);
+  const base = match ? FIELD_STANDARD_TREE_OFFSETS[`${match[1]}-${match[2]}`] : null;
+  if (base) return { lat: base.lat + 0.00007, lng: base.lng + 0.00007 };
+  return { lat: 0.0002, lng: 0.0002 };
+}
+
 function limitFieldTreesToRequiredCodes(trees, level = "Practicing", center = {}) {
   const source = fieldEnsureArray(trees);
   const includeAll = String(level || "").toLowerCase() === "all";
@@ -5295,16 +5320,7 @@ function limitFieldTreesToRequiredCodes(trees, level = "Practicing", center = {}
   const centerLng = Number(center?.longitude ?? center?.lng);
   const baseLat = Number.isFinite(centerLat) ? centerLat : 49.405888;
   const baseLng = Number.isFinite(centerLng) ? centerLng : 15.128912;
-  const offsets = {
-    "Practicing-A": { lat: 0.00025, lng: 0.00025 },
-    "Practicing-B": { lat: 0.00045, lng: 0.00055 },
-    "Practicing-C": { lat: 0.00015, lng: 0.00078 },
-    "Practicing-D": { lat: -0.00018, lng: 0.00055 },
-    "Consulting-A": { lat: 0.00005, lng: -0.00025 },
-    "Consulting-B": { lat: 0.00033, lng: -0.00048 },
-    "Consulting-C": { lat: -0.00012, lng: -0.00062 },
-    "Consulting-D": { lat: -0.00038, lng: -0.00028 },
-  };
+  const offsets = FIELD_STANDARD_TREE_OFFSETS;
   return levels.flatMap((requiredLevel) => FIELD_TREE_CODES.map((code) => {
     const key = fieldTreeKey(requiredLevel, code);
     const existing = source.find((tree) => fieldTreeKey(tree) === key || (String(tree.code || "").toUpperCase() === code && normalizeFieldLevel(tree.level || requiredLevel) === requiredLevel));
@@ -7136,8 +7152,6 @@ function FieldTabletPage() {
       setError(tt("moveAllNoCentre"));
       return;
     }
-    const dLat = targetLat - centerLat;
-    const dLng = targetLng - centerLng;
     const treesSnapshot = fieldTrees.map((tree) => ({
       key: fieldTreeKey(tree),
       lat: Number(tree.latitude),
@@ -7146,11 +7160,22 @@ function FieldTabletPage() {
     updateDraft((current) => {
       const treeNotes = { ...(current.treeNotes || {}) };
       treesSnapshot.forEach(({ key, lat, lng }) => {
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        // Keep each tree's offset from the current centre — unless it is invalid or absurdly far
+        // (stale/corrupted preps have held trees thousands of km from the centre, e.g. parked in
+        // the Atlantic; shifting those by the same delta kept them invisible and made Move-all
+        // look like it "only moved the centre"). Anything beyond ~2 km falls back to the standard
+        // row layout so every tree ALWAYS lands next to the target.
+        let offsetLat = lat - centerLat;
+        let offsetLng = lng - centerLng;
+        if (!Number.isFinite(offsetLat) || !Number.isFinite(offsetLng) || Math.abs(offsetLat) > 0.02 || Math.abs(offsetLng) > 0.03) {
+          const standard = fieldStandardOffsetForKey(key);
+          offsetLat = standard.lat;
+          offsetLng = standard.lng;
+        }
         treeNotes[key] = {
           ...(treeNotes[key] || {}),
-          latitude: Number((lat + dLat).toFixed(8)),
-          longitude: Number((lng + dLng).toFixed(8)),
+          latitude: Number((targetLat + offsetLat).toFixed(8)),
+          longitude: Number((targetLng + offsetLng).toFixed(8)),
         };
       });
       return {
