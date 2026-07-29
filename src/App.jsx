@@ -6421,6 +6421,7 @@ function FieldTabletPage() {
   // when the site is abroad, e.g. Italy). Auto-pick Esri World Imagery outside CZ; a manual choice
   // via the layer dropdown always wins from then on.
   const mapLayerManualRef = useRef(false);
+  const markerLayerRef = useRef(null);
   const [mapZoom, setMapZoom] = useState(18);
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
@@ -6811,6 +6812,20 @@ function FieldTabletPage() {
     if (mapLayerManualRef.current) return;
     setMapLayer(isWithinCzechRepublic(mapCenter.lat, mapCenter.lng) ? "cuzk" : "esri");
   }, [mapCenter.lat, mapCenter.lng]);
+
+  // iOS Safari keeps the composited map layer's cached texture and leaves recentred / newly-added
+  // tree markers unpainted — they "vanish" after Move-all-here or after enabling a second tree,
+  // even though they are in the DOM at the right spot. Nudge a GPU-layer repaint on the marker
+  // layer whenever the centre/zoom/level or the set of visible trees changes.
+  useEffect(() => {
+    const el = markerLayerRef.current;
+    if (!el || typeof window === "undefined") return undefined;
+    el.style.transform = "translateZ(0)";
+    const raf = window.requestAnimationFrame(() => {
+      if (markerLayerRef.current) markerLayerRef.current.style.transform = "";
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [mapCenter.lat, mapCenter.lng, mapZoom, activeTabletLevel, visibleFieldTrees.length]);
 
   function clampMapZoom(value) {
     const zoom = Math.round(Number(value));
@@ -7374,7 +7389,7 @@ function FieldTabletPage() {
                         layer's cached texture and leaves repositioned markers unpainted (trees
                         "vanish" right after Move-all). The key does NOT change during a transform
                         pan, so dragging stays smooth. */}
-                    <div className="field-marker-layer" key={`${mapCenter.lat}:${mapCenter.lng}:${mapZoom}:${activeTabletLevel}`}>
+                    <div className="field-marker-layer" ref={markerLayerRef} key={`${mapCenter.lat}:${mapCenter.lng}:${mapZoom}:${activeTabletLevel}:${visibleFieldTrees.length}`}>
                     {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
                       const p = mapPoint(centerLat, centerLng);
                       return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
