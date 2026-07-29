@@ -1100,6 +1100,10 @@ function VetBaraPrototype() {
   const [status, setStatus] = useState("Draft by Admin");
   const [centreUnlocked, setCentreUnlocked] = useState(false);
   const [centreCode, setCentreCode] = useState("");
+  // The certification's own id (Centre session subject). Field preparation is stored per exam id,
+  // and this used to fall back to the shared CENTRE_QR_ID constant for every certification opened
+  // by link — so two certifications silently shared one site setup, its trees and their photos.
+  const [centreExamId, setCentreExamId] = useState("");
   const [candidates, setCandidates] = useState(START_CANDIDATES);
   const [examiners, setExaminers] = useState(EXAMINERS);
   const [selectedCandidateId, setSelectedCandidateId] = useState("C-001");
@@ -1689,6 +1693,12 @@ function VetBaraPrototype() {
     if (isObject(access.centreSetup?.testPackage)) {
       applyTestPackagePayload(access.centreSetup.testPackage);
     }
+
+    // Scope this browser's per-exam caches to the certification we just authenticated into:
+    // its exam event (Centre without an event yet falls back to its own centre id, which is
+    // already unique per certification).
+    setActiveExamScope(access.centreSetup?.examEventId || (access.role === "Centre" ? access.subjectId : ""));
+    if (access.role === "Centre" && access.subjectId) setCentreExamId(String(access.subjectId));
 
     // Apply the real Centre roster (names, e-mails, assignments) persisted server-side, so an
     // Examiner/Candidate on their own device shows the actual people instead of the demo roster.
@@ -2903,7 +2913,7 @@ function VetBaraPrototype() {
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
       {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
@@ -4706,6 +4716,17 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
 const OUTDOOR_CENTRE_RESULT_KEY = "vetbara.outdoorCentreResults.v1";
 const EXAMINER_RESULT_KEY = "vetbara.examinerResults.v1";
 const WRITTEN_QUESTION_SCORES_KEY = "vetbara.writtenQuestionScores.v1";
+
+// These browser caches used to be keyed by candidate id alone, so opening two certifications in
+// the same browser mixed their results (candidate ids repeat across exams — C-001 exists in both).
+// Every cache key is now suffixed with the active exam, set when a session is resolved.
+let activeExamScope = "";
+function setActiveExamScope(scope) {
+  activeExamScope = String(scope || "").replace(/[^A-Za-z0-9._-]+/g, "-");
+}
+function scopedCacheKey(baseKey) {
+  return activeExamScope ? `${baseKey}.${activeExamScope}` : baseKey;
+}
 const EXAMINER_FORM_UNLOCK_PASSWORD = "Vetarbo";
 
 // Per-question written-test marks the examiner enters, kept per candidate so they survive leaving
@@ -4714,7 +4735,7 @@ const EXAMINER_FORM_UNLOCK_PASSWORD = "Vetarbo";
 function readWrittenQuestionScores(candidateId) {
   if (typeof window === "undefined" || !candidateId) return {};
   try {
-    const all = JSON.parse(window.localStorage.getItem(WRITTEN_QUESTION_SCORES_KEY) || "{}");
+    const all = JSON.parse(window.localStorage.getItem(scopedCacheKey(WRITTEN_QUESTION_SCORES_KEY)) || "{}");
     const row = all?.[candidateId];
     return row && typeof row === "object" && !Array.isArray(row) ? row : {};
   } catch {
@@ -4725,9 +4746,9 @@ function readWrittenQuestionScores(candidateId) {
 function writeWrittenQuestionScores(candidateId, scores) {
   if (typeof window === "undefined" || !candidateId) return;
   try {
-    const all = JSON.parse(window.localStorage.getItem(WRITTEN_QUESTION_SCORES_KEY) || "{}");
+    const all = JSON.parse(window.localStorage.getItem(scopedCacheKey(WRITTEN_QUESTION_SCORES_KEY)) || "{}");
     const next = { ...(all && typeof all === "object" && !Array.isArray(all) ? all : {}), [candidateId]: scores || {} };
-    window.localStorage.setItem(WRITTEN_QUESTION_SCORES_KEY, JSON.stringify(next));
+    window.localStorage.setItem(scopedCacheKey(WRITTEN_QUESTION_SCORES_KEY), JSON.stringify(next));
   } catch {
     /* ignore quota/serialization errors — the in-memory copy still works this session */
   }
@@ -4736,7 +4757,7 @@ function writeWrittenQuestionScores(candidateId, scores) {
 function readExaminerResultsLocal() {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(EXAMINER_RESULT_KEY);
+    const raw = window.localStorage.getItem(scopedCacheKey(EXAMINER_RESULT_KEY));
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -4766,7 +4787,7 @@ function writeExaminerResultLocal(record) {
       },
     },
   };
-  window.localStorage.setItem(EXAMINER_RESULT_KEY, JSON.stringify(next));
+  window.localStorage.setItem(scopedCacheKey(EXAMINER_RESULT_KEY), JSON.stringify(next));
   window.dispatchEvent(new CustomEvent("vetbara:examiner-results", { detail: next }));
   return next;
 }
@@ -4783,7 +4804,7 @@ async function saveExaminerResultToLocalServer(record) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
     if (data?.results) {
-      window.localStorage.setItem(EXAMINER_RESULT_KEY, JSON.stringify(data.results));
+      window.localStorage.setItem(scopedCacheKey(EXAMINER_RESULT_KEY), JSON.stringify(data.results));
       window.dispatchEvent(new CustomEvent("vetbara:examiner-results", { detail: data.results }));
     }
     return data;
@@ -4800,7 +4821,7 @@ async function fetchExaminerResultsFromLocalServer() {
     if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
     const results = data?.results && typeof data.results === "object" && !Array.isArray(data.results) ? data.results : {};
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(EXAMINER_RESULT_KEY, JSON.stringify(results));
+      window.localStorage.setItem(scopedCacheKey(EXAMINER_RESULT_KEY), JSON.stringify(results));
       window.dispatchEvent(new CustomEvent("vetbara:examiner-results", { detail: results }));
     }
     return results;
@@ -4823,7 +4844,7 @@ function confirmedReopenAllowed(label, t) {
 function readOutdoorCentreResults() {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(OUTDOOR_CENTRE_RESULT_KEY);
+    const raw = window.localStorage.getItem(scopedCacheKey(OUTDOOR_CENTRE_RESULT_KEY));
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -4847,7 +4868,7 @@ function writeOutdoorCentreResult(record) {
       },
     },
   };
-  window.localStorage.setItem(OUTDOOR_CENTRE_RESULT_KEY, JSON.stringify(next));
+  window.localStorage.setItem(scopedCacheKey(OUTDOOR_CENTRE_RESULT_KEY), JSON.stringify(next));
   window.dispatchEvent(new CustomEvent("vetbara:outdoor-centre-results", { detail: next }));
 }
 
@@ -8733,14 +8754,22 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
   );
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
   // dashboard sections mount their children only while open — switching to Candidates/Examiners
   // would otherwise unmount the module and discard unsaved site-prep edits. CentreView stays
   // mounted for the whole Centre session, so the draft survives section navigation.
-  const [fieldPrep, setFieldPrep] = useState(() => createDefaultFieldPreparation({ examId: centreCode || CENTRE_QR_ID, language }));
+  const fieldPrepExamId = centreExamId || centreCode || CENTRE_QR_ID;
+  const [fieldPrep, setFieldPrep] = useState(() => createDefaultFieldPreparation({ examId: fieldPrepExamId, language }));
+  // The Centre session resolves asynchronously, so the draft above may have been created with the
+  // fallback id. Re-point an untouched draft once the real certification id arrives — never
+  // overwrite an id the operator typed or a preparation already loaded from the server.
+  useEffect(() => {
+    if (!centreExamId) return;
+    setFieldPrep((current) => (current?.examId && current.examId !== CENTRE_QR_ID ? current : { ...current, examId: centreExamId }));
+  }, [centreExamId]);
   // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
   // default; switching to a local base URL is explicit, session-only, and never silently
   // rewrites links unless a validated local URL is set.
@@ -9023,7 +9052,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, unlockCentre, e
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
-          <CentreFieldPreparationModule prep={fieldPrep} setPrep={setFieldPrep} centreCode={centreCode || CENTRE_QR_ID} language={language} sessionToken={activeSessionToken} t={t} />
+          <CentreFieldPreparationModule prep={fieldPrep} setPrep={setFieldPrep} centreCode={fieldPrepExamId} language={language} sessionToken={activeSessionToken} t={t} />
         </AdminDashboardSection>
 
         <AdminDashboardSection

@@ -196,7 +196,9 @@ async function loadCentreSetupForBootstrap(session) {
       return { id: row.id, name: row.name || p.name || row.id, registrationId: p.registrationId || p.registration_id || "", email: p.email || "" };
     });
     const assignments = assignmentRows.map((row) => ({ candidateId: row.candidate_id, examinerId: row.examiner_id, role: row.role }));
-    return { testPackage, candidates, examiners, assignments };
+    // The client scopes its per-exam browser caches by this id, so results from one certification
+    // never surface in another opened in the same browser.
+    return { examEventId, testPackage, candidates, examiners, assignments };
   } catch (error) {
     console.warn("Bootstrap could not load Centre setup", error?.message || error);
     return null;
