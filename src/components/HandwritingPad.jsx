@@ -97,6 +97,18 @@ function wrapTemplateLines(text, maxChars) {
 export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, templateText = "", t, Button, CloseIcon, EraserIcon, UndoIcon }) {
   const svgRef = useRef(null);
   const scrollRef = useRef(null);
+  // Ink saved in an earlier session arrives as a flat PNG (`existingImage`), so it has no stroke
+  // data to filter. It lives on this canvas layered *under* the SVG, which lets the eraser punch
+  // pixels out of it and "Clear all" wipe it — previously both only touched `strokes`, so anything
+  // drawn before a reopen was permanent. The template text is not on this layer (it is re-rendered
+  // into the SVG from `templateText`), so erasing never removes the examiner's printed helper text.
+  const bgCanvasRef = useRef(null);
+  const lastErasePointRef = useRef(null);
+  // Set once the operator wipes the pad, so a slow-loading background image can't repaint itself
+  // over a clear that already happened.
+  const bgClearedRef = useRef(false);
+  const [hasBackground, setHasBackground] = useState(false);
+  const [dirty, setDirty] = useState(false);
   // Active finger-scroll gesture: { pointerId, startClientY, startScrollTop }. Only ever set for
   // pointerType "touch"; a pen/mouse leaves it null so those keep drawing.
   const touchScrollRef = useRef(null);
@@ -168,8 +180,50 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     return [x, y, pressure];
   }
 
+  // Paint the previously saved sketch onto the erasable background layer.
+  useEffect(() => {
+    const canvas = bgCanvasRef.current;
+    if (!canvas || !existingImage) return undefined;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled || bgClearedRef.current) return;
+      canvas.getContext("2d").drawImage(img, 0, 0, CANVAS_WIDTH, canvasHeight);
+      setHasBackground(true);
+    };
+    img.src = existingImage;
+    return () => { cancelled = true; };
+  }, [existingImage, canvasHeight]);
+
+  // Cut a round hole through the old ink, joining it to the previous point of the same gesture so a
+  // fast drag erases a continuous band instead of a dotted trail.
+  function eraseBackgroundAt(point) {
+    const canvas = bgCanvasRef.current;
+    if (!canvas || !hasBackground) return;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    const previous = lastErasePointRef.current;
+    if (previous) {
+      ctx.lineWidth = ERASER_RADIUS * 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(previous[0], previous[1]);
+      ctx.lineTo(point[0], point[1]);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(point[0], point[1], ERASER_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    lastErasePointRef.current = point;
+  }
+
   function eraseAt(point) {
     setStrokes((prev) => prev.filter((stroke) => !strokeHitTest(stroke, point, ERASER_RADIUS)));
+    eraseBackgroundAt(point);
+    setDirty(true);
   }
 
   function handlePointerDown(event) {
@@ -192,6 +246,9 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     drawingRef.current = true;
     activePointerIdRef.current = event.pointerId;
     const point = svgPoint(event);
+    // Each press starts a fresh erase gesture, so the band is never joined to where the previous
+    // one happened to end.
+    lastErasePointRef.current = null;
     if (eraserMode) eraseAt(point);
     else setCurrentPoints([point]);
   }
@@ -220,18 +277,27 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     drawingRef.current = false;
     activePointerIdRef.current = null;
     try { svgRef.current?.releasePointerCapture?.(event.pointerId); } catch { /* not fatal */ }
+    lastErasePointRef.current = null;
     if (!eraserMode && currentPoints && currentPoints.length > 1) {
       setStrokes((prev) => [...prev, { points: currentPoints, color, size }]);
+      setDirty(true);
     }
     setCurrentPoints(null);
   }
 
+  // Undo only steps back through strokes drawn in this session — erased pixels of a previously
+  // saved sketch are not restorable, which is why "Clear all" stays available as the way out.
   function undo() {
     setStrokes((prev) => prev.slice(0, -1));
   }
 
   function clearAll() {
     setStrokes([]);
+    bgClearedRef.current = true;
+    const canvas = bgCanvasRef.current;
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, CANVAS_WIDTH, canvasHeight);
+    setHasBackground(false);
+    setDirty(true);
   }
 
   function pathFor(strokeData) {
@@ -240,37 +306,24 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
 
   async function handleSave() {
     const svg = svgRef.current;
-    // Strip the background <image> (existingImage, if any) from the serialized SVG before
-    // rasterizing it — it's drawn separately onto the canvas below via drawImage.
-    const svgClone = svg.cloneNode(true);
-    const bg = svgClone.querySelector("[data-handwriting-bg]");
-    if (bg) bg.remove();
-    const svgString = new XMLSerializer().serializeToString(svgClone);
+    const svgString = new XMLSerializer().serializeToString(svg);
     const svgUrl = URL.createObjectURL(new Blob([svgString], { type: "image/svg+xml;charset=utf-8" }));
     try {
-      const [background, strokesImage] = await Promise.all([
-        existingImage
-          ? new Promise((resolve, reject) => {
-              const img = new Image();
-              img.onload = () => resolve(img);
-              img.onerror = reject;
-              img.src = existingImage;
-            })
-          : Promise.resolve(null),
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = svgUrl;
-        }),
-      ]);
+      const strokesImage = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = svgUrl;
+      });
       const canvas = document.createElement("canvas");
       canvas.width = CANVAS_WIDTH;
       canvas.height = canvasHeight;
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, CANVAS_WIDTH, canvasHeight);
-      if (background) ctx.drawImage(background, 0, 0, CANVAS_WIDTH, canvasHeight);
+      // Composite the *live* background layer, not `existingImage` — it carries whatever the
+      // eraser has already removed, so erasures survive the save.
+      if (bgCanvasRef.current) ctx.drawImage(bgCanvasRef.current, 0, 0);
       ctx.drawImage(strokesImage, 0, 0);
       onSave(canvas.toDataURL("image/png"));
     } finally {
@@ -336,13 +389,24 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           <Button type="button" onClick={undo} variant="outline" className="rounded-2xl" disabled={!strokes.length}>
             <UndoIcon className="mr-1 h-4 w-4" />{tr(t, "handwriting.undo", "Undo")}
           </Button>
-          <Button type="button" onClick={clearAll} variant="outline" className="rounded-2xl" disabled={!strokes.length}>
+          <Button type="button" onClick={clearAll} variant="outline" className="rounded-2xl" disabled={!strokes.length && !hasBackground}>
             {tr(t, "handwriting.clearAll", "Clear all")}
           </Button>
         </div>
 
         {tallCanvas && <p className="mb-2 text-xs text-slate-500">{tr(t, "handwriting.fingerScrollHint", "Draw with the stylus; drag with a finger to scroll for more writing space.")}</p>}
 
+        {/* The background canvas and the SVG share one box. `object-fit: contain` on the canvas
+            reproduces the SVG's "xMidYMid meet" letterboxing exactly, so old ink stays registered
+            with new ink and with the eraser's coordinates. */}
+        <div className={`relative shrink-0 overflow-hidden rounded-2xl border bg-white ${svgSizeClass}`} style={svgSizeStyle}>
+        <canvas
+          ref={bgCanvasRef}
+          width={CANVAS_WIDTH}
+          height={canvasHeight}
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          style={{ objectFit: "contain" }}
+        />
         <svg
           ref={svgRef}
           viewBox={`0 0 ${CANVAS_WIDTH} ${canvasHeight}`}
@@ -350,10 +414,9 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`shrink-0 rounded-2xl border bg-white ${svgSizeClass} ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
-          style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none", ...svgSizeStyle }}
+          className={`absolute inset-0 h-full w-full ${eraserMode ? "cursor-cell" : "cursor-crosshair"}`}
+          style={{ touchAction: "none", overscrollBehavior: "contain", WebkitUserSelect: "none", userSelect: "none" }}
         >
-          {existingImage && <image data-handwriting-bg="true" href={existingImage} x="0" y="0" width={CANVAS_WIDTH} height={canvasHeight} preserveAspectRatio="xMidYMid meet" />}
           {templateLines.length > 0 && (
             <text x={TEMPLATE_MARGIN_X} y={TEMPLATE_MARGIN_TOP} fill="#94a3b8" fontSize={TEMPLATE_FONT_SIZE} fontFamily="ui-sans-serif, system-ui, sans-serif">
               {templateLines.map((line, index) => (
@@ -366,11 +429,14 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           ))}
           {currentPath && <path d={currentPath} fill={color} />}
         </svg>
+        </div>
 
         {/* Sticky: with a tall canvas the footer used to sit far below the fold, so on a tablet the
             dialog looked like it only offered "Close" and the examiner could not find Save. */}
         <div className="sticky bottom-0 mt-3 flex justify-end gap-2 border-t border-slate-200 bg-white/95 py-2">
-          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length && !existingImage && templateLines.length === 0}>
+          {/* `dirty` keeps Save reachable after a full wipe, so clearing an old sketch can actually
+              be persisted rather than leaving the operator stuck with a disabled button. */}
+          <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!dirty && !strokes.length && !hasBackground && templateLines.length === 0}>
             {tr(t, "handwriting.save", "Save")}
           </Button>
         </div>
