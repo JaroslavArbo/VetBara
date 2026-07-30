@@ -367,7 +367,9 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           {currentPath && <path d={currentPath} fill={color} />}
         </svg>
 
-        <div className="mt-3 flex justify-end">
+        {/* Sticky: with a tall canvas the footer used to sit far below the fold, so on a tablet the
+            dialog looked like it only offered "Close" and the examiner could not find Save. */}
+        <div className="sticky bottom-0 mt-3 flex justify-end gap-2 border-t border-slate-200 bg-white/95 py-2">
           <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!strokes.length && !existingImage && templateLines.length === 0}>
             {tr(t, "handwriting.save", "Save")}
           </Button>

@@ -4881,9 +4881,11 @@ function examinerResultFor(results, candidateId, field) {
   return row && typeof row === "object" ? row : null;
 }
 
-function confirmedReopenAllowed(label, t) {
-  const password = window.prompt(t("examiner.confirmReopenPrompt").replace("{label}", label));
-  return password === EXAMINER_FORM_UNLOCK_PASSWORD;
+// Reopening a closed examiner form used to demand a shared unlock password, which just blocked
+// examiners mid-exam (they legitimately reopen a section to correct an entry). Reopening is
+// always allowed now; every change is still audited and synced.
+function confirmedReopenAllowed() {
+  return true;
 }
 
 function readOutdoorCentreResults() {
@@ -5550,6 +5552,14 @@ function createDefaultFieldPreparation({ examId = "ARBOR-2026", centre = "Arbori
   };
 }
 
+function fieldTreeDisplayName(tree) {
+  const labels = fieldTreeLabels(tree);
+  if (labels.length) return labels.join(" / ");
+  const level = normalizeFieldLevel(tree?.level)[0];
+  const code = String(tree?.code || "").toUpperCase();
+  return code ? `${level}-${code}` : "";
+}
+
 function fieldTreeLabels(tree) {
   return (tree.assignments || []).map((assignment) => `${assignment.level === "Practicing" ? "P" : "C"}-${assignment.code}`);
 }
@@ -5759,7 +5769,7 @@ function normalizeFieldPreparationForCentreMap(preparation) {
 }
 
 
-function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, sessionToken, t }) {
+function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, language, sessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [selectedTreeId, setSelectedTreeId] = useState(() => fieldEnsureArray(prep.trees)[0]?.id || "");
   const [coordinateInput, setCoordinateInput] = useState(`${prep.referenceLatitude}, ${prep.referenceLongitude}`);
@@ -5842,6 +5852,17 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
     setSelectedTreeId(tree.id);
     setError("");
   }
+
+  // Pull the stored preparation as soon as the section is available, so what the tablet synced
+  // is what the operator sees. Runs once per exam id (the ref lives in CentreView, which stays
+  // mounted), so it can never clobber edits made after that first load.
+  useEffect(() => {
+    const examId = safeExamId(prep.examId || centreCode || CENTRE_QR_ID);
+    if (!autoLoadRef || autoLoadRef.current === examId) return;
+    autoLoadRef.current = examId;
+    loadFieldPreparation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadFieldPreparation() {
     setStatus("");
@@ -6212,7 +6233,18 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
       const left = widthPx / 2 + (w.x - fit.worldX);
       const top = heightPx / 2 + (w.y - fit.worldY);
       const isCentre = p.kind === "centre";
-      return `<div style="position:absolute;left:${left}px;top:${top}px;transform:translate(-50%,-50%);z-index:20;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;background:${isCentre ? "#e11d48" : "#020617"};box-shadow:0 0 0 3px #fff;white-space:nowrap">${escapeHtml(p.label)}</div>`;
+      const colour = isCentre ? "#e11d48" : "#020617";
+      const placement = fieldMarkerVisualStyle(p.labelDirection || "n", p.labelOffsetX, p.labelOffsetY);
+      const labelX = parseFloat(placement["--label-x"]) || 0;
+      const labelY = parseFloat(placement["--label-y"]) || 0;
+      const stemLength = parseFloat(placement["--stem-length"]) || 0;
+      const stemAngle = parseFloat(placement["--stem-angle"]) || 0;
+      const dot = `<div style="position:absolute;left:${left}px;top:${top}px;transform:translate(-50%,-50%);z-index:22;width:11px;height:11px;border-radius:999px;background:${colour};box-shadow:0 0 0 3px #fff"></div>`;
+      const stem = stemLength > 0
+        ? `<div style="position:absolute;left:${left}px;top:${top}px;transform:rotate(${stemAngle}deg);transform-origin:0 50%;z-index:20;width:${stemLength}px;height:3px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(2,6,23,.25)"></div>`
+        : "";
+      const label = `<div style="position:absolute;left:${left + labelX}px;top:${top + labelY}px;transform:translate(-50%,-50%);z-index:21;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;background:${colour};box-shadow:0 0 0 3px #fff;white-space:nowrap">${escapeHtml(p.label)}</div>`;
+      return `${stem}${dot}${label}`;
     }).join("");
     return `<section class="print-map-page">
       <h2>${escapeHtml(levelLabel)}</h2>
@@ -6261,7 +6293,15 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
         ...centrePointEntry,
         ...levelTrees
           .filter((tree) => Number.isFinite(Number(tree.point?.lat)) && Number.isFinite(Number(tree.point?.lng)))
-          .map((tree) => ({ lat: Number(tree.point.lat), lng: Number(tree.point.lng), label: fieldTreeLabels(tree).join("/") || tree.name, kind: "tree" })),
+          .map((tree) => ({
+            lat: Number(tree.point.lat),
+            lng: Number(tree.point.lng),
+            label: fieldTreeDisplayName(tree),
+            kind: "tree",
+            labelDirection: tree.labelDirection || "n",
+            labelOffsetX: Number(tree.labelOffsetX || 0),
+            labelOffsetY: Number(tree.labelOffsetY || 0),
+          })),
       ];
       if (!points.length) return "";
       return printMapPageHtml(level, points, mapLayer);
@@ -6389,7 +6429,7 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
             </div>
             {selectedTree && Array.isArray(selectedTree.photos) && selectedTree.photos.length > 0 && (
               <div className="mt-3 rounded-2xl border bg-white p-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.treePhotos")} · {selectedTree.name}</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.treePhotos")} · {fieldTreeDisplayName(selectedTree)}</div>
                 <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {selectedTree.photos.map((photo, index) => {
                     const src = photo.url || photo.dataUrl;
@@ -6415,13 +6455,8 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
           ) : selectedTree ? (
             <div className="rounded-2xl border bg-white p-4">
               <div className="flex items-start justify-between gap-3">
-                <div><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.selectedTree")}</div><h3 className="text-lg font-semibold">{selectedTree.name}</h3><p className="text-xs text-slate-500">{formatFieldCoordinates(selectedTree.point)}</p></div>
+                <div><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.selectedTree")}</div><h3 className="text-lg font-semibold">{fieldTreeDisplayName(selectedTree)}</h3><p className="text-xs text-slate-500">{formatFieldCoordinates(selectedTree.point)}</p></div>
                 <Button onClick={() => removeTree(selectedTree.id)} variant="outline" className="rounded-2xl">{t("fieldPrep.delete")}</Button>
-              </div>
-              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.treeName")}<input value={selectedTree.name || ""} onChange={(event) => updateTree(selectedTree.id, { name: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="text-sm font-medium">Latitude<input type="number" value={selectedTree.point?.lat ?? ""} onChange={(event) => updateTree(selectedTree.id, (tree) => ({ ...tree, point: { ...tree.point, lat: Number(event.target.value) } }))} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                <label className="text-sm font-medium">Longitude<input type="number" value={selectedTree.point?.lng ?? ""} onChange={(event) => updateTree(selectedTree.id, (tree) => ({ ...tree, point: { ...tree.point, lng: Number(event.target.value) } }))} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               </div>
               <div className="mt-4 flex items-center justify-between"><h4 className="font-semibold">{t("fieldPrep.assignment")}</h4><Button onClick={() => addAssignment(selectedTree.id)} variant="outline" className="rounded-2xl">{t("fieldPrep.addAssignment")}</Button></div>
               <div className="mt-2 space-y-2">
@@ -6445,14 +6480,6 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
                   {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /><div className="mt-2 flex justify-end"><Button onClick={() => removeIntervention(selectedTree.id, intervention.id)} variant="outline" className="rounded-xl text-rose-700"><X className="mr-1 h-4 w-4" />{t("fieldPrep.remove")}</Button></div></div>)}
                 </div>
               </div>
-              <div className="mt-4">
-                <div className="text-sm font-medium">{t("fieldPrep.photos")}</div>
-                <label className="mt-1 inline-flex cursor-pointer items-center justify-center rounded-xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">
-                  {t("fieldPrep.uploadPhotos")}
-                  <input type="file" multiple accept="image/*" onChange={(event) => { handlePhotoUpload(selectedTree.id, event.target.files); event.target.value = ""; }} className="hidden" />
-                </label>
-              </div>
-              <div className="mt-2 grid grid-cols-3 gap-2">{(selectedTree.photos || []).map((photo) => <img key={photo.id} src={photo.url} alt={photo.caption || photo.fileName || "photo"} className="h-20 w-full rounded-xl object-cover" />)}</div>
             </div>
           ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">{t("fieldPrep.selectTreeOrCentre")}</div>}
         </div>
@@ -7695,7 +7722,7 @@ function FieldTabletPage() {
                       <div className="field-detail-header field-manual-coords-tree">
                         <div>
                           <span>{tt("selectedTree")}</span>
-                          <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTreeDisplayName}</h2>
+                          <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)}</h2>
                         </div>
                       </div>
                       <div className="field-two-cols">
@@ -7754,15 +7781,11 @@ function FieldTabletPage() {
                   <div className="field-detail-header">
                     <div>
                       <span>{tt("selectedTree")}</span>
-                      <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTreeDisplayName}</h2>
+                      <h2>{fieldTreeLabel(selectedTree.level, selectedTree.code)}</h2>
                       <p>{formatCoord(selectedTree.latitude)}, {formatCoord(selectedTree.longitude)}</p>
                     </div>
                     <label className="field-visited-toggle"><input type="checkbox" checked={Boolean(selectedLocal.visited)} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { visited: event.target.checked })} />{Boolean(selectedLocal.visited) && <Check className="h-3.5 w-3.5" />}{tt("checked")}</label>
                   </div>
-                  <label className="field-detail-field">
-                    <span>{tt("treeName")}</span>
-                    <input value={selectedTreeDisplayName} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { treeName: event.target.value })} />
-                  </label>
                   <FieldCollapsibleSection title={tt("assignmentSection")} className="field-assignment-box" defaultOpen>
                     <div className="field-assignment-row editable">
                       <label><span>{tt("level")}</span><select value={normalizeFieldLevel(selectedTree.level)} onChange={(event) => { const nextLevel = normalizeFieldLevel(event.target.value); setActiveTabletLevel(nextLevel); setSelectedTreeCode(fieldTreeKey(nextLevel, selectedTree.code)); }}><option>Practicing</option><option>Consulting</option></select></label>
@@ -8913,6 +8936,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   }
 
   const fieldPrepExamId = centreExamId || centreCode || CENTRE_QR_ID;
+  // Section B used to open on the built-in default template, so a preparation already stored on
+  // the server (e.g. everything the tablet synced from the field) looked LOST until someone
+  // happened to press "Load". Pull it automatically, once per exam id per Centre session.
+  const fieldPrepAutoLoadRef = useRef("");
   const [fieldPrep, setFieldPrep] = useState(() => createDefaultFieldPreparation({ examId: fieldPrepExamId, language }));
   // The Centre session resolves asynchronously, so the draft above may have been created with the
   // fallback id. Re-point an untouched draft once the real certification id arrives — never
@@ -9290,7 +9317,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
-          <CentreFieldPreparationModule prep={fieldPrep} setPrep={setFieldPrep} centreCode={fieldPrepExamId} language={language} sessionToken={activeSessionToken} t={t} />
+          <CentreFieldPreparationModule prep={fieldPrep} setPrep={setFieldPrep} autoLoadRef={fieldPrepAutoLoadRef} centreCode={fieldPrepExamId} language={language} sessionToken={activeSessionToken} t={t} />
         </AdminDashboardSection>
 
         <AdminDashboardSection
