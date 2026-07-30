@@ -9034,7 +9034,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
       // "Describe 2 tools ... 2 advantages and disadvantages for each ..." asks for several
       // answers in one question, so it gets exactly double the standard writing room.
       const multiPart = asks >= 2 || text.length > 180;
-      return Math.min(18, multiPart ? base * 2 : base);
+      // Cap high enough that the doubling is never silently clipped, but still short enough that
+      // a question block (text + lines + scoring box) fits one A4 page — the block is
+      // break-inside:avoid so the scoring box always stays with its question.
+      return Math.min(24, multiPart ? base * 2 : base);
     }
     function answerLines(count) {
       return `<div class="pt-lines">${Array.from({ length: count }).map(() => `<div class="pt-line"></div>`).join("")}</div>`;
