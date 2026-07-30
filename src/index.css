@@ -182,6 +182,7 @@
 }
 .field-map-overlay-button:hover { background: #fff; }
 .field-map-overlay-button:active { transform: scale(.95); }
+.field-map-overlay-button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
 .field-move-all-button {
   display: inline-flex;
   align-items: center;
@@ -271,6 +272,17 @@
    Exam-centre or a tree dot it happens to overlap, and nudge it slightly aside so it does not
    sit exactly on the Exam-centre dot (which would make the centre impossible to grab). */
 .field-map-marker.gps { pointer-events: none; transform: translate(24px, -24px); }
+/* Reported GPS accuracy, drawn at true ground scale and centred on the fix. Sits under the
+   markers so it never hides a tree, and is inert to pointer events so it can't block panning. */
+.field-map-gps-accuracy {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px solid rgba(37, 99, 235, .55);
+  background: rgba(37, 99, 235, .14);
+}
 .field-map-marker.gps .field-marker-label { background: #2563eb; color: #fff; border-color: rgba(255,255,255,.92); box-shadow: 0 0 0 6px rgba(37,99,235,.18), 0 7px 20px rgba(20,50,30,.18); }
 .field-map-marker.gps .field-marker-dot { background: #2563eb; border-color: #fff; box-shadow: 0 0 0 6px rgba(37,99,235,.18), 0 2px 7px rgba(20,50,30,.28); }
 .field-map-marker.tree.selected .field-marker-label { background: #07111f; color: #ffffff; border-color: #07111f; transform: translate(var(--label-x, 0px), var(--label-y, -54px)) translate(-50%, -50%) scale(1.08); }

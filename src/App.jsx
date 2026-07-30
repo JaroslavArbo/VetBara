@@ -5232,14 +5232,72 @@ const FIELD_REQUIRED_ASSIGNMENTS = FIELD_LEVELS.flatMap((level) => FIELD_TREE_CO
 // Trees A and B can optionally get a second instance (A2/B2) per level — e.g. two candidates
 // working the same exercise on separate trees. Toggled per exam in the tablet's "Přehled stromů"
 // section; off by default so nothing changes unless the field team opts in.
-const FIELD_EXTRA_TREE_TOGGLE_KEYS = ["Practicing-A2", "Practicing-B2", "Consulting-A2", "Consulting-B2"];
+// Consulting no longer offers second trees; only Practicing A/B can be doubled. A draft saved
+// while the Consulting toggles still existed simply stops producing those extra trees, because
+// both the toggle list and `extraFieldTrees` are derived from this one array.
+const FIELD_EXTRA_TREE_TOGGLE_KEYS = ["Practicing-A2", "Practicing-B2"];
+
+// --- Map tile memory cache -------------------------------------------------------------------
+// Tiles used to be fetched again every time a pan pushed them out of the rendered window or a zoom
+// change rebuilt the whole set, which is what made the field map stutter and flash blank. Holding a
+// decoded Image per URL keeps the bytes in the browser's memory cache, so re-creating an <img> for
+// that URL paints immediately instead of hitting the network.
+const FIELD_TILE_CACHE = new Map();
+// ~3 zoom levels of a 9x7 window plus room for whatever the operator pans over.
+const FIELD_TILE_CACHE_LIMIT = 900;
+// The window kept warm around the exam centre, matching the rendered tile window.
+const FIELD_TILE_HALF_X = 4;
+const FIELD_TILE_HALF_Y = 3;
+// The deepest zoom the tablet allows and the two above it — the band the examiner works in when
+// walking between trees, and where re-fetching hurts most (each level has 4x the tiles).
+const FIELD_PREFETCH_ZOOMS = [21, 20, 19];
+
+function retainFieldTile(url) {
+  if (!url) return null;
+  const cached = FIELD_TILE_CACHE.get(url);
+  if (cached) return cached;
+  const image = new Image();
+  image.decoding = "async";
+  image.src = url;
+  FIELD_TILE_CACHE.set(url, image);
+  while (FIELD_TILE_CACHE.size > FIELD_TILE_CACHE_LIMIT) {
+    const oldest = FIELD_TILE_CACHE.keys().next().value;
+    FIELD_TILE_CACHE.delete(oldest);
+  }
+  return image;
+}
+
+// Warm the cache a few tiles at a time: firing ~190 requests at once would saturate the tablet's
+// connection pool and stall the tiles the operator is actually looking at.
+async function prefetchFieldTiles(urls, { concurrency = 6, control } = {}) {
+  const queue = urls.filter((url) => !FIELD_TILE_CACHE.has(url));
+  let index = 0;
+  const worker = async () => {
+    while (index < queue.length && !control?.aborted) {
+      const url = queue[index];
+      index += 1;
+      await new Promise((resolve) => {
+        const image = retainFieldTile(url);
+        if (!image || image.complete) { resolve(); return; }
+        // A tile request that neither loads nor errors (a throttling tile server, a flaky field
+        // connection) would otherwise pin one of the few workers forever and stall the whole
+        // warm-up — observed as the prefetch stopping part-way through a zoom level.
+        const timer = window.setTimeout(finish, 10000);
+        function finish() { window.clearTimeout(timer); resolve(); }
+        image.addEventListener("load", finish, { once: true });
+        image.addEventListener("error", finish, { once: true });
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+}
 
 function overviewTreeLabel(tree, extraToggles = {}) {
   const levelPrefix = normalizeFieldLevel(tree.level)[0];
   const code = String(tree.code || "").toUpperCase();
   if (code === "A" || code === "B") {
     const toggleKey = `${normalizeFieldLevel(tree.level)}-${code}2`;
-    if (extraToggles[toggleKey]) return `${levelPrefix}-${code}1`;
+    if (FIELD_EXTRA_TREE_TOGGLE_KEYS.includes(toggleKey) && extraToggles[toggleKey]) return `${levelPrefix}-${code}1`;
   }
   return `${levelPrefix}-${code}`;
 }
@@ -6273,8 +6331,6 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
       </div>
       <h3>${escapeHtml(t("fieldPrep.interventionTechnology"))}</h3>
       ${interventionsHtml}
-      <h3>${escapeHtml(t("fieldPrep.candidateNote"))}</h3>
-      <div class="print-note">${tree.candidateNote ? linesToHtml(tree.candidateNote) : `<span class="print-empty">-</span>`}</div>
       <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
       ${photosHtml}
     </section>`;
@@ -6474,7 +6530,6 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                   <Button onClick={() => removeAssignment(selectedTree.id, assignment.id)} variant="outline" className="rounded-xl">{t("fieldPrep.remove")}</Button>
                 </div>)}
               </div>
-              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
                 <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
                 <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
@@ -6594,6 +6649,12 @@ function FieldTabletPage() {
   const draftKey = fieldTabletStorageKey("draft", examId, normalizedLevel);
   const [fieldPackage, setFieldPackage] = useState(() => readJsonLocalStorage(packageKey, null));
   const [draft, setDraft] = useState(() => readJsonLocalStorage(draftKey, null));
+  // Photo compression takes seconds on a tablet, and `draft` inside a closure is frozen at the
+  // moment the async work started. Committing against that stale snapshot is what silently dropped
+  // photos. Every read-modify-write goes through this ref instead, which is advanced synchronously
+  // by updateDraft (so two updates in one tick are also safe) and re-synced after every render.
+  const draftRef = useRef(draft);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
   const [selectedTreeCode, setSelectedTreeCode] = useState(() => firstFieldTabletTreeCode(readJsonLocalStorage(packageKey, null), normalizedLevel));
   const [status, setStatus] = useState(fieldPackage ? "The package is stored locally on this device." : "");
   const [error, setError] = useState("");
@@ -6612,6 +6673,12 @@ function FieldTabletPage() {
   const [mapZoom, setMapZoom] = useState(18);
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
+  // GPS is a toggle: on = a live watchPosition feed (dot follows the operator, blue circle shows the
+  // reported accuracy), off = the feed is stopped and the dot is hidden. Only the first fix recentres
+  // the map, so tracking never fights the operator panning to look somewhere else.
+  const [gpsTracking, setGpsTracking] = useState(false);
+  const gpsWatchIdRef = useRef(null);
+  const gpsFirstFixRef = useRef(false);
   const [moveConfirm, setMoveConfirm] = useState(null);
   const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18, panDelta: null });
   const treeDragRef = useRef(null);
@@ -6785,8 +6852,10 @@ function FieldTabletPage() {
   }
 
   function updateDraft(updater) {
-    const next = typeof updater === "function" ? updater(draft || {}) : { ...(draft || {}), ...updater };
+    const base = draftRef.current || {};
+    const next = typeof updater === "function" ? updater(base) : { ...base, ...updater };
     const withMeta = { ...next, examId, level: normalizedLevel, updatedAt: new Date().toISOString() };
+    draftRef.current = withMeta;
     setDraft(withMeta);
     writeJsonLocalStorage(draftKey, withMeta);
     setLastSyncOk(false);
@@ -6794,13 +6863,17 @@ function FieldTabletPage() {
   }
 
   function updateTreeDraft(code, patch) {
-    updateDraft((current) => ({
-      ...current,
-      treeNotes: {
-        ...(current.treeNotes || {}),
-        [code]: { ...(current.treeNotes?.[code] || {}), ...patch },
-      },
-    }));
+    updateDraft((current) => {
+      const currentNote = current.treeNotes?.[code] || {};
+      const resolved = typeof patch === "function" ? patch(currentNote) : patch;
+      return {
+        ...current,
+        treeNotes: {
+          ...(current.treeNotes || {}),
+          [code]: { ...currentNote, ...resolved },
+        },
+      };
+    });
   }
 
   function readFileAsDataUrl(file) {
@@ -6817,20 +6890,28 @@ function FieldTabletPage() {
   async function addTreePhotos(code, files) {
     const list = Array.from(files || []);
     if (!list.length) return;
-    const existing = draft?.treeNotes?.[code]?.photos || [];
-    const uploaded = await Promise.all(list.map(async (file) => ({
+    setStatus(`Processing ${list.length} photo(s)…`);
+    // allSettled, not all: a single unreadable file (a HEIC the reader chokes on) used to reject the
+    // whole batch, so every photo in that capture was lost with nothing shown to the operator.
+    const results = await Promise.allSettled(list.map(async (file) => ({
       id: vetbaraUid("field-photo"),
       fileName: file.name,
       url: await compressImageToDataUrl(file),
       caption: "",
       uploadedAt: new Date().toISOString(),
     })));
-    updateTreeDraft(code, { photos: [...existing, ...uploaded] });
+    const uploaded = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
+    const failed = results.length - uploaded.length;
+    if (uploaded.length) {
+      updateTreeDraft(code, (currentNote) => ({ photos: [...(currentNote.photos || []), ...uploaded] }));
+    }
+    setStatus(failed
+      ? `${uploaded.length} photo(s) saved, ${failed} could not be read — try again for those.`
+      : `${uploaded.length} photo(s) saved on the tablet and waiting for sync.`);
   }
 
   function removeTreePhoto(code, photoId) {
-    const existing = draft?.treeNotes?.[code]?.photos || [];
-    updateTreeDraft(code, { photos: existing.filter((photo) => photo.id !== photoId) });
+    updateTreeDraft(code, (currentNote) => ({ photos: (currentNote.photos || []).filter((photo) => photo.id !== photoId) }));
   }
 
   function updateCenterDraft(patch) {
@@ -7115,6 +7196,28 @@ function FieldTabletPage() {
     return () => window.cancelAnimationFrame(raf);
   }, [mapCenter.lat, mapCenter.lng, mapZoom, activeTabletLevel, visibleFieldTrees.length]);
 
+  // Once the exam centre is placed, quietly pull the whole map window for the three working zoom
+  // levels into memory. From then on panning and zooming inside the stanoviste is served from cache,
+  // so the map stops re-downloading the same orthophoto every time the operator moves.
+  useEffect(() => {
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) return undefined;
+    const control = { aborted: false };
+    const urls = [];
+    for (const zoom of FIELD_PREFETCH_ZOOMS) {
+      const world = latLngToWorld(centerLat, centerLng, zoom);
+      const tileX = Math.floor(world.x / 256);
+      const tileY = Math.floor(world.y / 256);
+      for (let dx = -FIELD_TILE_HALF_X; dx <= FIELD_TILE_HALF_X; dx += 1) {
+        for (let dy = -FIELD_TILE_HALF_Y; dy <= FIELD_TILE_HALF_Y; dy += 1) {
+          urls.push(tileUrl(tileX + dx, tileY + dy, zoom));
+        }
+      }
+    }
+    prefetchFieldTiles(urls, { control });
+    return () => { control.aborted = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerLat, centerLng, mapLayer]);
+
   function clampMapZoom(value) {
     const zoom = Math.round(Number(value));
     if (!Number.isFinite(zoom)) return 18;
@@ -7158,13 +7261,14 @@ function FieldTabletPage() {
     const offsetX = centerWorld.x - centerTileX * 256;
     const offsetY = centerWorld.y - centerTileY * 256;
     const tiles = [];
-    for (let dx = -4; dx <= 4; dx += 1) {
-      for (let dy = -3; dy <= 3; dy += 1) {
+    for (let dx = -FIELD_TILE_HALF_X; dx <= FIELD_TILE_HALF_X; dx += 1) {
+      for (let dy = -FIELD_TILE_HALF_Y; dy <= FIELD_TILE_HALF_Y; dy += 1) {
         const x = centerTileX + dx;
         const y = centerTileY + dy;
+        const src = tileUrl(x, y, mapZoom);
         tiles.push({
           key: `${mapLayer}-${mapZoom}-${x}-${y}`,
-          src: tileUrl(x, y, mapZoom),
+          src,
           style: { left: `calc(50% + ${dx * 256 - offsetX}px)`, top: `calc(50% + ${dy * 256 - offsetY}px)` },
         });
       }
@@ -7405,16 +7509,55 @@ function FieldTabletPage() {
     });
   }
 
-  function locateTablet() {
+  function stopGpsTracking() {
+    if (gpsWatchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+    }
+    gpsWatchIdRef.current = null;
+    gpsFirstFixRef.current = false;
+    setGpsTracking(false);
+    setGpsPosition(null);
+  }
+
+  function startGpsTracking() {
+    if (!navigator.geolocation) {
+      setError("GPS is not available in this browser.");
+      return;
+    }
     setError("");
     setStatus("Requesting GPS permission...");
-    requestGpsPosition()
-      .then((next) => {
+    gpsFirstFixRef.current = false;
+    setGpsTracking(true);
+    gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const next = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
         setGpsPosition(next);
-        setMapCenterOverride({ lat: next.lat, lng: next.lng });
-        setStatus(`GPS position loaded${Number.isFinite(next.accuracy) ? ` · accuracy approx. ${Math.round(next.accuracy)} m` : ""}.`);
-      })
-      .catch((err) => setError(`GPS could not be loaded: ${err?.message || "permission was denied"}.`));
+        if (!gpsFirstFixRef.current) {
+          gpsFirstFixRef.current = true;
+          setMapCenterOverride({ lat: next.lat, lng: next.lng });
+        }
+        setStatus(`GPS tracking${Number.isFinite(next.accuracy) ? ` · accuracy approx. ${Math.round(next.accuracy)} m` : ""}.`);
+      },
+      (err) => {
+        setError(`GPS could not be loaded: ${err?.message || "permission was denied"}.`);
+        stopGpsTracking();
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 2000 }
+    );
+  }
+
+  function locateTablet() {
+    if (gpsTracking) { stopGpsTracking(); setStatus("GPS tracking is off."); return; }
+    startGpsTracking();
+  }
+
+  // Web Mercator ground resolution, used to draw the reported accuracy at true scale on the map.
+  function gpsAccuracyRadiusPx(position) {
+    const accuracy = Number(position?.accuracy);
+    if (!Number.isFinite(accuracy) || accuracy <= 0) return 0;
+    const metresPerPixel = (156543.03392 * Math.cos((Number(position.lat) * Math.PI) / 180)) / 2 ** mapZoom;
+    if (!Number.isFinite(metresPerPixel) || metresPerPixel <= 0) return 0;
+    return Math.min(accuracy / metresPerPixel, 4000);
   }
 
   // Rigidly translates the whole standard setup — exam centre + every tree in the row — so the
@@ -7578,7 +7721,6 @@ function FieldTabletPage() {
     const interventions = Array.isArray(data.interventions) ? data.interventions : [];
     const label = overviewTreeLabel(tree, extraTreeToggles);
     const name = local.treeName || tree.name || label;
-    const note = local.candidateNote ?? tree.candidateNote ?? "";
     return `<section class="pdf-tree-detail">
       <h2>${escapeHtml(label)} · ${escapeHtml(name)}</h2>
       <p class="pdf-tree-coords">${escapeHtml(formatCoord(tree.latitude))}, ${escapeHtml(formatCoord(tree.longitude))}</p>
@@ -7588,7 +7730,6 @@ function FieldTabletPage() {
         <div><strong>${escapeHtml(tt("stemDiameterCm"))}</strong><span>${escapeHtml(String(data.stemDiameterCm ?? "") || "-")}</span></div>
         <div><strong>${escapeHtml(tt("crownSpreadM"))}</strong><span>${escapeHtml(String(data.crownSpreadM ?? "") || "-")}</span></div>
       </div>
-      ${note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("candidateNote"))}</strong><p>${escapeHtml(note)}</p></div>` : ""}
       ${data.note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("managementNote"))}</strong><p>${escapeHtml(data.note)}</p></div>` : ""}
       <div class="pdf-tree-interventions">
         <strong>${escapeHtml(tt("interventions"))}</strong>
@@ -7679,7 +7820,7 @@ function FieldTabletPage() {
                   {error && <div className="field-map-message error"><AlertTriangle className="h-4 w-4" />{error}</div>}
                   <div className="field-pan-layer" ref={panLayerRef}>
                     <div className="field-tile-layer" aria-hidden="true">
-                      {mapTiles.map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
+                      {mapTiles.map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="eager" decoding="async" draggable={false} onLoad={(event) => retainFieldTile(event.currentTarget.src)} alt="" />)}
                     </div>
                     {/* Markers live in their own layer that remounts (via key) whenever the map
                         recenters/zooms — iOS Safari otherwise keeps the composited tile+marker
@@ -7693,7 +7834,11 @@ function FieldTabletPage() {
                     })()}
                     {gpsPosition && (() => {
                       const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
-                      return <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>;
+                      const radius = gpsAccuracyRadiusPx(gpsPosition);
+                      return <>
+                        {radius > 0 && <div className="field-map-gps-accuracy" style={{ ...p, width: `${radius * 2}px`, height: `${radius * 2}px` }} />}
+                        <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>
+                      </>;
                     })()}
                     {visibleFieldTrees.map((tree) => {
                       const p = mapPoint(tree.latitude, tree.longitude);
@@ -7708,7 +7853,7 @@ function FieldTabletPage() {
                   <div className="field-map-overlay-controls" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
                     <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
                     <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
-                    <button type="button" className="field-map-overlay-button" onClick={locateTablet} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
+                    <button type="button" className={`field-map-overlay-button ${gpsTracking ? "active" : ""}`} onClick={locateTablet} aria-pressed={gpsTracking} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
                   </div>
                   <div className="field-map-attribution">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
                 </div>
@@ -7830,10 +7975,6 @@ function FieldTabletPage() {
                       <label><span>{tt("tree")}</span><select value={selectedTree.code} onChange={(event) => setSelectedTreeCode(fieldTreeKey(selectedTree.level, event.target.value))}>{FIELD_TREE_CODES.map((code) => <option key={code}>{code}</option>)}</select></label>
                     </div>
                   </FieldCollapsibleSection>
-                  <label className="field-detail-field">
-                    <span>{tt("candidateNote")}</span>
-                    <textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { candidateNote: event.target.value })} rows={3} />
-                  </label>
                   <div className="field-detail-field">
                     <span><Camera className="mr-1 inline h-3.5 w-3.5" />{tt("photosSection")}</span>
                     <label className="field-photo-add-button">
@@ -9659,7 +9800,6 @@ function candidateTreeCharacteristics(tree) {
     ["Height", textValue("height", "heightM", "treeHeight")],
     ["Stem diameter", textValue("stemDiameter", "stemDiameterCm", "diameter", "dbh")],
     ["Crown spread", textValue("crownSpread", "crownSpreadM", "crownProjection")],
-    ["Candidate note", textValue("candidateNote", "note")],
   ];
 }
 
