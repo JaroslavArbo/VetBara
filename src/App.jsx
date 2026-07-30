@@ -2190,6 +2190,19 @@ function VetBaraPrototype() {
     return issues;
   }
 
+  // The Centre's access links only exist after the setup has been loaded from the backend
+  // (that response carries qrAccess). Until then the QR pack had nothing to show. Load it
+  // automatically once per Centre session — before the operator edits anything, so this can
+  // never overwrite unsaved work.
+  const centreAutoLoadedRef = useRef(null);
+  useEffect(() => {
+    if (role !== "Centre" || !activeSessionToken) return;
+    if (centreAutoLoadedRef.current === activeSessionToken) return;
+    centreAutoLoadedRef.current = activeSessionToken;
+    handleLoadCentreSetup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, activeSessionToken]);
+
   async function handleLoadCentreSetup() {
     if (!activeSessionToken) {
       setCentreSetupError(t("status.centreQrRequired"));
@@ -8900,8 +8913,11 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
 
   const candidateQrUrl = (id) => rewriteQrBaseUrl(candidateQrUrlRaw(id));
   const examinerQrUrl = (id) => rewriteQrBaseUrl(examinerQrUrlRaw(id));
-  const candidateQrForRewritten = (id) => rewriteQrBaseUrl(candidateQrFor(id));
-  const examinerQrForRewritten = (id) => rewriteQrBaseUrl(examinerQrFor(id));
+  // Printed QR sheets and printed tests must carry the SERVER-MINTED access link. They used to
+  // fall back to the synthesised `VETBARA-<ROLE>-<ID>-2026` pattern, which is only a real token
+  // for the two seeded demo subjects — so every other printed QR was a dead link.
+  const candidateQrForRewritten = (id) => candidateQrUrl(id) || "";
+  const examinerQrForRewritten = (id) => examinerQrUrl(id) || "";
 
   async function copyQrLink(label, value) {
     const text = String(value ?? "").trim();
@@ -8954,7 +8970,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
     const people = [
       ...candidates.map((c) => ({ id: c.id, name: c.name, role: t("role.candidate"), url: candidateQrForRewritten(c.id) })),
       ...examiners.map((ex) => ({ id: ex.id, name: ex.name, role: t("role.examiner"), url: examinerQrForRewritten(ex.id) })),
-    ];
+    ].filter((person) => person.url);
+    if (!people.length) { setCopiedQr(t("qr.missing")); return; }
     const cells = people.map((person) => `<div class="qr-print-cell">
       <div class="qr-print-code">${renderQrSvgMarkup(person.url, 220)}</div>
       <div class="qr-print-name">${escapeHtml(person.name || person.id)}</div>
