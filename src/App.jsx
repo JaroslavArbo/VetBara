@@ -8891,27 +8891,22 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   // archive are all keyed to the people entered in section C, and the QR links are only minted
   // when that roster is saved. So they stay locked until the operator confirms the list, and any
   // change to WHO is on it (adding or removing a candidate/examiner) locks them again.
-  const rosterSignature = JSON.stringify({
-    candidates: candidates.map((c) => c.id).sort(),
-    examiners: examiners.map((e) => e.id).sort(),
-  });
-  const [confirmedRosterSignature, setConfirmedRosterSignature] = useState(null);
   const [rosterConfirming, setRosterConfirming] = useState(false);
   const issuedLinkCount = (centreQrAccess?.candidates?.length || 0) + (centreQrAccess?.examiners?.length || 0);
-  // A roster loaded from the backend already has its links issued, so it counts as confirmed.
-  const rosterConfirmed = issuedLinkCount > 0 && (confirmedRosterSignature === null || confirmedRosterSignature === rosterSignature);
-  const rosterLockRef = useRef(rosterSignature);
-  useEffect(() => {
-    if (rosterLockRef.current === rosterSignature) return;
-    rosterLockRef.current = rosterSignature;
-    setConfirmedRosterSignature((current) => (current === null ? "" : current));
-  }, [rosterSignature]);
+  // Confirmed == every person currently on the roster already has an issued access link. This is
+  // derived rather than remembered, so it is right in every case without extra bookkeeping: a
+  // fresh certification has no links (locked), a roster loaded from the backend has them all
+  // (unlocked), and a newly added candidate/examiner has none yet (locked again until the
+  // operator presses the confirm button, which saves the roster and issues the missing links).
+  const hasIssuedLink = (list, id) => Boolean(list?.some((item) => (item.subjectId || item.subject_id) === id));
+  const rosterConfirmed = candidates.length > 0
+    && candidates.every((c) => hasIssuedLink(centreQrAccess?.candidates, c.id))
+    && examiners.every((e) => hasIssuedLink(centreQrAccess?.examiners, e.id));
 
   async function confirmRosterComplete() {
     setRosterConfirming(true);
     try {
-      const ok = await handleSaveCentreSetup();
-      if (ok !== false) setConfirmedRosterSignature(rosterSignature);
+      await handleSaveCentreSetup();
     } finally {
       setRosterConfirming(false);
     }
