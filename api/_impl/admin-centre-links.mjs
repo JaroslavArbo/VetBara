@@ -26,6 +26,16 @@ export default async function handler(request, response) {
       await supabase("centre_links", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify(row) });
       return sendJson(response, 200, { ok: true, entry: toClient(row) });
     }
+    // Delete a single history entry. This removes the Centre link from the Admin's list only —
+    // the exam event, its roster and any results stay in place; it is a tidy-up of the link
+    // history, not a way to erase an exam.
+    if (request.method === "POST" && action === "delete") {
+      if (!(await resolveAdminSession(request.body?.sessionToken))) return sendJson(response, 401, { ok: false, error: "Admin session required" });
+      const id = String(request.body?.id || "").trim();
+      if (!id) return sendJson(response, 400, { ok: false, error: "Missing centre link id" });
+      await supabase(`centre_links?id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+      return sendJson(response, 200, { ok: true, id });
+    }
     return sendJson(response, 405, { ok: false, error: "Method not allowed" });
   } catch (error) {
     return sendJson(response, 500, { ok: false, error: error.message || "Centre links failed" });

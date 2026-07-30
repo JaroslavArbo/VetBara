@@ -27,6 +27,7 @@ const routes = {
   "centre-links/register": centreLinksRegister,
   "centre-links/list": centreLinks,
   "centre-links/save": centreLinks,
+  "centre-links/delete": centreLinks,
   "test-package/authoring/save": tpAuthoringSave,
   "test-package/convert": tpConvert,
   "test-package/approve": tpApprove,

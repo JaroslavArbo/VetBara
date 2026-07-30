@@ -319,6 +319,9 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "common.back": "Back",
+  "admin.centreAccess.delete": "Delete",
+  "admin.centreAccess.deleteConfirm": "Delete the certification link for {place} ({date}) from the history? The exam itself, its roster and results are not affected.",
+  "admin.centreAccess.deleteFailed": "Could not delete the certification link.",
   "access.error.rejected": "This access link was rejected by the server — it is not valid for this exam.",
   "access.error.roleBlocked": "This link does not belong to this portal.",
   "access.error.help": "Use the personal link issued by the Centre (Centre → Access). Links cannot be created by hand from another person's link.",
@@ -437,6 +440,9 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "common.back": "Zpět",
+  "admin.centreAccess.delete": "Smazat",
+  "admin.centreAccess.deleteConfirm": "Smazat odkaz certifikace {place} ({date}) z historie? Samotná zkouška, její roster ani výsledky se nesmažou.",
+  "admin.centreAccess.deleteFailed": "Odkaz certifikace se nepodařilo smazat.",
   "access.error.rejected": "Tento přístupový odkaz server odmítl — pro tuto zkoušku není platný.",
   "access.error.roleBlocked": "Tento odkaz nepatří do tohoto portálu.",
   "access.error.help": "Použijte osobní odkaz vydaný Centrem (Centrum → Přístup). Odkazy nelze vytvářet ručně podle odkazu jiné osoby.",

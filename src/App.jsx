@@ -4446,6 +4446,24 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
 
   useEffect(() => { loadCentreLinks(); }, []);
 
+  async function deleteCentreLink(link) {
+    if (!window.confirm(tf("admin.centreAccess.deleteConfirm", { place: link.place || "-", date: link.examDate || "-" }))) return;
+    setAuthError("");
+    try {
+      const response = await fetch("/api/admin/centre-links/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: link.id, sessionToken: admin?.sessionToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) { admin?.logout?.(); setAuthError(t("adminAuth.expired")); return; }
+      if (!response.ok) throw new Error(data.error || t("admin.centreAccess.deleteFailed"));
+      setLinks((prev) => prev.filter((item) => item.id !== link.id));
+    } catch (error) {
+      setAuthError(error.message || t("admin.centreAccess.deleteFailed"));
+    }
+  }
+
   async function generateCentreAccessLink() {
     const entry = centreAccessLinkFor(place, examDate, centre);
     setAuthError("");
@@ -4530,7 +4548,10 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
                     <td className="py-2 pr-3">{link.centre || "-"}</td>
                     <td className="py-2 pr-3 break-all font-mono text-xs text-slate-600">{link.url}</td>
                     <td className="py-2 pr-3">
-                      <Button onClick={() => navigator.clipboard?.writeText(link.url)} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centreAccess.copyLink")}</Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => navigator.clipboard?.writeText(link.url)} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centreAccess.copyLink")}</Button>
+                        <Button onClick={() => deleteCentreLink(link)} variant="outline" className="rounded-xl px-3 py-1 text-xs text-rose-700">{t("admin.centreAccess.delete")}</Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
