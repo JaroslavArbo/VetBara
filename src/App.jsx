@@ -1324,6 +1324,7 @@ function VetBaraPrototype() {
                 max: p.max ?? null,
                 scores: p.scores ?? {},
                 notes: p.notes ?? {},
+                noteDrawings: p.noteDrawings ?? {},
                 examSummary: p.examSummary ?? "",
                 submittedAt: row.submitted_at ?? row.submittedAt ?? p.submittedAt ?? null,
                 closedAt: p.closedAtLabel ?? null,
@@ -2772,16 +2773,39 @@ function VetBaraPrototype() {
   // rest of the outdoor record in the outdoor_assessment.submitted sync event on submit,
   // rather than its own per-keystroke sync event (a single sketch save is a discrete action,
   // not a continuous stream like typing).
-  function updateOutdoorNoteDrawing(itemId, dataUrl) {
+  async function updateOutdoorNoteDrawing(itemId, dataUrl) {
     if (!loggedExaminer || selectedMode === "unassigned") return;
+    // Compress on the way in, so both localStorage and the submit payload stay small. Clearing a
+    // sketch passes an empty string, which must not be run through the compressor.
+    const stored = dataUrl ? await compressImageToDataUrl(dataUrl, { maxBytes: 150_000, maxDim: 1400 }) : dataUrl;
     setOutdoorNoteDrawings((prev) => ({
       ...prev,
       [selectedCandidate.id]: {
         ...(prev[selectedCandidate.id] ?? {}),
-        [itemId]: dataUrl,
+        [itemId]: stored,
       },
     }));
     queue("Outdoor note sketch", `${selectedCandidate.name} / ${itemId}`);
+  }
+
+  // Even compressed, a full set of sketches can exceed the request cap, and a 413 loses the whole
+  // assessment. Shrink them further in steps until the encoded body fits, so the submission always
+  // gets through — degraded sketches beat a failed submit.
+  async function boundedOutdoorSubmitPayload(basePayload) {
+    const budgets = [null, 90_000, 45_000, 20_000];
+    let last = basePayload;
+    for (const maxBytes of budgets) {
+      let payload = basePayload;
+      if (maxBytes) {
+        const entries = await Promise.all(Object.entries(basePayload.noteDrawings || {}).map(async ([itemId, url]) => (
+          url ? [itemId, await compressImageToDataUrl(url, { maxBytes, maxDim: maxBytes > 50_000 ? 1100 : 800 })] : [itemId, url]
+        )));
+        payload = { ...basePayload, noteDrawings: Object.fromEntries(entries) };
+      }
+      last = payload;
+      if (new Blob([JSON.stringify(payload)]).size <= 3_500_000) return payload;
+    }
+    return last;
   }
 
   function updateOutdoorExamSummary(text) {
@@ -2830,6 +2854,7 @@ function VetBaraPrototype() {
       max,
       scores: values,
       notes: outdoorNotes[selectedCandidate.id] ?? {},
+      noteDrawings: outdoorNoteDrawings[selectedCandidate.id] ?? {},
       examSummary: outdoorExamSummaries[selectedCandidate.id] ?? "",
       submittedAt,
       closedAt,
@@ -2841,7 +2866,8 @@ function VetBaraPrototype() {
     saveExaminerResultToLocalServer(outdoorResultRecord);
     setExaminerTimes((prev) => ({ ...prev, [loggedExaminer.id]: { ...(prev[loggedExaminer.id] ?? {}), [selectedCandidate.id]: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id] ?? {}), outdoor: { ...(prev[loggedExaminer.id]?.[selectedCandidate.id]?.outdoor ?? {}), closedAt, closedAtIso: submittedAt } } } }));
     addAudit("Outdoor assessment submitted", selectedCandidate.name, `${total} points / ${closedAt}`);
-    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-submitted-${selectedCandidate.id}-${loggedExaminer.id}`), type: "outdoor_assessment.submitted", entityType: "outdoor_assessment", entityId: `${selectedCandidate.id}:outdoor`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: "outdoor", submittedAt, closedAtLabel: closedAt, total: cappedTotal, max, scores: values, notes: outdoorNotes[selectedCandidate.id] ?? {}, noteDrawings: outdoorNoteDrawings[selectedCandidate.id] ?? {}, examSummary: outdoorExamSummaries[selectedCandidate.id] ?? "" }, createdAt: submittedAt });
+    const outdoorSubmitPayload = await boundedOutdoorSubmitPayload({ candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: "outdoor", submittedAt, closedAtLabel: closedAt, total: cappedTotal, max, scores: values, notes: outdoorNotes[selectedCandidate.id] ?? {}, noteDrawings: outdoorNoteDrawings[selectedCandidate.id] ?? {}, examSummary: outdoorExamSummaries[selectedCandidate.id] ?? "" });
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-assessment-submitted-${selectedCandidate.id}-${loggedExaminer.id}`), type: "outdoor_assessment.submitted", entityType: "outdoor_assessment", entityId: `${selectedCandidate.id}:outdoor`, candidateId: selectedCandidate.id, payload: outdoorSubmitPayload, createdAt: submittedAt });
     // Closing the section automatically finalizes (cleans + stores) any running voice recording.
     if (voiceRecorderRef.current) await finalizeVoiceRecording();
     setActiveExaminerPage("landing");
