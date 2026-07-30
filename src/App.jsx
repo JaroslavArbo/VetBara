@@ -2230,7 +2230,7 @@ function VetBaraPrototype() {
   async function handleSaveCentreSetup() {
     if (!activeSessionToken) {
       setCentreSetupError(t("status.centreQrRequired"));
-      return;
+      return false;
     }
 
     const issues = validateCentreSetup();
@@ -2278,9 +2278,11 @@ function VetBaraPrototype() {
       setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
       setCentreSetupDirty(false);
       setCentreSetupStatus(tf("status.centreSetup.savedEvent", { event: result.examEventId || "current" }));
+      return true;
     } catch (error) {
       console.error("Centre Setup save failed", error);
       setCentreSetupError(isBackendPersistenceUnavailable(error) ? t("status.backendPersistenceUnavailable") : t("status.centreSetup.saveFailed"));
+      return false;
     } finally {
       setCentreSetupSaving(false);
     }
@@ -5767,6 +5769,11 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
   const [tabletSyncLoadedAt, setTabletSyncLoadedAt] = useState("");
   const [mapLayer, setMapLayer] = useState(() => (isWithinCzechRepublic(prep.referenceLatitude, prep.referenceLongitude) ? "cuzk" : "esri"));
   const mapLayerManualRef = useRef(false);
+  // The Centre map was locked at zoom 18, so the operator had no way to frame the site before
+  // printing it. This zoom drives the live tiles, the marker positions, marker dragging AND the
+  // printed map, so what is framed on screen is what lands in the PDF.
+  const [centreMapZoom, setCentreMapZoom] = useState(18);
+  const changeCentreMapZoom = (delta) => setCentreMapZoom((current) => Math.max(13, Math.min(19, current + delta)));
   // ČÚZK only has Czech coverage; if the reference point moves outside CZ, switch to Esri World
   // Imagery (orthophoto across Europe/globe) automatically — unless the operator already picked a
   // layer by hand, which always wins.
@@ -6056,10 +6063,10 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
   function pointFromCentreMapEvent(event) {
     const rect = centreMapRef.current?.getBoundingClientRect();
     if (!rect) return null;
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, 18);
+    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
     const worldX = centerWorld.x + (event.clientX - (rect.left + rect.width / 2));
     const worldY = centerWorld.y + (event.clientY - (rect.top + rect.height / 2));
-    const { lat, lng } = centreWorldToLatLng(worldX, worldY, 18);
+    const { lat, lng } = centreWorldToLatLng(worldX, worldY, centreMapZoom);
     return { lat, lng };
   }
 
@@ -6093,8 +6100,8 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
     const lat = Number(point?.lat ?? point?.latitude);
     const lng = Number(point?.lng ?? point?.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { left: "50%", top: "50%" };
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, 18);
-    const pointWorld = centreLatLngToWorld(lat, lng, 18);
+    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    const pointWorld = centreLatLngToWorld(lat, lng, centreMapZoom);
     return {
       left: `calc(50% + ${pointWorld.x - centerWorld.x}px)`,
       top: `calc(50% + ${pointWorld.y - centerWorld.y}px)`,
@@ -6129,7 +6136,7 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
   }
 
   function centreMapTiles() {
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, 18);
+    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
     const centerTileX = Math.floor(centerWorld.x / 256);
     const centerTileY = Math.floor(centerWorld.y / 256);
     const offsetX = centerWorld.x - centerTileX * 256;
@@ -6140,8 +6147,8 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
         const x = centerTileX + dx;
         const y = centerTileY + dy;
         tiles.push({
-          key: `centre-${mapLayer}-18-${x}-${y}`,
-          src: centreTileUrl(x, y, 18),
+          key: `centre-${mapLayer}-${centreMapZoom}-${x}-${y}`,
+          src: centreTileUrl(x, y, centreMapZoom),
           style: { left: `calc(50% + ${dx * 256 - offsetX}px)`, top: `calc(50% + ${dy * 256 - offsetY}px)` },
         });
       }
@@ -6176,7 +6183,13 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
   function printMapPageHtml(levelLabel, points, layer) {
     const widthPx = 680;
     const heightPx = 900;
-    const fit = fitZoomAndCenter(points, widthPx, heightPx);
+    // Honour the operator's chosen zoom (that is what the on-screen zoom buttons are for);
+    // auto-fit only decides the centre so the whole site stays on the page.
+    const autoFit = fitZoomAndCenter(points, widthPx, heightPx);
+    const centre = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    const fit = Number.isFinite(centre.x) && Number.isFinite(centre.y)
+      ? { zoom: centreMapZoom, worldX: centre.x, worldY: centre.y }
+      : autoFit;
     const centerTileX = Math.floor(fit.worldX / 256);
     const centerTileY = Math.floor(fit.worldY / 256);
     const offsetX = fit.worldX - centerTileX * 256;
@@ -6347,6 +6360,11 @@ function CentreFieldPreparationModule({ prep, setPrep, centreCode, language, ses
                 {centreMapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
               </div>
               <div className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">N ▲</div>
+              <div className="absolute left-3 top-12 z-30 flex flex-col gap-1.5">
+                <button type="button" onClick={() => changeCentreMapZoom(1)} disabled={centreMapZoom >= 19} title={t("fieldPrep.zoomIn")} aria-label={t("fieldPrep.zoomIn")} className="flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm hover:bg-white disabled:opacity-40">+</button>
+                <button type="button" onClick={() => changeCentreMapZoom(-1)} disabled={centreMapZoom <= 13} title={t("fieldPrep.zoomOut")} aria-label={t("fieldPrep.zoomOut")} className="flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm hover:bg-white disabled:opacity-40">−</button>
+                <div className="rounded-full bg-white/90 px-2 py-0.5 text-center text-[10px] font-semibold text-slate-500 shadow-sm">{centreMapZoom}</div>
+              </div>
               <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
               <span aria-hidden="true" style={markerForPoint(prep.examCenter?.point)} className="pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 ring-2 ring-white" />
               <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
@@ -8869,6 +8887,36 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   // dashboard sections mount their children only while open — switching to Candidates/Examiners
   // would otherwise unmount the module and discard unsaved site-prep edits. CentreView stays
   // mounted for the whole Centre session, so the draft survives section navigation.
+  // Sections D/E/F depend on the roster being final: access links, the review overview and the
+  // archive are all keyed to the people entered in section C, and the QR links are only minted
+  // when that roster is saved. So they stay locked until the operator confirms the list, and any
+  // change to WHO is on it (adding or removing a candidate/examiner) locks them again.
+  const rosterSignature = JSON.stringify({
+    candidates: candidates.map((c) => c.id).sort(),
+    examiners: examiners.map((e) => e.id).sort(),
+  });
+  const [confirmedRosterSignature, setConfirmedRosterSignature] = useState(null);
+  const [rosterConfirming, setRosterConfirming] = useState(false);
+  const issuedLinkCount = (centreQrAccess?.candidates?.length || 0) + (centreQrAccess?.examiners?.length || 0);
+  // A roster loaded from the backend already has its links issued, so it counts as confirmed.
+  const rosterConfirmed = issuedLinkCount > 0 && (confirmedRosterSignature === null || confirmedRosterSignature === rosterSignature);
+  const rosterLockRef = useRef(rosterSignature);
+  useEffect(() => {
+    if (rosterLockRef.current === rosterSignature) return;
+    rosterLockRef.current = rosterSignature;
+    setConfirmedRosterSignature((current) => (current === null ? "" : current));
+  }, [rosterSignature]);
+
+  async function confirmRosterComplete() {
+    setRosterConfirming(true);
+    try {
+      const ok = await handleSaveCentreSetup();
+      if (ok !== false) setConfirmedRosterSignature(rosterSignature);
+    } finally {
+      setRosterConfirming(false);
+    }
+  }
+
   const fieldPrepExamId = centreExamId || centreCode || CENTRE_QR_ID;
   const [fieldPrep, setFieldPrep] = useState(() => createDefaultFieldPreparation({ examId: fieldPrepExamId, language }));
   // The Centre session resolves asynchronously, so the draft above may have been created with the
@@ -8994,7 +9042,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   // reference code — the "control characters" — so answers can be matched back to the right
   // question during manual/scanned evaluation. Multiple-choice gets checkboxes; written
   // questions get ruled lines sized roughly to their point value.
-  function printCandidateTest(candidate) {
+  // Builds one candidate's printable test (header + questions). Shared by the single-candidate
+  // print and the "print all tests" pack, so both stay identical in layout.
+  function candidateTestSectionHtml(candidate) {
     const snapshot = resolveCandidateWrittenSnapshot({ candidate, variants, testBank });
     const questions = snapshot.questions;
     const qrMarkup = renderQrSvgMarkup(candidateQrForRewritten(candidate.id), 130);
@@ -9078,7 +9128,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
       // and the whole <section> is break-inside:avoid, so the box and its max mark can never end
       // up on a different page than the question they belong to.
       const maxPoints = Number(q.points) > 0 ? `${q.points}` : "";
-      const scoreHtml = `<div class="pt-score"><span class="pt-score-label">${escapeHtml(t("centre.print.scoreLabel"))}</span><span class="pt-score-box"></span>${maxPoints ? `<span class="pt-score-max">/ ${escapeHtml(maxPoints)} b.</span>` : ""}</div>`;
+      const scoreHtml = `<div class="pt-score"><span class="pt-score-box"></span>${maxPoints ? `<span class="pt-score-max">/ ${escapeHtml(maxPoints)} b.</span>` : ""}</div>`;
       const sectionName = String(q.section || "").trim();
       let sectionHtml = "";
       if (sectionName && sectionName !== printedSection) {
@@ -9095,13 +9145,29 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
         ${scoreHtml}
       </section>`;
     }).join("");
-    // Layout for anything inside a `break-inside: avoid` block deliberately avoids flexbox/grid
-    // here — printing flex/grid content that also needs page-break fragmentation is a known
-    // source of Chromium/WebKit pagination bugs (extra blank trailing pages, content vanishing
-    // near a page boundary). Plain block flow + floats paginate reliably everywhere instead.
-    openPrintWindow(`<!doctype html><html><head><meta charset="utf-8" /><title>VetBara test - ${escapeHtml(candidate.id)}</title><style>
+    return `<article class="pt-candidate">
+      <header class="pt-header">
+        <div class="pt-header-info">
+          <h1>${escapeHtml(candidate.name || candidate.id)}</h1>
+          <p>${escapeHtml(candidate.id)} · ${escapeHtml(candidateLevel(candidate))} · ${escapeHtml(snapshot.variantCode || "")}</p>
+          <div class="pt-header-code">[[CANDIDATE:${escapeHtml(candidate.id)}]] [[VARIANT:${escapeHtml(snapshot.variantCode || "")}]]</div>
+        </div>
+        <div class="pt-qr">${qrMarkup}</div>
+      </header>
+      <main>${questionsHtml || `<p>${escapeHtml(t("centre.print.noQuestionsFound"))}</p>`}</main>
+    </article>`;
+  }
+
+  // Layout for anything inside a `break-inside: avoid` block deliberately avoids flexbox/grid
+  // here — printing flex/grid content that also needs page-break fragmentation is a known
+  // source of Chromium/WebKit pagination bugs (extra blank trailing pages, content vanishing
+  // near a page boundary). Plain block flow + floats paginate reliably everywhere instead.
+  function candidateTestDocument(title, innerHtml) {
+    return `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title><style>
       @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
       .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+      .pt-candidate{break-after:page}
+      .pt-candidate:last-child{break-after:auto}
       header.pt-header{border-bottom:2px solid #102018;padding-bottom:5mm;margin-bottom:6mm}
       header.pt-header::after{content:"";display:block;clear:both}
       .pt-header-info{float:left;max-width:70%}
@@ -9130,22 +9196,25 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
       .pt-lines{margin-top:2mm}
       .pt-line{border-bottom:1px solid #b9c3bb;height:1px;margin-bottom:6mm}
       .pt-score{margin-top:2.5mm;text-align:right;font-size:9pt;color:#516158}
-      .pt-score-label{margin-right:2mm}
       .pt-score-box{display:inline-block;width:16mm;height:8mm;border:1.5pt solid #102018;border-radius:1mm;vertical-align:middle}
       .pt-score-max{margin-left:2mm;font-weight:700;color:#102018;vertical-align:middle}
       @media print{.actions{display:none}}
     </style></head><body>
       <div class="actions"><button onclick="window.print()">Tisk / PDF</button></div>
-      <header class="pt-header">
-        <div class="pt-header-info">
-          <h1>${escapeHtml(candidate.name || candidate.id)}</h1>
-          <p>${escapeHtml(candidate.id)} · ${escapeHtml(candidateLevel(candidate))} · ${escapeHtml(snapshot.variantCode || "")}</p>
-          <div class="pt-header-code">[[CANDIDATE:${escapeHtml(candidate.id)}]] [[VARIANT:${escapeHtml(snapshot.variantCode || "")}]]</div>
-        </div>
-        <div class="pt-qr">${qrMarkup}</div>
-      </header>
-      <main>${questionsHtml || `<p>${escapeHtml(t("centre.print.noQuestionsFound"))}</p>`}</main>
-    </body></html>`);
+      ${innerHtml}
+    </body></html>`;
+  }
+
+  function printCandidateTest(candidate) {
+    openPrintWindow(candidateTestDocument(`VetBara test - ${candidate.id}`, candidateTestSectionHtml(candidate)));
+  }
+
+  // One PDF with every candidate's test (both levels), ordered by candidate number, each
+  // starting on a fresh page.
+  function printAllCandidateTests() {
+    const ordered = [...candidates].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: "base" }));
+    if (!ordered.length) return;
+    openPrintWindow(candidateTestDocument("VetBara - tests", ordered.map(candidateTestSectionHtml).join("")));
   }
 
   const setupMeta = testImportSummary ? t("centre.status.packageLoaded") : t("centre.status.awaitingPackage");
@@ -9288,6 +9357,19 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                 </table>
               </div>
             </div>
+
+            <div className={`rounded-2xl border-2 p-4 ${rosterConfirmed ? "border-emerald-300 bg-emerald-50" : "border-amber-400 bg-amber-50"}`}>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-base font-bold">{t("centre.roster.confirmTitle")}</h3>
+                  <p className="mt-1 text-sm text-slate-700">{rosterConfirmed ? t("centre.roster.confirmedHelper") : t("centre.roster.confirmHelper")}</p>
+                </div>
+                <Button onClick={confirmRosterComplete} disabled={rosterConfirming || centreSetupSaving} className="rounded-2xl px-5 py-3 text-base font-bold">
+                  {rosterConfirming ? t("centre.roster.confirming") : t("centre.roster.confirmButton")}
+                </Button>
+              </div>
+              {rosterConfirmed && <div className="mt-2 text-sm font-semibold text-emerald-800">{tf("centre.roster.linksIssued", { count: issuedLinkCount })}</div>}
+            </div>
           </div>
         </AdminDashboardSection>
 
@@ -9295,8 +9377,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="access"
           icon={QrCodeIcon}
           t={t}
-          locked={!activeAdminPackageMeta}
-          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
+          locked={!activeAdminPackageMeta || !rosterConfirmed}
+          lockedMessage={!activeAdminPackageMeta ? t("centre.dashboard.lockedNoAdminPackage") : t("centre.dashboard.lockedRosterUnconfirmed")}
           title={t("centre.dashboard.access.title")}
           description={t("centre.dashboard.access.description")}
           activeSection={activeCentreSection}
@@ -9307,7 +9389,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
               <StatusPill tone={centreValidationIssues.length ? "warn" : "good"}>{accessMeta}</StatusPill>
               <StatusPill>{peopleMeta}</StatusPill>
             </div>
-            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintCandidateTest={printCandidateTest} />
+            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintAllTests={printAllCandidateTests} onPrintCandidateTest={printCandidateTest} />
             <CentreCandidateResultsOverview candidates={candidates} assignments={assignments} examiners={examiners} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorItemsByLevel={outdoorItemsByLevel} t={t} />
           </div>
         </AdminDashboardSection>
@@ -9316,8 +9398,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="review"
           icon={ShieldCheck}
           t={t}
-          locked={!activeAdminPackageMeta}
-          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
+          locked={!activeAdminPackageMeta || !rosterConfirmed}
+          lockedMessage={!activeAdminPackageMeta ? t("centre.dashboard.lockedNoAdminPackage") : t("centre.dashboard.lockedRosterUnconfirmed")}
           title={t("centre.dashboard.review.title")}
           description={t("centre.dashboard.review.description")}
           activeSection={activeCentreSection}
@@ -9342,8 +9424,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="archive"
           icon={FileSpreadsheet}
           t={t}
-          locked={!activeAdminPackageMeta}
-          lockedMessage={t("centre.dashboard.lockedNoAdminPackage")}
+          locked={!activeAdminPackageMeta || !rosterConfirmed}
+          lockedMessage={!activeAdminPackageMeta ? t("centre.dashboard.lockedNoAdminPackage") : t("centre.dashboard.lockedRosterUnconfirmed")}
           title={t("centre.dashboard.archive.title")}
           description={t("centre.dashboard.archive.description")}
           activeSection={activeCentreSection}

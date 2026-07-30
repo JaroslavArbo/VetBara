@@ -13,7 +13,7 @@ function accessUrlFor(id, realUrlLookup) {
   return String(realUrlLookup(id) || "");
 }
 
-export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, examinerQrUrl, candidateQrFor, examinerQrFor, copiedQr, copyQrLink, QrCodeIcon, SectionTitle, StatusPill, Button, RealQr, t, onPrintAllQr, onPrintCandidateTest }) {
+export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, examinerQrUrl, candidateQrFor, examinerQrFor, copiedQr, copyQrLink, QrCodeIcon, SectionTitle, StatusPill, Button, RealQr, t, onPrintAllQr, onPrintAllTests, onPrintCandidateTest }) {
   return (
     <div className="mt-4 rounded-2xl border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -22,11 +22,18 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
           title={tr(t, "qr.title", "Centre / QR access pack")}
           subtitle={tr(t, "qr.subtitle", "Give each Candidate or Examiner only their own Candidate QR or Examiner QR link.")}
         />
-        {onPrintAllQr && (
-          <Button onClick={onPrintAllQr} className="rounded-2xl">
-            {tr(t, "qr.printAll", "Tisk všech QR kódů")}
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {onPrintAllQr && (
+            <Button onClick={onPrintAllQr} className="rounded-2xl">
+              {tr(t, "qr.printAll", "Tisk všech QR kódů")}
+            </Button>
+          )}
+          {onPrintAllTests && (
+            <Button onClick={onPrintAllTests} variant="outline" className="rounded-2xl">
+              {tr(t, "qr.printAllTests", "Tisk všech testů")}
+            </Button>
+          )}
+        </div>
       </div>
       {copiedQr && <div className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{copiedQr}</div>}
       <div className="grid gap-4 lg:grid-cols-2">
