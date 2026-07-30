@@ -6284,7 +6284,15 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
     const centreLabel = t("fieldPrep.centre");
     const centerPoint = prep.examCenter?.point;
     const centrePointEntry = Number.isFinite(Number(centerPoint?.lat)) && Number.isFinite(Number(centerPoint?.lng))
-      ? [{ lat: Number(centerPoint.lat), lng: Number(centerPoint.lng), label: centreLabel, kind: "centre" }]
+      ? [{
+          lat: Number(centerPoint.lat),
+          lng: Number(centerPoint.lng),
+          label: centreLabel,
+          kind: "centre",
+          labelDirection: prep.examCenter?.labelDirection || "n",
+          labelOffsetX: Number(prep.examCenter?.labelOffsetX || 0),
+          labelOffsetY: Number(prep.examCenter?.labelOffsetY || 0),
+        }]
       : [];
 
     const mapPages = FIELD_LEVELS.map((level) => {
@@ -6608,7 +6616,7 @@ function FieldTabletPage() {
   const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18, panDelta: null });
   const treeDragRef = useRef(null);
   const panLayerRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement));
+  const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement || document.webkitFullscreenElement));
   const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
 
   function requestTabletFullscreen() {
@@ -6628,10 +6636,27 @@ function FieldTabletPage() {
     // If the browser blocks it (no activation, or no Fullscreen API support, e.g. some iOS
     // versions), the toolbar button below lets the field operator trigger it manually instead.
     requestTabletFullscreen();
-    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    // iPad Safari (and any browser reached by scanning a QR rather than by window.open) has no
+    // user activation on load, so the call above is silently rejected there. Retry it on the
+    // operator's FIRST touch — the earliest moment the browser will allow it — then stop
+    // listening, so it never fights a deliberate exit later on.
+    const enterOnFirstGesture = () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) requestTabletFullscreen();
+      removeGestureListeners();
+    };
+    const removeGestureListeners = () => {
+      document.removeEventListener("pointerdown", enterOnFirstGesture);
+      document.removeEventListener("touchend", enterOnFirstGesture);
+      document.removeEventListener("click", enterOnFirstGesture);
+    };
+    document.addEventListener("pointerdown", enterOnFirstGesture);
+    document.addEventListener("touchend", enterOnFirstGesture);
+    document.addEventListener("click", enterOnFirstGesture);
+    const onFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
     return () => {
+      removeGestureListeners();
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
     };
@@ -7664,7 +7689,7 @@ function FieldTabletPage() {
                     <div className="field-marker-layer" ref={markerLayerRef} key={`${mapCenter.lat}:${mapCenter.lng}:${mapZoom}:${activeTabletLevel}:${visibleFieldTrees.length}`}>
                     {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
                       const p = mapPoint(centerLat, centerLng);
-                      return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
+                      return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle(center.labelDirection || "n", center.labelOffsetX, center.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
                     })()}
                     {gpsPosition && (() => {
                       const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
@@ -7717,6 +7742,19 @@ function FieldTabletPage() {
                     onCopyResult={(ok) => setStatus(ok ? tt("coordsCopied") : tt("coordsCopyFailed"))}
                     tt={tt}
                   />
+                  <FieldCollapsibleSection title={tt("labelPosition")} className="field-assignment-box" defaultOpen={false}>
+                    <label className="field-detail-field">
+                      <span>{tt("labelPosition")}</span>
+                      <select value={center.labelDirection || "n"} onChange={(event) => updateCenterDraft({ labelDirection: event.target.value })}>
+                        {FIELD_LABEL_DIRECTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <div className="field-label-offset-controls">
+                      <label><span>{tt("labelOffsetX")}</span><input type="number" step="2" value={center.labelOffsetX ?? 0} onChange={(event) => updateCenterDraft({ labelOffsetX: Number(event.target.value || 0) })} /></label>
+                      <label><span>{tt("labelOffsetY")}</span><input type="number" step="2" value={center.labelOffsetY ?? 0} onChange={(event) => updateCenterDraft({ labelOffsetY: Number(event.target.value || 0) })} /></label>
+                      <button type="button" onClick={() => updateCenterDraft({ labelOffsetX: 0, labelOffsetY: 0 })}>{tt("resetOffset")}</button>
+                    </div>
+                  </FieldCollapsibleSection>
                   {selectedTree && (
                     <>
                       <div className="field-detail-header field-manual-coords-tree">

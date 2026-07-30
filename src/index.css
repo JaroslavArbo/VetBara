@@ -625,10 +625,17 @@
   pointer-events: auto;
   touch-action: none;
 }
+/* The success state is applied to "Send data to Centre", which is a .field-primary-button —
+   the rule used to target .field-ghost-button only, so it never matched and the button never
+   went green after a successful upload. Keep both, and make it strong enough to beat the
+   primary button's own background. */
+.field-sync-ok,
+.field-primary-button.field-sync-ok,
 .field-ghost-button.field-sync-ok {
   border-color: #16a34a;
-  background: #dcfce7;
-  color: #14532d;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, .18);
+  background: #16a34a;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, .25);
 }
-.field-ghost-button.field-sync-ok:hover { background: #bbf7d0; }
+.field-primary-button.field-sync-ok:hover,
+.field-ghost-button.field-sync-ok:hover { background: #15803d; }
