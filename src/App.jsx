@@ -9363,7 +9363,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                   {rosterConfirming ? t("centre.roster.confirming") : t("centre.roster.confirmButton")}
                 </Button>
               </div>
-              {rosterConfirmed && <div className="mt-2 text-sm font-semibold text-emerald-800">{tf("centre.roster.linksIssued", { count: issuedLinkCount })}</div>}
+              {rosterConfirmed && <div className="mt-2 text-sm font-semibold text-emerald-800">{String(t("centre.roster.linksIssued")).replace("{count}", issuedLinkCount)}</div>}
             </div>
           </div>
         </AdminDashboardSection>
