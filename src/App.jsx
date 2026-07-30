@@ -8187,7 +8187,8 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
     #vetbara-scan-measure .pt-question-head::after{content:"";display:block;clear:both}
     #vetbara-scan-measure .pt-corner-qr{background:#fff;padding:1mm}
     #vetbara-scan-measure .pt-corner-qr svg{width:13mm;height:13mm;display:block}
-    #vetbara-scan-measure .pt-corner-qr-options{display:block;margin:0 0 1.5mm}
+    #vetbara-scan-measure .pt-corner-qr-options{float:right;display:block;margin:0 0 1.5mm 3mm}
+    #vetbara-scan-measure .pt-options::after{content:"";display:block;clear:both}
     #vetbara-scan-measure .pt-qtext{font-weight:700;margin:2.5mm 0;font-size:11.5pt;clear:both}
     #vetbara-scan-measure .pt-options{margin-top:1mm}
     #vetbara-scan-measure .pt-option{margin:1.8mm 0;font-size:10.5pt}
@@ -8203,8 +8204,9 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
     const qrSvg = renderQrSvgMarkup(qrValue, 68, { includeMargin: true });
     const section = document.createElement("section");
     section.className = "pt-question";
-    // Mirrors printCandidateTest: the QR sits inside .pt-options, directly above the checkbox
-    // column, not up in the question header — see the comment on questionsHtml there.
+    // Mirrors printCandidateTest: the QR sits inside .pt-options (floated to the right of the
+    // checkbox column, not up in the question header) — see the comment on questionsHtml there.
+    // Both copies must keep the same float/margins or the measured offsets stop matching print.
     section.innerHTML = `
       <div class="pt-qtext">${escapeHtml(question.text || "")}</div>
       <div class="pt-options"><span class="pt-corner-qr pt-corner-qr-options">${qrSvg}</span>${question.options.map(() => `<div class="pt-option"><span class="pt-checkbox"></span></div>`).join("")}</div>
@@ -9003,22 +9005,74 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
     // detection error scales into real position error over distance), and the header sits far
     // to the right of the checkboxes at the left margin — tens of mm apart on an A4 page. Written
     // (non-choice) questions have no checkboxes to locate, so their QR stays in the header.
+    // How much writing room a written question gets. Multi-part questions (asking for several
+    // items, e.g. "Describe 2 diagnostic tools ... Provide 2 advantages and disadvantages for
+    // each") need roughly double the space of a single-answer question, so they are detected and
+    // doubled rather than every question being padded.
+    function answerLineCount(question) {
+      const text = String(question.text || "");
+      const points = Number(question.points) || 0;
+      const base = Math.max(3, points > 0 ? Math.ceil(points * 1.5) : 3);
+      const asks = (text.match(/\b[2-9]\b/g) || []).length;
+      // "Describe 2 tools ... 2 advantages and disadvantages for each ..." asks for several
+      // answers in one question, so it gets exactly double the standard writing room.
+      const multiPart = asks >= 2 || text.length > 180;
+      return Math.min(18, multiPart ? base * 2 : base);
+    }
+    function answerLines(count) {
+      return `<div class="pt-lines">${Array.from({ length: count }).map(() => `<div class="pt-line"></div>`).join("")}</div>`;
+    }
+    // A question that lists bullet points is really several sub-questions (e.g. "Describe what the
+    // following pieces of EU Legislation cover" followed by four directives). Give each bullet its
+    // own answer field instead of one shared block of lines.
+    function splitBullets(text) {
+      const lines = String(text || "").split(/\r?\n/);
+      const bulletAt = lines.findIndex((line) => /^\s*[•\u2022*\-\u2013]\s+\S/.test(line));
+      if (bulletAt < 0) return null;
+      const intro = lines.slice(0, bulletAt).join("\n").trim();
+      const bullets = [];
+      let trailing = [];
+      for (const line of lines.slice(bulletAt)) {
+        if (/^\s*[•\u2022*\-\u2013]\s+\S/.test(line)) bullets.push(line.replace(/^\s*[•\u2022*\-\u2013]\s+/, "").trim());
+        else if (line.trim()) trailing.push(line.trim());
+      }
+      return bullets.length >= 2 ? { intro, bullets, trailing: trailing.join(" ") } : null;
+    }
+
+    let printedSection = null;
     const questionsHtml = questions.map((q, index) => {
-      const qid = q.id || `Q${index + 1}`;
+      const number = index + 1;
+      const qid = q.id || `Q${number}`;
       const isChoice = q.type === "single_choice" && q.options.length;
-      const cornerQr = scanSortQr(index + 1);
-      const optionsHtml = isChoice
+      const cornerQr = scanSortQr(number);
+      const bulletParts = isChoice ? null : splitBullets(q.text);
+      const bodyHtml = isChoice
         ? `<div class="pt-options"><span class="pt-corner-qr pt-corner-qr-options">${cornerQr}</span>${q.options.map((opt, i) => `<div class="pt-option"><span class="pt-checkbox"></span>${escapeHtml(String.fromCharCode(65 + i))}. ${escapeHtml(String(opt).replace(/^[A-D][.)]\s*/i, ""))}</div>`).join("")}</div>`
-        : `<div class="pt-lines">${Array.from({ length: Math.max(3, Math.ceil((Number(q.points) || 1) * 1.5)) }).map(() => `<div class="pt-line"></div>`).join("")}</div>`;
-      return `<section class="pt-question">
+        : bulletParts
+          ? bulletParts.bullets.map((bullet) => `<div class="pt-subblock"><div class="pt-subtext">• ${escapeHtml(bullet)}</div>${answerLines(3)}</div>`).join("")
+          : answerLines(answerLineCount(q));
+      const questionText = bulletParts
+        ? [bulletParts.intro, bulletParts.trailing].filter(Boolean).join("\n")
+        : (q.text || "");
+      // The max mark sits next to the examiner's scoring box under the question (not above it),
+      // and the whole <section> is break-inside:avoid, so the box and its max mark can never end
+      // up on a different page than the question they belong to.
+      const maxPoints = Number(q.points) > 0 ? `${q.points}` : "";
+      const scoreHtml = `<div class="pt-score"><span class="pt-score-label">${escapeHtml(t("centre.print.scoreLabel"))}</span><span class="pt-score-box"></span>${maxPoints ? `<span class="pt-score-max">/ ${escapeHtml(maxPoints)} b.</span>` : ""}</div>`;
+      const sectionName = String(q.section || "").trim();
+      let sectionHtml = "";
+      if (sectionName && sectionName !== printedSection) {
+        printedSection = sectionName;
+        sectionHtml = `<h2 class="pt-section">${escapeHtml(sectionName)}</h2>`;
+      }
+      return `${sectionHtml}<section class="pt-question">
         <div class="pt-question-head">
           <span class="pt-qcode">[[${escapeHtml(qid)}]]</span>
-          <span class="pt-qpoints">/${escapeHtml(String(q.points ?? "-"))} b.</span>
-          <span class="pt-page-num"></span>
           ${!isChoice ? `<span class="pt-corner-qr">${cornerQr}</span>` : ""}
         </div>
-        <div class="pt-qtext">${linesToHtml(q.text || "")}</div>
-        ${optionsHtml}
+        <div class="pt-qtext"><span class="pt-qnum">${number}.</span> ${linesToHtml(questionText)}</div>
+        ${bodyHtml}
+        ${scoreHtml}
       </section>`;
     }).join("");
     // Layout for anything inside a `break-inside: avoid` block deliberately avoids flexbox/grid
@@ -9040,18 +9094,25 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
       .pt-question-head{font-family:ui-monospace,monospace;font-size:8pt;color:#8a978f;margin-bottom:1.5mm}
       .pt-question-head::after{content:"";display:block;clear:both}
       .pt-qcode{float:left}
-      .pt-qpoints{float:left;margin-left:4mm}
-      .pt-page-num{float:right;margin-left:2mm;font-size:8pt;color:#8a978f}
-      .pt-page-num::after{content:"str. " counter(page)}
       .pt-corner-qr{float:right;background:#fff;padding:1mm}
       .pt-corner-qr svg{width:13mm;height:13mm}
-      .pt-corner-qr-options{float:none;display:block;margin:0 0 1.5mm}
+      .pt-corner-qr-options{float:right;display:block;margin:0 0 1.5mm 3mm}
+      .pt-section{break-after:avoid;font-size:12pt;margin:7mm 0 3mm;padding-bottom:1.5mm;border-bottom:1.5pt solid #102018;color:#0f3d2e}
+      .pt-section:first-child{margin-top:0}
       .pt-qtext{font-weight:700;margin-bottom:2.5mm;font-size:11.5pt;clear:both}
+      .pt-qnum{color:#0f3d2e}
       .pt-options{margin-top:1mm}
+      .pt-options::after{content:"";display:block;clear:both}
       .pt-option{margin:1.8mm 0;font-size:10.5pt}
       .pt-checkbox{display:inline-block;width:4.5mm;height:4.5mm;border:1.5pt solid #102018;border-radius:1mm;margin-right:3mm;vertical-align:middle}
+      .pt-subblock{margin:0 0 3mm}
+      .pt-subtext{font-weight:600;font-size:10.5pt;margin-bottom:1mm}
       .pt-lines{margin-top:2mm}
       .pt-line{border-bottom:1px solid #b9c3bb;height:1px;margin-bottom:6mm}
+      .pt-score{margin-top:2.5mm;text-align:right;font-size:9pt;color:#516158}
+      .pt-score-label{margin-right:2mm}
+      .pt-score-box{display:inline-block;width:16mm;height:8mm;border:1.5pt solid #102018;border-radius:1mm;vertical-align:middle}
+      .pt-score-max{margin-left:2mm;font-weight:700;color:#102018;vertical-align:middle}
       @media print{.actions{display:none}}
     </style></head><body>
       <div class="actions"><button onclick="window.print()">Tisk / PDF</button></div>
