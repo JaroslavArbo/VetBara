@@ -1104,6 +1104,10 @@ function VetBaraPrototype() {
   // and this used to fall back to the shared CENTRE_QR_ID constant for every certification opened
   // by link — so two certifications silently shared one site setup, its trees and their photos.
   const [centreExamId, setCentreExamId] = useState("");
+  // A rejected QR/link used to fail silently: the audit trail recorded it, but the person holding
+  // the link just saw the empty "no examiner logged in" portal with no hint that their LINK was
+  // the problem (e.g. a hand-made link guessed from another examiner's pattern). Surface it.
+  const [accessError, setAccessError] = useState("");
   const [candidates, setCandidates] = useState(START_CANDIDATES);
   const [examiners, setExaminers] = useState(EXAMINERS);
   const [selectedCandidateId, setSelectedCandidateId] = useState("C-001");
@@ -1641,6 +1645,7 @@ function VetBaraPrototype() {
       if (!error?.isBackendUnavailable) {
         console.warn("QR/session request rejected by server", error);
         addAudit("QR resolve failed", parsed.id ?? "Unknown QR", error?.message || "The QR could not be verified.");
+        setAccessError(`${t("access.error.rejected")} ${error?.message ? `(${error.message})` : ""}`.trim());
         return null;
       }
       console.error("Backend unreachable; using local demo fallback when available", error);
@@ -1650,6 +1655,7 @@ function VetBaraPrototype() {
         return fallback;
       }
       addAudit("QR resolve failed", parsed.id ?? "Unknown QR", "The QR could not be verified.");
+      setAccessError(t("access.error.rejected"));
       return null;
     }
   }
@@ -1697,6 +1703,7 @@ function VetBaraPrototype() {
     // Scope this browser's per-exam caches to the certification we just authenticated into:
     // its exam event (Centre without an event yet falls back to its own centre id, which is
     // already unique per certification).
+    setAccessError("");
     setActiveExamScope(access.centreSetup?.examEventId || (access.role === "Centre" ? access.subjectId : ""));
     if (access.role === "Centre" && access.subjectId) setCentreExamId(String(access.subjectId));
 
@@ -1780,6 +1787,7 @@ function VetBaraPrototype() {
     }
 
     addAudit("QR role blocked", access.role ?? "Unknown role", "Resolved role or subject does not match this portal package");
+    setAccessError(t("access.error.roleBlocked"));
   }
 
   // Centre unlock for a ?role=Centre&token=... direct link is handled by the openQrSession
@@ -2911,6 +2919,7 @@ function VetBaraPrototype() {
   return <main className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-8"><div className="mx-auto max-w-7xl">
     <header className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div className="flex items-start gap-4"><img src="/brand/vetcert-logo.jpg" alt="VETcert Certified Veteran Tree Specialist" className="h-14 w-14 shrink-0 rounded-full border bg-white object-contain p-1 shadow-sm md:h-16 md:w-16" /><div><div className="mb-2 flex flex-wrap items-center gap-2"><div className="rounded-2xl bg-slate-950 px-3 py-1 text-sm font-semibold text-white">{t("app.title")}</div><StatusPill><CloudOff className="mr-1 h-3.5 w-3.5" /> {t("app.offlineFirst")}</StatusPill></div><h1 className="text-3xl font-bold tracking-tight md:text-5xl">{t("app.heroTitle")}</h1><p className="mt-2 max-w-3xl text-slate-600">{t("app.subtitle")}</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-medium text-slate-500">{t("language.label")}<select value={uiLanguage} onChange={(e) => setUiLanguage(e.target.value)} className="ml-2 rounded-xl border bg-white p-2 text-sm text-slate-950">{uiLanguageChoices.map((lang) => <option key={lang.code} value={lang.code}>{lang.draft ? `${lang.label} - draft` : lang.label}</option>)}</select></label>{lockedPortalRole ? <StatusPill tone="good">{tf("app.dedicatedPortal", { role: roleLabel(lockedPortalRole) })}</StatusPill> : role === "Admin" ? <StatusPill tone="good">Admin</StatusPill> : ROLES.map((r) => <Button key={r} onClick={() => setRole(r)} variant={role === r ? "default" : "outline"} className="rounded-2xl">{roleLabel(r)}</Button>)}</div></header>
     {draftPreviewActive && <div role="status" className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-950 shadow-sm">{t("language.draftPreviewWarning")}</div>}
+    {accessError && <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-950 shadow-sm"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><div>{accessError}</div><div className="mt-1 font-normal">{t("access.error.help")}</div></div></div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
@@ -6789,6 +6798,64 @@ function FieldTabletPage() {
   // the Centre. Unlike the old sync it does not require the offline-download step first (it loads
   // the package on demand) and it is not gated behind "all trees checked" — station prep must be
   // sendable at any point.
+  // Photos are base64 data URLs embedded in JSON, and they used to be serialised THREE times per
+  // send (once in packageSnapshot, once in draft.treeNotes, once in fieldPreparationSnapshot).
+  // With ~1 MB photos that blew past Vercel's ~4.5 MB request-body limit and the send died with a
+  // 413 "FUNCTION_PAYLOAD_TOO_LARGE" after a couple of seconds — which on the tablet just looked
+  // like "Sending…" flicking back to "Send data to Centre" with nothing arriving in the Centre.
+  // The server rebuilds the preparation from fieldPreparationSnapshot, so that is the ONE copy
+  // that has to carry the image data; everywhere else we keep the photo metadata but drop the
+  // bytes.
+  function stripPhotoBytes(value) {
+    if (Array.isArray(value)) return value.map(stripPhotoBytes);
+    if (!value || typeof value !== "object") return value;
+    const next = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "photos" && Array.isArray(item)) {
+        next[key] = item.map((photo) => {
+          if (!photo || typeof photo !== "object") return photo;
+          const { url, dataUrl, ...rest } = photo;
+          return rest;
+        });
+      } else {
+        next[key] = stripPhotoBytes(item);
+      }
+    }
+    return next;
+  }
+
+  // Even with a single copy, enough tree photos still exceed the limit, so shrink them further
+  // (and only for the transfer — the tablet keeps its originals) until the whole body fits.
+  async function buildBoundedSyncPayload() {
+    const budgets = [null, 400_000, 220_000, 120_000, 60_000];
+    let lastPayload = null;
+    for (const maxBytes of budgets) {
+      const snapshot = buildFieldPreparationSnapshotForSync();
+      if (maxBytes) {
+        snapshot.trees = await Promise.all((snapshot.trees || []).map(async (tree) => ({
+          ...tree,
+          photos: await Promise.all((tree.photos || []).map(async (photo) => (
+            photo?.url ? { ...photo, url: await compressImageToDataUrl(photo.url, { maxBytes, maxDim: maxBytes > 200_000 ? 1400 : 1000 }) } : photo
+          ))),
+        })));
+      }
+      const payload = {
+        kind: "vetbara.fieldTabletSync.v1",
+        examId,
+        level: normalizedLevel,
+        token,
+        syncedAt: new Date().toISOString(),
+        packageSnapshot: stripPhotoBytes(fieldPackage),
+        draft: stripPhotoBytes(draft),
+        fieldPreparationSnapshot: snapshot,
+      };
+      lastPayload = payload;
+      // 3.5 MB keeps headroom under the platform's ~4.5 MB cap for headers/encoding overhead.
+      if (new Blob([JSON.stringify(payload)]).size <= 3_500_000) return payload;
+    }
+    return lastPayload;
+  }
+
   async function sendDataToCentre() {
     if (syncing) return;
     if (!fieldPackage || !draft) {
@@ -6799,16 +6866,7 @@ function FieldTabletPage() {
     setSyncing(true);
     setError("");
     try {
-      const payload = {
-        kind: "vetbara.fieldTabletSync.v1",
-        examId,
-        level: normalizedLevel,
-        token,
-        syncedAt: new Date().toISOString(),
-        packageSnapshot: fieldPackage,
-        draft,
-        fieldPreparationSnapshot: buildFieldPreparationSnapshotForSync(),
-      };
+      const payload = await buildBoundedSyncPayload();
       // fetch() has NO built-in timeout — on a weak field connection with a large payload
       // (several MB once tree photos are attached), the browser can sit uploading indefinitely
       // with the button stuck on "Sending..." and no final message ever appearing. Abort after a

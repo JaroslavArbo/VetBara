@@ -319,6 +319,9 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "common.back": "Back",
+  "access.error.rejected": "This access link was rejected by the server — it is not valid for this exam.",
+  "access.error.roleBlocked": "This link does not belong to this portal.",
+  "access.error.help": "Use the personal link issued by the Centre (Centre → Access). Links cannot be created by hand from another person's link.",
   "map.layer.cuzk": "ČÚZK ortofoto (CZ)",
   "map.layer.esri": "Ortofoto (Europe)",
   "map.layer.osm": "OSM map",
@@ -434,6 +437,9 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "common.back": "Zpět",
+  "access.error.rejected": "Tento přístupový odkaz server odmítl — pro tuto zkoušku není platný.",
+  "access.error.roleBlocked": "Tento odkaz nepatří do tohoto portálu.",
+  "access.error.help": "Použijte osobní odkaz vydaný Centrem (Centrum → Přístup). Odkazy nelze vytvářet ručně podle odkazu jiné osoby.",
   "map.layer.cuzk": "ČÚZK ortofoto (CZ)",
   "map.layer.esri": "Ortofoto (Evropa)",
   "map.layer.osm": "Mapa OSM",
