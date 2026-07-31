@@ -8,6 +8,7 @@ import { AuditSyncView, translateAuditAction } from "./components/AuditSyncView"
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
 import { HandwritingPad } from "./components/HandwritingPad";
 import { decodeAllQrCodes, parseScanSortPayload, mapOffsetToPhoto, classifyMark, resolveQuestionMark } from "./lib/scanMarkDetection";
+import { cropScoreBox, recognizeScore } from "./lib/scanScoreDetection";
 import { LANGUAGES as UI_LANGUAGES, makeTranslator, allTranslationKeys, translationFor, englishSourceFor, applyTranslationOverrides } from "./i18n";
 import { QRCodeSVG } from "qrcode.react";
 import { uploadExamMedia } from "./lib/api";
@@ -352,6 +353,123 @@ const REPORT_TREES = ["Tree A", "Tree B"];
 // title/description are translation KEYS, not display text — module scope has no t(). Resolve
 // via sectionTitle(t, entry) / sectionDescription(t, entry) at render time.
 const REPORT_SECTIONS = ["s1", "s2", "s3", "s4", "s5", "s6"].map((key) => ({ key, titleKey: `reportSections.${key}` }));
+
+// VETcert Consulting "Veteran tree management plan - model answer", version April 2020: the marking
+// scheme the examiner works to. 7 per-tree sections scored for Tree A and Tree B (59 marks each),
+// plus 9 marks for overall clarity of the whole plan = 127. `guidance` is the marking band text from
+// the model answer, shown next to the score box so the examiner does not need the paper document.
+const REPORT_MARKING_SECTIONS = [
+  {
+    key: "basic",
+    title: "Section 1 - Basic information regarding the tree",
+    perTreeMax: 5,
+    guidance: [
+      "1 mark for any of the following:",
+      "Correct tree species identification.",
+      "Accurate measurements (girth, crown spread, height).",
+      "Correct identification of tree form.",
+      "Providing a tree number / recording tag number.",
+      "Grid reference / tree locations illustrated on a plan.",
+      "Correct identification of the conditions in which the tree is located (avenue, wood pasture, park, ...).",
+      "Photograph clearly showing the tree enabling it to be located easily.",
+      "Topography.",
+      "Soil.",
+    ],
+  },
+  {
+    key: "health",
+    title: "Section 2 - Health and vitality of the tree",
+    perTreeMax: 10,
+    guidance: [
+      "2 marks (poor) - correct 'condition score' only.",
+      "4 marks (fair) - condition score and up to 2 pieces of supporting information.",
+      "6 marks (good) - as above and at least 3 pieces of supporting information.",
+      "8 marks (very good) - as above, at least 4 pieces, and must consider different condition/age of the crown/functional units.",
+      "10 marks (excellent) - as above, at least 5 pieces, and must consider different condition/age of the crown/functional units.",
+      "Supporting information: leaf/bud density, leaf size/colour, extension growth, branch ramification, size of living crown, woundwood/occlusion, adaptive growth, epicormic growth.",
+    ],
+  },
+  {
+    key: "structure",
+    title: "Section 3 - Structural condition (biomechanics) of the tree",
+    perTreeMax: 10,
+    guidance: [
+      "2 marks (poor) - correct 'condition score' only.",
+      "4 marks (fair) - condition score and at least 1 piece of supporting information.",
+      "6 marks (good) - condition score and at least 2 pieces of supporting information.",
+      "8 marks (very good) - as above and must consider how long the tree has been like that.",
+      "10 marks (excellent) - as above and must consider how the tree has responded (adaptive growth).",
+      "Supporting information: biomechanical defects (cavities, splits, fibre buckling, weak forks, root plate movement, previous failures), fungal fruiting bodies, history and lapses of management, different functional units.",
+    ],
+  },
+  {
+    key: "values",
+    title: "Section 4 - Wildlife, historical, cultural or social values of the tree",
+    perTreeMax: 6,
+    guidance: [
+      "Marks under 2 headings only (wildlife, historical, cultural, social values); maximum 3 marks per heading.",
+      "1 mark (poor) - basic description of the value.",
+      "2 marks (fair) - semi-detailed description of the value.",
+      "3 marks (good) - detailed description of the value.",
+    ],
+  },
+  {
+    key: "threats",
+    title: "Section 5 - Threats to the tree",
+    perTreeMax: 6,
+    guidance: [
+      "3 marks for describing the threat, 3 marks for discussing 'do nothing'.",
+      "Threat: correct identification of the threat, of its cause, which parts of the tree it affects, how long it has been posing a threat.",
+      "Do nothing: impact on health, on structural condition, on a sensitive feature, whether the impact is increasing, its significance and timescale, whether it is reversible.",
+      "Where more than one threat is reported, the examiner may give an average score.",
+    ],
+  },
+  {
+    key: "plan",
+    title: "Section 6 - Management plan / detailed work specification",
+    perTreeMax: 12,
+    guidance: [
+      "Brief overview of management (vision/end point), who will undertake the work, and the detailed specification.",
+      "Most items carry 1 mark; some carry 2 or 3. More than 12 marks are listed in the model answer so the examiner has a range of options - cap the section at 12.",
+      "If the candidate proposes no cutting for either tree, mark both using the 'do nothing' tables.",
+    ],
+  },
+  {
+    key: "justification",
+    title: "Section 7 - Management justification summary",
+    perTreeMax: 10,
+    guidance: [
+      "3 marks for the justification (good 3, fair 2, poor 1, none 0).",
+      "3 marks for consideration of positive impacts on the tree.",
+      "3 marks for consideration of negative impacts on the tree.",
+      "1 mark for convincing the tree owner.",
+    ],
+  },
+];
+
+// Whole-plan marks, not per tree: 3 each, 9 in total.
+const REPORT_CLARITY_ITEMS = [
+  { key: "spelling", title: "Spelling and grammar", max: 3 },
+  { key: "layout", title: "Layout / formatting", max: 3 },
+  { key: "photographs", title: "Use of photographs to supplement text", max: 3 },
+];
+
+const REPORT_MARKING_INTRO = [
+  "Candidates are asked to survey two veteran trees and produce a management plan detailing their findings. A total of 127 marks are available for this element of the VETcert exam. The model answer provides structure and guidance whilst assessing the management plan. The model answer is separated into 7 sections, these are detailed below.",
+  "Section 1 - Basic information regarding the trees (10 marks)",
+  "Section 2 - Health and vitality of the tree (20 marks)",
+  "Section 3 - Structural condition (biomechanics) of the tree (20 marks)",
+  "Section 4 - Wildlife, historical, cultural or social values of the tree (12 marks)",
+  "Section 5 - Threats to the tree (12 marks)",
+  "Section 6 - Management plan (24 marks)",
+  "Section 7 - Management justification summary (20 marks)",
+  "In addition to the above marks, there are a further 9 marks available for overall clarity of the management plan.",
+  "This document has been produced to provide a framework for awarding marks for this element of the exam. Please note that this document is a guide and examiner discretion is permitted.",
+];
+
+const REPORT_MARKING_TOTAL = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax * 2, 0)
+  + REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + item.max, 0);
+
 const CANDIDATE_SECTIONS = {
   Practicing: [
     { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
@@ -2225,6 +2343,25 @@ function VetBaraPrototype() {
     });
   }
 
+  // The examiner's report marks roll up to one number on the candidate's record, so section D/E and
+  // the archive see the same total the examiner is looking at.
+  function applyReportMarking(candidate, marks) {
+    if (!candidate?.id) return;
+    const total = reportMarksTotal(marks);
+    setCandidates((prev) => prev.map((item) => (item.id === candidate.id ? { ...item, report: total } : item)));
+    if (!loggedExaminer?.id) return;
+    const updatedAt = new Date().toISOString();
+    sendSyncEvent({
+      clientEventId: localEventId(`report-marking-${candidate.id}-${loggedExaminer.id}-${updatedAt}`),
+      type: "examiner_score.saved",
+      entityType: "examiner_score",
+      entityId: `${candidate.id}:report`,
+      candidateId: candidate.id,
+      payload: { candidateId: candidate.id, examinerId: loggedExaminer.id, mode: "primary", role: "primary", field: "report", value: total, max: REPORT_MARKING_TOTAL, updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
   function applyCentreSetup(result) {
     if (Array.isArray(result.candidates)) {
       setCandidates(result.candidates.map((candidate) => ({
@@ -3158,7 +3295,7 @@ function VetBaraPrototype() {
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
@@ -4979,6 +5116,35 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
 const OUTDOOR_CENTRE_RESULT_KEY = "vetbara.outdoorCentreResults.v1";
 const EXAMINER_RESULT_KEY = "vetbara.examinerResults.v1";
 const WRITTEN_QUESTION_SCORES_KEY = "vetbara.writtenQuestionScores.v1";
+// Examiner's marks for the Consulting report, per candidate:
+// { [treeName]: { [sectionKey]: { score, comment } }, clarity: { [itemKey]: score } }.
+const REPORT_MARKS_KEY = "vetbara.reportMarks.v1";
+
+function readReportMarks(candidateId) {
+  if (typeof window === "undefined" || !candidateId) return {};
+  try {
+    const all = JSON.parse(window.localStorage.getItem(scopedCacheKey(REPORT_MARKS_KEY)) || "{}");
+    const row = all?.[candidateId];
+    return row && typeof row === "object" && !Array.isArray(row) ? row : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeReportMarks(candidateId, marks) {
+  if (typeof window === "undefined" || !candidateId) return;
+  try {
+    const all = JSON.parse(window.localStorage.getItem(scopedCacheKey(REPORT_MARKS_KEY)) || "{}");
+    window.localStorage.setItem(scopedCacheKey(REPORT_MARKS_KEY), JSON.stringify({ ...all, [candidateId]: marks }));
+  } catch { /* private mode - marks stay in component state for this session */ }
+}
+
+function reportMarksTotal(marks) {
+  const perTree = REPORT_TREES.reduce((sum, treeName) => sum
+    + REPORT_MARKING_SECTIONS.reduce((inner, section) => inner + (Number(marks?.[treeName]?.[section.key]?.score) || 0), 0), 0);
+  const clarity = REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + (Number(marks?.clarity?.[item.key]) || 0), 0);
+  return perTree + clarity;
+}
 
 // These browser caches used to be keyed by candidate id alone, so opening two certifications in
 // the same browser mixed their results (candidate ids repeat across exams — C-001 exists in both).
@@ -8724,13 +8890,15 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
     #vetbara-scan-measure .pt-options{margin-top:1mm}
     #vetbara-scan-measure .pt-option{margin:1.8mm 0;font-size:10.5pt}
     #vetbara-scan-measure .pt-checkbox{display:inline-block;width:4.5mm;height:4.5mm;border:1.5pt solid #102018;border-radius:1mm;margin-right:3mm;vertical-align:middle}
+    #vetbara-scan-measure .pt-score{margin-top:3mm;text-align:right}
+    #vetbara-scan-measure .pt-score-box{display:inline-block;width:16mm;height:8mm;border:1.5pt solid #102018;border-radius:1mm;vertical-align:middle}
   `;
   container.id = "vetbara-scan-measure";
   container.appendChild(style);
 
   const sections = [];
   questions.forEach((question, index) => {
-    if (!(question.type === "single_choice" && Array.isArray(question.options) && question.options.length)) return;
+    const isChoice = question.type === "single_choice" && Array.isArray(question.options) && question.options.length;
     const qrValue = `VS-${testCode}-${candidateNumber}-Q${index + 1}`;
     const qrSvg = renderQrSvgMarkup(qrValue, 68, { includeMargin: true });
     const section = document.createElement("section");
@@ -8738,9 +8906,19 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
     // Mirrors printCandidateTest: the QR sits inside .pt-options (floated to the right of the
     // checkbox column, not up in the question header) — see the comment on questionsHtml there.
     // Both copies must keep the same float/margins or the measured offsets stop matching print.
-    section.innerHTML = `
+    // Mirrors printCandidateTest for both shapes: multiple-choice keeps the QR inside .pt-options,
+    // everything else carries it in the header — and both end with the examiner's score box, whose
+    // offset from the QR is what lets the mark in it be cropped out of a photo later.
+    section.innerHTML = isChoice
+      ? `
       <div class="pt-qtext">${escapeHtml(question.text || "")}</div>
       <div class="pt-options"><span class="pt-corner-qr pt-corner-qr-options">${qrSvg}</span>${question.options.map(() => `<div class="pt-option"><span class="pt-checkbox"></span></div>`).join("")}</div>
+      <div class="pt-score"><span class="pt-score-box"></span></div>
+    `
+      : `
+      <div class="pt-question-head"><span class="pt-corner-qr">${qrSvg}</span></div>
+      <div class="pt-qtext">${escapeHtml(question.text || "")}</div>
+      <div class="pt-score"><span class="pt-score-box"></span></div>
     `;
     container.appendChild(section);
     sections.push({ question, section, qrSvg });
@@ -8765,7 +8943,15 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
         dyMm: (boxRect.top + boxRect.height / 2 - moduleGridTop) / pxPerMm,
       };
     });
-    layout[question.id] = { moduleGridMm, options };
+    const scoreEl = section.querySelector(".pt-score-box");
+    const scoreRect = scoreEl ? scoreEl.getBoundingClientRect() : null;
+    const scoreBox = scoreRect ? {
+      dxMm: (scoreRect.left + scoreRect.width / 2 - moduleGridLeft) / pxPerMm,
+      dyMm: (scoreRect.top + scoreRect.height / 2 - moduleGridTop) / pxPerMm,
+      widthMm: scoreRect.width / pxPerMm,
+      heightMm: scoreRect.height / pxPerMm,
+    } : null;
+    layout[question.id] = { moduleGridMm, options, scoreBox };
   });
   document.body.removeChild(container);
   return layout;
@@ -8890,6 +9076,8 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   const [scanAssignments, setScanAssignments] = useState({});
   const [expectedPageCounts, setExpectedPageCounts] = useState({});
   const [processedInfo, setProcessedInfo] = useState({});
+  // scanScoreGuesses[candidateId][questionId] = estimated mark read out of the printed score box.
+  const [scanScoreGuesses, setScanScoreGuesses] = useState({});
   const [unmatchedScans, setUnmatchedScans] = useState([]);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanMessage, setScanMessage] = useState(null);
@@ -8966,14 +9154,27 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     parsedList.forEach(({ parsed, location }) => {
       const question = questions[parsed.anchorQuestion - 1];
       const entry = question ? layout[question.id] : null;
-      if (!question || !entry || !entry.options.length) return;
+      if (!question || !entry) return;
       const pxPerMm = Math.hypot(location.topRightCorner.x - location.topLeftCorner.x, location.topRightCorner.y - location.topLeftCorner.y) / entry.moduleGridMm;
+
+      // The examiner's handwritten mark in the score box, read as a pre-fill for the marking window.
+      let scoreGuess = null;
+      if (entry.scoreBox) {
+        const scorePoint = mapOffsetToPhoto(location, entry.scoreBox.dxMm, entry.scoreBox.dyMm, entry.moduleGridMm);
+        const crop = cropScoreBox(imageData, scorePoint.x, scorePoint.y, (entry.scoreBox.widthMm / 2) * pxPerMm, (entry.scoreBox.heightMm / 2) * pxPerMm);
+        scoreGuess = recognizeScore(crop, question.points);
+      }
+
+      if (!entry.options.length) {
+        questionResults[question.id] = { scoreGuess };
+        return;
+      }
       const boxHalfPx = Math.max(4, 4.5 * pxPerMm * 0.4);
       const optionResults = entry.options.map((option) => {
         const point = mapOffsetToPhoto(location, option.dxMm, option.dyMm, entry.moduleGridMm);
         return { index: option.index, ...classifyMark(imageData, point.x, point.y, boxHalfPx) };
       });
-      questionResults[question.id] = { ...resolveQuestionMark(optionResults), optionResults };
+      questionResults[question.id] = { ...resolveQuestionMark(optionResults), optionResults, scoreGuess };
     });
 
     setScans((prev) => ({
@@ -9043,13 +9244,18 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     const responsesPatch = {};
     const assignPatch = {};
     let errorCount = 0;
+    const scorePatch = {};
     pages.forEach((page) => {
       Object.entries(page.questionResults || {}).forEach(([questionId, result]) => {
         assignPatch[questionId] = page.dataUrl;
+        if (result.scoreGuess && Number.isFinite(result.scoreGuess.value)) scorePatch[questionId] = result.scoreGuess.value;
         if (result.error) { errorCount += 1; return; }
         if (result.selectedIndex != null) responsesPatch[questionId] = String.fromCharCode(65 + result.selectedIndex);
       });
     });
+    if (Object.keys(scorePatch).length) {
+      setScanScoreGuesses((prev) => ({ ...prev, [candidate.id]: { ...(prev[candidate.id] || {}), ...scorePatch } }));
+    }
     if (Object.keys(responsesPatch).length) {
       setTestResponses((prev) => ({ ...prev, [candidate.id]: { ...(prev[candidate.id] || {}), ...responsesPatch } }));
     }
@@ -9382,7 +9588,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
             candidate={scanGradingCandidate}
             pages={scans[scanGradingCandidate.id] || []}
             questions={questions}
-            initialScores={readWrittenQuestionScores(scanGradingCandidate.id)}
+            initialScores={{ ...(scanScoreGuesses[scanGradingCandidate.id] || {}), ...readWrittenQuestionScores(scanGradingCandidate.id) }}
             onSave={(scores) => {
               const numeric = Object.fromEntries(Object.entries(scores).map(([id, value]) => [id, value === "" ? "" : Number(value)]));
               writeWrittenQuestionScores(scanGradingCandidate.id, numeric);
@@ -11964,6 +12170,7 @@ function ExaminerView({
                   examinerName={loggedExaminer?.name}
                   activeAdminPackageMeta={activeAdminPackageMeta}
                   t={t}
+                  onReportMarked={onReportMarked}
                 />
               ) : (
                 <OutdoorForm
@@ -13380,7 +13587,37 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
   );
 }
 
-function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, activeAdminPackageMeta, t }) {
+function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, activeAdminPackageMeta, onReportMarked, t }) {
+  const candidateId = selectedCandidate?.id || "";
+  const [marks, setMarks] = useState(() => readReportMarks(candidateId));
+  // Opening the report shows the model answer's own introduction first, so the examiner marks
+  // against the same framing the paper document gives.
+  const [introOpen, setIntroOpen] = useState(true);
+
+  useEffect(() => {
+    setMarks(readReportMarks(candidateId));
+    setIntroOpen(true);
+  }, [candidateId]);
+
+  function persist(next) {
+    setMarks(next);
+    writeReportMarks(candidateId, next);
+    onReportMarked?.(selectedCandidate, next);
+  }
+
+  function updateMark(treeName, sectionKey, patch) {
+    persist({
+      ...marks,
+      [treeName]: { ...(marks[treeName] || {}), [sectionKey]: { ...(marks[treeName]?.[sectionKey] || {}), ...patch } },
+    });
+  }
+
+  function updateClarity(itemKey, value) {
+    persist({ ...marks, clarity: { ...(marks.clarity || {}), [itemKey]: value } });
+  }
+
+  const marksTotal = reportMarksTotal(marks);
+
   if (!activeAdminPackageMeta) {
     return (
       <div className="rounded-2xl border bg-white p-4">
@@ -13446,12 +13683,29 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
 
   return (
     <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
+      {introOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-bold">{t("examiner.reportReview.introTitle")}</h3>
+            <div className="mt-3 space-y-2 text-sm leading-relaxed text-slate-700">
+              {REPORT_MARKING_INTRO.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => setIntroOpen(false)} className="rounded-2xl">{t("common.confirm")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-2xl font-bold">{t("examiner.reportReview.title")}</h3>
           <p className="mt-1 text-sm text-slate-600">
             {selectedCandidate.name} · {selectedCandidate.id} · {selectedCandidate.level}
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-bold text-white">{marksTotal} / {REPORT_MARKING_TOTAL}</span>
+            <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("examiner.reportReview.showIntro")}</Button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => openWrittenReview?.(selectedCandidate.id)} variant="outline" className="rounded-2xl">
@@ -13472,79 +13726,107 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {treeSummaries.map(({ treeName, tree, reportPhotos, completedSections }) => (
-          <div key={treeName} className="rounded-2xl border bg-slate-50 p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h4 className="text-xl font-bold">{treeName}</h4>
-                <p className="text-sm text-slate-600">
-                  {t("examiner.reportReview.completedSectionsLabel")}: {completedSections} / {REPORT_SECTIONS.length}
-                </p>
+      {/* Trees stacked, never side by side: each tree gets the full width so the candidate's own
+          text (left) can be read against the examiner's comment and mark (right). */}
+      <div className="space-y-6">
+        {treeSummaries.map(({ treeName, tree, reportPhotos, completedSections }) => {
+          const treeMarks = marks[treeName] || {};
+          const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + (Number(treeMarks[section.key]?.score) || 0), 0);
+          const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
+          return (
+            <div key={treeName} className="rounded-2xl border bg-slate-50 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xl font-bold">{treeName}</h4>
+                  <p className="text-sm text-slate-600">
+                    {t("examiner.reportReview.completedSectionsLabel")}: {completedSections} / {REPORT_SECTIONS.length}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusPill tone={completedSections === REPORT_SECTIONS.length ? "good" : "warn"}>
+                    {completedSections === REPORT_SECTIONS.length ? t("examiner.reportReview.complete") : t("examiner.reportReview.incomplete")}
+                  </StatusPill>
+                  <span className="rounded-full bg-slate-950 px-3 py-1.5 text-sm font-bold text-white">{treeTotal} / {treeMax}</span>
+                </div>
               </div>
-              <StatusPill tone={completedSections === REPORT_SECTIONS.length ? "good" : "warn"}>
-                {completedSections === REPORT_SECTIONS.length ? t("examiner.reportReview.complete") : t("examiner.reportReview.incomplete")}
-              </StatusPill>
-            </div>
 
-            <div className="rounded-xl border bg-white p-3">
-              <h5 className="font-semibold">{t("examiner.reportReview.photosLabel")}</h5>
-              {reportPhotos.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">{t("examiner.reportReview.noPhotos")}</p>
-              ) : (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {reportPhotos.map((photo) => (
-                    <button
-                      key={photo.id}
-                      type="button"
-                      className="rounded-xl border bg-white p-2 text-left"
-                    >
-                      <div className="h-40 overflow-hidden rounded-lg bg-slate-200">
-                        {photo.dataUrl ? (
-                          <img src={photo.dataUrl} alt={photo.description || photo.name || photo.id} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-slate-500">
-                            {t("report.photoNoImageData")}
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-2 text-sm font-medium">{photo.description || photo.name || photo.id}</div>
-                      <div className="text-xs text-slate-500">{photo.name}</div>
-                    </button>
+              {reportPhotos.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {reportPhotos.map((photo) => photo.dataUrl && (
+                    <img key={photo.id} src={photo.dataUrl} alt={photo.description || photo.name || photo.id} className="h-24 w-32 rounded-lg border object-cover" />
                   ))}
                 </div>
               )}
-            </div>
 
-            <div className="mt-3 rounded-xl border bg-white p-3">
-              <h5 className="font-semibold">{t("examiner.reportReview.fieldNotesLabel")}</h5>
-              <p className="mt-1 text-xs text-slate-500">
-                {t("examiner.reportReview.fieldNotesHelper")}
-              </p>
-              <div className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-100 p-3 text-sm">
-                {String(tree.fieldNotes ?? "").trim() || "-"}
+              <div className="space-y-3">
+                {REPORT_MARKING_SECTIONS.map((section, index) => {
+                  const candidateText = String(tree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim()
+                    || (index === 0 ? String(tree.fieldNotes ?? "").trim() : "");
+                  const mark = treeMarks[section.key] || {};
+                  return (
+                    <div key={section.key} className="grid gap-3 rounded-2xl border bg-white p-3 lg:grid-cols-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                        <div className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm">
+                          {candidateText || <em className="text-slate-400">{t("examiner.reportReview.missing")}</em>}
+                        </div>
+                      </div>
+                      <div className="min-w-0 border-t pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <ul className="min-w-0 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-slate-600">
+                            {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
+                          </ul>
+                          <label className="shrink-0 text-xs font-semibold text-slate-600">
+                            {t("centre.scan.score")} / {section.perTreeMax}
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              max={section.perTreeMax}
+                              value={mark.score ?? ""}
+                              onChange={(event) => updateMark(treeName, section.key, { score: event.target.value })}
+                              className="mt-1 block w-24 rounded-lg border p-1 text-right text-sm font-bold"
+                            />
+                          </label>
+                        </div>
+                        <textarea
+                          value={mark.comment ?? ""}
+                          onChange={(event) => updateMark(treeName, section.key, { comment: event.target.value })}
+                          rows={3}
+                          placeholder={t("examiner.reportReview.commentPlaceholder")}
+                          className="mt-2 w-full rounded-xl border p-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
+          );
+        })}
 
-            <div className="mt-3 space-y-3">
-              {REPORT_SECTIONS.map((section) => {
-                const value = String(tree.finalSections?.[section.key] ?? "").trim();
-
-                return (
-                  <div key={section.key} className="rounded-xl border bg-white p-3">
-                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <h5 className="font-semibold">{sectionTitle(t, section)}</h5>
-                      <StatusPill tone={value ? "good" : "warn"}>{value ? t("examiner.reportReview.filled") : t("examiner.reportReview.missing")}</StatusPill>
-                    </div>
-                    <div className="whitespace-pre-wrap text-sm text-slate-700">
-                      {value || "-"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {/* Whole-plan marks, scored once rather than per tree. */}
+        <div className="rounded-2xl border bg-slate-50 p-4">
+          <h4 className="text-xl font-bold">{t("examiner.reportReview.clarityTitle")}</h4>
+          <p className="mt-1 text-sm text-slate-600">{t("examiner.reportReview.clarityHelper")}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {REPORT_CLARITY_ITEMS.map((item) => (
+              <label key={item.key} className="rounded-2xl border bg-white p-3 text-sm font-medium">
+                {item.title}
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  max={item.max}
+                  value={marks.clarity?.[item.key] ?? ""}
+                  onChange={(event) => updateClarity(item.key, event.target.value)}
+                  className="mt-2 block w-full rounded-lg border p-1 text-right text-sm font-bold"
+                />
+                <span className="mt-1 block text-xs font-normal text-slate-500">/ {item.max}</span>
+              </label>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
