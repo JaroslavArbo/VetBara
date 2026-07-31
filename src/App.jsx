@@ -8651,42 +8651,92 @@ function FieldTabletPage() {
 
 // Opened by scanning the "Připojit tablet/telefon" QR in Centre's Scan podkladů panel
 // (?mode=scan-capture&examId=...). Deliberately dumb: it has no candidate/testBank/variant
-// context at all, so it can't decode or sort anything itself — it just captures a page photo,
-// runs the same generic auto-enhance pass used everywhere else in the app, and uploads it to
-// this exam's server-side scan inbox. The Centre browser that showed the QR polls that inbox and
-// runs the full identify-and-detect pipeline there, where the exam data actually lives.
+// context at all, so it can't decode or sort anything itself — it just captures page photos and
+// uploads them to this exam's server-side scan inbox; the Centre browser that showed the QR
+// polls that inbox and runs the full identify-and-detect pipeline there, where the exam data
+// actually lives (see processScanImage). Capture is a local queue, not one-photo-at-a-time: the
+// camera button re-arms the instant a photo is resized and queued (no network wait), so someone
+// can shoot through a whole stack of pages in a few seconds while a small number of uploads run
+// in the background - what used to be a serial photograph-wait-photograph-wait loop.
+const SCAN_CAPTURE_UPLOAD_CONCURRENCY = 2;
+const SCAN_CAPTURE_MAX_DIMENSION = 2200;
 function ScanCaptureMobilePage() {
   const [uiLanguage] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "cs");
   const t = makeTranslator(uiLanguage);
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const query = new URLSearchParams(window.location.search);
   const examId = query.get("examId") || CENTRE_QR_ID;
-  const [uploaded, setUploaded] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // queue items: { id, dataUrl, status: "queued" | "uploading" | "done" | "error" }
+  const [queue, setQueue] = useState([]);
+  const queueRef = useRef([]);
+  queueRef.current = queue;
+  const activeUploadsRef = useRef(0);
+  const [captureError, setCaptureError] = useState("");
 
-  async function captureFile(file) {
-    setBusy(true);
-    setError("");
-    try {
-      const image = await loadImageFromFile(file);
-      const canvas = imageElementToCanvas(image);
-      autoEnhanceCanvas(canvas);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      const response = await fetch(`/api/exams/${encodeURIComponent(examId)}/scan-inbox`, {
+  function updateItem(id, patch) {
+    setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function runQueue() {
+    while (activeUploadsRef.current < SCAN_CAPTURE_UPLOAD_CONCURRENCY) {
+      const next = queueRef.current.find((item) => item.status === "queued");
+      if (!next) break;
+      activeUploadsRef.current += 1;
+      updateItem(next.id, { status: "uploading" });
+      fetch(`/api/exams/${encodeURIComponent(examId)}/scan-inbox`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl, capturedAt: new Date().toISOString() }),
-      });
-      if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
-      setUploaded((prev) => [{ id: vetbaraUid("upload"), dataUrl, at: new Date().toISOString() }, ...prev]);
-    } catch (uploadError) {
-      console.error("Scan capture upload failed", uploadError);
-      setError(t("scanCapture.uploadError"));
-    } finally {
-      setBusy(false);
+        body: JSON.stringify({ dataUrl: next.dataUrl, capturedAt: new Date().toISOString() }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
+          updateItem(next.id, { status: "done" });
+        })
+        .catch((uploadError) => {
+          console.error("Scan capture upload failed", uploadError);
+          updateItem(next.id, { status: "error" });
+        })
+        .finally(() => {
+          activeUploadsRef.current -= 1;
+          runQueue();
+        });
+      // queueRef.current won't reflect the "uploading" patch until the next render, so the loop
+      // condition above would otherwise immediately re-pick the same "queued" item.
+      queueRef.current = queueRef.current.map((item) => (item.id === next.id ? { ...item, status: "uploading" } : item));
     }
   }
+
+  async function captureFile(file) {
+    setCaptureError("");
+    const id = vetbaraUid("scan-queue");
+    try {
+      const image = await loadImageFromFile(file);
+      // No auto-enhance here on purpose: it is a heavy full-resolution pass (three-channel
+      // histogram + rewrite), pointless to run twice, and processScanImage runs it again once
+      // the Centre downloads the page - doing it here only slowed down capture and doubled up
+      // the contrast stretch, which does not decode QRs any better.
+      const canvas = resizeCanvasToMaxDimension(imageElementToCanvas(image), SCAN_CAPTURE_MAX_DIMENSION);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setQueue((prev) => [{ id, dataUrl, status: "queued" }, ...prev]);
+      queueRef.current = [{ id, dataUrl, status: "queued" }, ...queueRef.current];
+      runQueue();
+    } catch (captureFailure) {
+      console.error("Scan capture failed", captureFailure);
+      setCaptureError(t("scanCapture.uploadError"));
+    }
+  }
+
+  function retryItem(id) {
+    updateItem(id, { status: "queued" });
+    queueRef.current = queueRef.current.map((item) => (item.id === id ? { ...item, status: "queued" } : item));
+    runQueue();
+  }
+
+  const doneCount = queue.filter((item) => item.status === "done").length;
+  const pendingCount = queue.filter((item) => item.status === "queued" || item.status === "uploading").length;
+  const errorCount = queue.filter((item) => item.status === "error").length;
+  const statusLabel = { queued: t("scanCapture.status.queued"), uploading: t("scanCapture.status.uploading"), done: t("scanCapture.status.done"), error: t("scanCapture.status.error") };
+  const statusTone = { queued: "bg-slate-700 text-slate-200", uploading: "bg-amber-500 text-amber-950", done: "bg-emerald-500 text-emerald-950", error: "bg-rose-500 text-white" };
 
   return (
     <main className="min-h-screen bg-slate-950 p-4 text-white">
@@ -8697,26 +8747,37 @@ function ScanCaptureMobilePage() {
         </div>
         <p className="mb-4 text-sm text-slate-300">{t("scanCapture.helper")}</p>
 
-        <label className={`flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed ${busy ? "border-slate-600 text-slate-500" : "border-emerald-400 text-white"}`}>
+        <label className="flex h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-400 text-white">
           <Camera className="h-8 w-8" />
-          <span className="text-lg font-semibold">{busy ? t("scanCapture.uploading") : t("scanCapture.captureButton")}</span>
+          <span className="text-lg font-semibold">{t("scanCapture.captureButton")}</span>
           <input
             type="file"
             accept="image/*"
             capture="environment"
             className="hidden"
-            disabled={busy}
             onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) captureFile(file); }}
           />
         </label>
 
-        {error && <div className="mt-3 rounded-xl border border-rose-500 bg-rose-950 p-3 text-sm text-rose-200">{error}</div>}
+        {captureError && <div className="mt-3 rounded-xl border border-rose-500 bg-rose-950 p-3 text-sm text-rose-200">{captureError}</div>}
 
-        <div className="mt-4 text-sm font-semibold text-slate-300">
-          {tf("scanCapture.uploadedCount", { count: uploaded.length })}
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-300">
+          <span>{tf("scanCapture.uploadedCount", { count: doneCount })}</span>
+          {pendingCount > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-amber-950">{tf("scanCapture.pendingCount", { count: pendingCount })}</span>}
+          {errorCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{tf("scanCapture.errorCount", { count: errorCount })}</span>}
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2">
-          {uploaded.map((item) => <img key={item.id} src={item.dataUrl} alt="uploaded scan" className="h-24 w-full rounded-lg border border-slate-700 object-cover" />)}
+          {queue.map((item) => (
+            <div key={item.id} className="relative">
+              <img src={item.dataUrl} alt="scanned page" className="h-24 w-full rounded-lg border border-slate-700 object-cover" />
+              <span className={`absolute bottom-1 left-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${statusTone[item.status]}`}>{statusLabel[item.status]}</span>
+              {item.status === "error" && (
+                <button type="button" onClick={() => retryItem(item.id)} className="absolute inset-x-1 top-1 rounded-full bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {t("scanCapture.retry")}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </main>
@@ -8903,6 +8964,46 @@ function imageElementToCanvas(image) {
   canvas.height = image.naturalHeight || image.height;
   canvas.getContext("2d").drawImage(image, 0, 0);
   return canvas;
+}
+// A modern phone camera photo can be 4000-9000px on the long edge. jsQR needs the corner QR to
+// be at most a few dozen pixels across, not thousands, and every downstream pass (histogram
+// enhance, repeated jsQR scans, upload payload size) scales with pixel count — a 12MP source
+// makes those seconds slower for no detection benefit. Downscaling first is the single biggest
+// lever on both "scanning is slow" and "the QR is clearly there but wasn't found" (jsQR's own
+// decoder gets noticeably less reliable on very large/noisy source images). The QR-relative
+// checkbox math (mapOffsetToPhoto) rebuilds its ruler from the QR's own detected corner distance
+// each time, so it is scale-invariant - downscaling never changes what gets read off a page.
+function resizeCanvasToMaxDimension(canvas, maxDimension) {
+  const longest = Math.max(canvas.width, canvas.height);
+  if (longest <= maxDimension) return canvas;
+  const scale = maxDimension / longest;
+  const resized = document.createElement("canvas");
+  resized.width = Math.round(canvas.width * scale);
+  resized.height = Math.round(canvas.height * scale);
+  resized.getContext("2d").drawImage(canvas, 0, 0, resized.width, resized.height);
+  return resized;
+}
+// Second attempt at a different scale for a page whose corner QR is visibly present but didn't
+// decode: jsQR occasionally misses on the resolution it was first given (motion blur, moire from
+// downscaling, a finder pattern that lands on a bad pixel boundary) and succeeds on another. Kept
+// to one extra size (75%) rather than a whole pyramid - each attempt re-scans the full image.
+function decodeAllQrCodesWithRetry(canvas, maxCodes = 12) {
+  const first = decodeAllQrCodes(canvas, maxCodes);
+  if (first.length) return first;
+  const resized = resizeCanvasToMaxDimension(canvas, Math.round(Math.max(canvas.width, canvas.height) * 0.75));
+  if (resized === canvas) return first;
+  const scaleX = canvas.width / resized.width;
+  const scaleY = canvas.height / resized.height;
+  const scalePoint = (point) => ({ x: point.x * scaleX, y: point.y * scaleY });
+  return decodeAllQrCodes(resized, maxCodes).map((result) => ({
+    ...result,
+    location: {
+      topLeftCorner: scalePoint(result.location.topLeftCorner),
+      topRightCorner: scalePoint(result.location.topRightCorner),
+      bottomLeftCorner: scalePoint(result.location.bottomLeftCorner),
+      bottomRightCorner: scalePoint(result.location.bottomRightCorner),
+    },
+  }));
 }
 
 // Final-review modal: shows every question with the candidate's answer highlighted next to the
@@ -9442,7 +9543,7 @@ function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreCode, examDate, place, onExamClosed, examClosed, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreExamId, centreCode, examDate, place, onExamClosed, examClosed, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -9538,10 +9639,21 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     URL.revokeObjectURL(url);
   }
   const checkboxLayoutCacheRef = useRef({});
+  // pollScanInbox reentrancy guard + a "claimed but not yet confirmed deleted" set: without
+  // these, a poll cycle slower than the 4s interval (a handful of full-resolution QR decodes can
+  // easily take that long) let a second poll fetch the SAME still-present inbox items before the
+  // first poll's deletes had landed, turning every one of them into a duplicate scanned page.
+  const pollScanInboxBusyRef = useRef(false);
+  const claimedScanInboxIdsRef = useRef(new Set());
   // A phone that scans the "Připojit tablet/telefon" QR uploads photos to this exam's server-side
   // scan inbox (see ScanCaptureMobilePage); this browser's own Centre session polls for new
   // uploads and runs them through the exact same detection pipeline as a locally captured photo.
-  const scanInboxExamId = CENTRE_QR_ID;
+  // Scoped the same way field-prep already is (fieldPrepExamId in CentreView): this used to be
+  // the CENTRE_QR_ID constant unconditionally, so every certification's "Připojit tablet" QR
+  // pointed at the SAME shared inbox — two Centres open at once (a real multi-site/multi-day
+  // scenario this app already supports) would each poll and race on the other's pages, which
+  // reads exactly like "pages appear twice" even with the reentrancy fix above.
+  const scanInboxExamId = centreExamId || centreCode || CENTRE_QR_ID;
   const mobileScanCaptureUrl = `${window.location.origin}${window.location.pathname}?mode=scan-capture&examId=${encodeURIComponent(scanInboxExamId)}`;
 
   const identifiedExaminer = examiners.find((examiner) => examiner.id === identifiedExaminerId) || null;
@@ -9562,9 +9674,9 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   // file-capture button and the remote scan-inbox poller (see the "Připojit tablet/telefon" QR),
   // which both just need to hand it an already-loaded image.
   async function processScanImage(image) {
-    const canvas = imageElementToCanvas(image);
+    const canvas = resizeCanvasToMaxDimension(imageElementToCanvas(image), 2200);
     autoEnhanceCanvas(canvas);
-    const decoded = decodeAllQrCodes(canvas);
+    const decoded = decodeAllQrCodesWithRetry(canvas);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
     if (!decoded.length) {
@@ -9658,23 +9770,39 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   // for pages a connected phone/tablet has uploaded, runs each one through the same detection
   // pipeline as a locally captured photo, then deletes it from the inbox so it isn't reprocessed.
   async function pollScanInbox() {
+    if (pollScanInboxBusyRef.current) return;
+    pollScanInboxBusyRef.current = true;
     try {
       const response = await fetch(`/api/exams/${encodeURIComponent(scanInboxExamId)}/scan-inbox`, { cache: "no-store" });
       if (!response.ok) return;
       const data = await response.json();
       const items = Array.isArray(data.items) ? data.items : [];
       for (const item of items) {
+        const deleteUrl = `/api/exams/${encodeURIComponent(scanInboxExamId)}/scan-inbox/${encodeURIComponent(item.id)}`;
+        if (claimedScanInboxIdsRef.current.has(item.id)) {
+          // Already turned into a scan page on an earlier poll; only its delete didn't land yet
+          // (slow connection or a dropped request) - retry the delete, never the processing.
+          try { await fetch(deleteUrl, { method: "DELETE" }); claimedScanInboxIdsRef.current.delete(item.id); } catch { /* retry next poll */ }
+          continue;
+        }
+        claimedScanInboxIdsRef.current.add(item.id);
         try {
           const image = await loadImageFromDataUrl(item.dataUrl);
           await processScanImage(image);
         } catch (error) {
           console.error("Remote scan processing failed", error);
-        } finally {
-          fetch(`/api/exams/${encodeURIComponent(scanInboxExamId)}/scan-inbox/${encodeURIComponent(item.id)}`, { method: "DELETE" }).catch(() => {});
+        }
+        try {
+          await fetch(deleteUrl, { method: "DELETE" });
+          claimedScanInboxIdsRef.current.delete(item.id);
+        } catch {
+          // Stays claimed so the next poll retries only the delete, not the (already-added) page.
         }
       }
     } catch {
       // Best-effort background poll; the next tick will retry.
+    } finally {
+      pollScanInboxBusyRef.current = false;
     }
   }
 
@@ -10857,6 +10985,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             candidates={candidates}
             examiners={examiners}
             assignments={assignments}
+            centreExamId={centreExamId}
             outdoorByExaminer={outdoorByExaminer}
             onOutdoorCorrection={applyOutdoorCorrection}
             onScanGradingSaved={applyScanGrading}
