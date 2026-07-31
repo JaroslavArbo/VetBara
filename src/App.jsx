@@ -216,18 +216,13 @@ const DEMO_QR_TOKENS = {
   Candidate: "VETBARA-CANDIDATE-C-001-2026",
   Examiner: "VETBARA-EXAMINER-E-001-2026",
 };
-const EXAMINERS = [
-  { id: "E-001", name: "Examiner 1", birthDate: "", registrationId: "EX-DEMO-001" },
-  { id: "E-002", name: "Examiner 2", birthDate: "", registrationId: "EX-DEMO-002" },
-  { id: "E-003", name: "Examiner 3", birthDate: "", registrationId: "EX-DEMO-003" },
-];
-const START_CANDIDATES = [
-  { id: "C-001", name: "Candidate 1", birthDate: "", documentId: "", level: "Consulting", status: "Ready", written: null, outdoor: null, report: null },
-  { id: "C-002", name: "Candidate 2", birthDate: "", documentId: "", level: "Practicing", status: "Ready", written: null, outdoor: null, report: null },
-  { id: "C-003", name: "Candidate 3", birthDate: "", documentId: "", level: "Practicing", status: "Ready", written: null, outdoor: null, report: null },
-  { id: "C-004", name: "Candidate 4", birthDate: "", documentId: "", level: "Consulting", status: "Ready", written: null, outdoor: null, report: null },
-];
-const START_ASSIGNMENTS = { "C-001": { primary: "E-001", secondary: "E-002" }, "C-002": { primary: "E-002", secondary: "E-003" }, "C-003": { primary: "E-003", secondary: "E-001" }, "C-004": { primary: "E-001", secondary: "E-003" } };
+// The roster is always the real one loaded from the Centre setup — there is deliberately no seed
+// roster. Placeholder people ("Candidate 1", "Examiner 2", EX-DEMO-00x) used to be the initial
+// state and were indistinguishable from real entries, so a failed setup load left the operator
+// issuing QR links for candidates who do not exist.
+const EXAMINERS = [];
+const START_CANDIDATES = [];
+const START_ASSIGNMENTS = {};
 const TEST_VARIANTS = [
   { code: "PRACTICING_2026_V1_EN", level: "Practicing", language: "EN", status: "Approved" },
   { code: "PRACTICING_2026_V1_CZ", level: "Practicing", language: "CZ", status: "Approved" },
@@ -1110,15 +1105,22 @@ function VetBaraPrototype() {
   const [accessError, setAccessError] = useState("");
   const [candidates, setCandidates] = useState(START_CANDIDATES);
   const [examiners, setExaminers] = useState(EXAMINERS);
-  const [selectedCandidateId, setSelectedCandidateId] = useState("C-001");
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const [loggedCandidateId, setLoggedCandidateId] = useState(null);
   const [candidateConfirmed, setCandidateConfirmed] = useState({});
-  const [candidateStatus, setCandidateStatus] = useState({ "C-001": createSectionStatus("Consulting"), "C-002": createSectionStatus("Practicing"), "C-003": createSectionStatus("Practicing"), "C-004": createSectionStatus("Consulting") });
+  const [candidateStatus, setCandidateStatus] = useState({});
   const [candidateTimes, setCandidateTimes] = useState({});
   const [activeCandidateSection, setActiveCandidateSection] = useState("landing");
   const [testResponses, setTestResponses] = useState({});
   const [importedCandidatePackages, setImportedCandidatePackages] = useState({});
-  const [reportDrafts, setReportDrafts] = useState({ "C-001": createReportDraft(), "C-004": createReportDraft() });
+  const [reportDrafts, setReportDrafts] = useState({});
+  // candidatePreparations[candidateId][treeKey] = { note, sketch } — what the candidate wrote and
+  // drew for each tree before the outdoor exam, pulled back from the server for the Centre.
+  const [candidatePreparations, setCandidatePreparations] = useState({});
+  // outdoorByExaminer[candidateId][examinerId] = { mode, scores, notes, noteDrawings, examSummary,
+  // submittedAt }. The flat `outdoor` state merges every examiner together, which is fine for a
+  // total but loses who scored what — section E needs the primary and secondary side by side.
+  const [outdoorByExaminer, setOutdoorByExaminer] = useState({});
   const [activeReportTree, setActiveReportTree] = useState("Tree A");
   // Examiner login id is set only after the openQrSession effect verifies the token with the
   // server (via resolveAccessWithFallback -> applyResolvedAccess -> loginExaminer). It used to
@@ -1333,6 +1335,43 @@ function VetBaraPrototype() {
                 updatedAt: row.updated_at ?? row.submitted_at ?? p.submittedAt ?? null,
               });
             });
+          // Per-examiner split: scores/notes come from outdoor_scores rows (which carry examiner_id),
+          // sketches and the closing summary from that examiner's submitted assessment payload.
+          const assessmentRows = Array.isArray(result.outdoorAssessments) ? result.outdoorAssessments : [];
+          const perExaminer = {};
+          const examinerBucket = (examinerId) => {
+            if (!perExaminer[examinerId]) perExaminer[examinerId] = { examinerId, mode: "", scores: {}, notes: {}, noteDrawings: {}, examSummary: "", submittedAt: null };
+            return perExaminer[examinerId];
+          };
+          (Array.isArray(result.outdoorScores) ? result.outdoorScores : []).forEach((row) => {
+            const examinerId = row.examiner_id ?? row.examinerId;
+            const itemId = row.item_id ?? row.itemId;
+            if (!examinerId || !itemId) return;
+            const bucket = examinerBucket(examinerId);
+            const raw = row.score ?? row.payload?.score ?? "";
+            if (raw !== "" && raw !== null && raw !== undefined) {
+              const num = Number(raw);
+              bucket.scores[itemId] = Number.isFinite(num) ? num : raw;
+            }
+            const note = row.note ?? row.payload?.note ?? row.payload?.comment ?? "";
+            if (note) bucket.notes[itemId] = note;
+            if (!bucket.mode) bucket.mode = row.payload?.mode || row.mode || "";
+          });
+          assessmentRows.forEach((row) => {
+            const examinerId = row.examiner_id ?? row.examinerId;
+            if (!examinerId) return;
+            const bucket = examinerBucket(examinerId);
+            const p = row.payload ?? {};
+            bucket.mode = row.mode ?? p.mode ?? bucket.mode;
+            if (p.noteDrawings && typeof p.noteDrawings === "object") bucket.noteDrawings = { ...bucket.noteDrawings, ...p.noteDrawings };
+            if (p.notes && typeof p.notes === "object") bucket.notes = { ...p.notes, ...bucket.notes };
+            if (p.examSummary) bucket.examSummary = p.examSummary;
+            bucket.submittedAt = row.submitted_at ?? row.submittedAt ?? p.submittedAt ?? bucket.submittedAt;
+          });
+          if (Object.keys(perExaminer).length) {
+            setOutdoorByExaminer((prev) => ({ ...prev, [candidate.id]: perExaminer }));
+          }
+
           // Per-item Outdoor scores (also covers in-progress, pre-submit editing).
           const scoreRows = Array.isArray(result.outdoorScores) ? result.outdoorScores : [];
           if (scoreRows.length) {
@@ -1358,6 +1397,19 @@ function VetBaraPrototype() {
               }, { ...(prev[candidate.id] ?? {}) }),
             }));
           }
+          // What the candidate prepared per tree before going out (notes + sketch).
+          const preparationRows = Array.isArray(result.preparations) ? result.preparations : [];
+          if (preparationRows.length) {
+            setCandidatePreparations((prev) => ({
+              ...prev,
+              [candidate.id]: preparationRows.reduce((next, row) => {
+                const treeKey = row.tree_key ?? row.treeKey;
+                if (!treeKey) return next;
+                return { ...next, [treeKey]: { note: row.note ?? "", sketch: row.sketch ?? "" } };
+              }, {}),
+            }));
+          }
+
           // Report draft → the Consulting report column.
           if (result.reportDraft && typeof result.reportDraft === "object") {
             setReportDrafts((prev) => ({
@@ -1991,18 +2043,18 @@ function VetBaraPrototype() {
         }));
       }
 
-      if (restoredScores.length > 0) {
-        setOutdoorNotes((prev) => ({
+      const assessment = restoredAssessments.find((row) => (row.section_key ?? row.sectionKey) === "outdoor") ?? restoredAssessments[0];
+      const restoredDrawings = assessment?.payload?.noteDrawings;
+      if (restoredDrawings && typeof restoredDrawings === "object") {
+        setOutdoorNoteDrawings((prev) => ({
           ...prev,
-          [candidateId]: restoredScores.reduce((next, score) => {
-            const itemId = score.item_id ?? score.itemId;
-            const note = score.note ?? score.payload?.note ?? score.payload?.comment ?? "";
-            return itemId ? { ...next, [itemId]: note } : next;
-          }, { ...(prev[candidateId] ?? {}) }),
+          [candidateId]: { ...(prev[candidateId] ?? {}), ...restoredDrawings },
         }));
       }
-
-      const assessment = restoredAssessments.find((row) => (row.section_key ?? row.sectionKey) === "outdoor") ?? restoredAssessments[0];
+      const restoredSummary = assessment?.payload?.examSummary;
+      if (typeof restoredSummary === "string" && restoredSummary) {
+        setOutdoorExamSummaries((prev) => ({ ...prev, [candidateId]: restoredSummary }));
+      }
       if (assessment) {
         setExaminerTimes((prev) => ({
           ...prev,
@@ -2089,6 +2141,64 @@ function VetBaraPrototype() {
     setTestImportStatus(summary?.variants && summary?.questions
       ? tf("status.testImport.loadedStoredFull", { variants: summary.variants, questions: summary.questions })
       : t("status.testImport.loadedStored"));
+  }
+
+  // Section E correction by the identified primary examiner: update the per-examiner view, persist
+  // it as an outdoor_score.saved event (the Centre role is allowed exactly this one event type),
+  // and record it in the exam audit log — every edit is traceable to who made it.
+  function applyOutdoorCorrection(candidate, examinerId, itemId, patch) {
+    if (!candidate?.id || !examinerId || !itemId) return;
+    const updatedAt = new Date().toISOString();
+    let nextScore = null;
+    let nextNote = null;
+
+    setOutdoorByExaminer((prev) => {
+      const forCandidate = prev[candidate.id] ?? {};
+      const bucket = forCandidate[examinerId] ?? { examinerId, mode: "primary", scores: {}, notes: {}, noteDrawings: {}, examSummary: "", submittedAt: null };
+      const scores = { ...bucket.scores };
+      const notes = { ...bucket.notes };
+      if (patch.score !== undefined) {
+        scores[itemId] = patch.score === "" ? "" : Number(patch.score);
+      }
+      if (patch.note !== undefined) notes[itemId] = patch.note;
+      nextScore = scores[itemId] ?? "";
+      nextNote = notes[itemId] ?? "";
+      return { ...prev, [candidate.id]: { ...forCandidate, [examinerId]: { ...bucket, scores, notes } } };
+    });
+
+    // Keep the flat per-candidate total in step so section D's overview reflects the correction.
+    if (patch.score !== undefined) {
+      setOutdoor((prev) => ({
+        ...prev,
+        [candidate.id]: { ...(prev[candidate.id] ?? {}), [itemId]: patch.score === "" ? "" : Number(patch.score) },
+      }));
+    }
+
+    const examinerName = examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId;
+    const what = patch.score !== undefined ? `score → ${patch.score === "" ? "-" : patch.score}` : `note edited (${String(patch.note ?? "").length} chars)`;
+    addAudit("Outdoor corrected in Centre", `${candidate.name} / ${itemId}`, `${examinerName} · ${what}`);
+
+    sendSyncEvent({
+      clientEventId: localEventId(`outdoor-correction-${candidate.id}-${examinerId}-${itemId}-${updatedAt}`),
+      type: "outdoor_score.saved",
+      entityType: "outdoor_score",
+      entityId: `${candidate.id}:${itemId}`,
+      candidateId: candidate.id,
+      payload: {
+        candidateId: candidate.id,
+        examinerId,
+        mode: "primary",
+        role: "primary",
+        sectionKey: "outdoor",
+        itemId,
+        score: patch.score !== undefined ? (patch.score === "" ? null : Number(patch.score)) : nextScore,
+        note: patch.note !== undefined ? patch.note : nextNote,
+        comment: patch.note !== undefined ? patch.note : nextNote,
+        correctedInCentre: true,
+        updatedAt,
+      },
+      createdAt: updatedAt,
+    });
   }
 
   function applyCentreSetup(result) {
@@ -2662,7 +2772,7 @@ function VetBaraPrototype() {
     if (voiceRecording.status === "recording") finalizeVoiceRecording();
     else startVoiceRecording();
   }
-  function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", EXAMINERS.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
+  function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", examiners.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
   function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
   function setPrimary(candidateId, examinerId, primary) { setAssignments((prev) => { const current = prev[candidateId] ?? {}; return { ...prev, [candidateId]: primary ? { primary: examinerId, secondary: current.primary && current.primary !== examinerId ? current.primary : current.secondary } : { ...current, secondary: examinerId, primary: current.primary === examinerId ? current.secondary : current.primary } }; }); }
   async function openOutdoor(candidateId) {
@@ -8318,7 +8428,73 @@ function imageElementToCanvas(image) {
 // Final-review modal: shows every question with the candidate's answer highlighted next to the
 // correct answer / scoring help, any scanned handwriting crops assigned to that question, and
 // (once an Examiner has identified themselves) a "mark as corrected" action.
-function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, isCorrected, onClose, t }) {
+// One examiner's column of the Outdoor review. The primary examiner's own column is editable when
+// they have identified themselves; sketches are always read-only (they are drawn in the field).
+function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
+  const { scores, notes, noteDrawings } = column.data;
+  const total = items.reduce((sum, item) => sum + Number(scores?.[item.id] ?? 0), 0);
+  const max = items.reduce((sum, item) => sum + Number(item.max || 0), 0);
+  return (
+    <div className={`rounded-2xl border p-3 ${column.role === "primary" ? "border-slate-300 bg-white" : "border-slate-200 bg-slate-50"}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{t(`centre.review.outdoor.${column.role}`)}</div>
+          <div className="font-semibold">{column.examinerName}</div>
+        </div>
+        <div className="text-sm font-bold">{total} / {max} b.</div>
+      </div>
+      {column.data.examSummary && (
+        <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-100 p-2 text-xs italic text-slate-700">{column.data.examSummary}</div>
+      )}
+      <div className="mt-2 space-y-2">
+        {items.map((item) => {
+          const sketch = noteDrawings?.[item.id];
+          const note = notes?.[item.id] ?? "";
+          const score = scores?.[item.id] ?? "";
+          return (
+            <div key={item.id} className="rounded-xl border bg-white p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-mono text-[11px] text-slate-500">{item.id}</div>
+                  <div className="truncate text-xs text-slate-700" title={item.text}>{item.text}</div>
+                </div>
+                {editable ? (
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max={item.max}
+                    value={score}
+                    onChange={(event) => onChange(item.id, { score: event.target.value })}
+                    className="w-20 shrink-0 rounded-lg border p-1 text-right text-sm font-semibold"
+                  />
+                ) : (
+                  <span className="shrink-0 text-sm font-semibold">{score === "" ? "-" : score}</span>
+                )}
+                <span className="shrink-0 text-xs text-slate-400">/ {item.max}</span>
+              </div>
+              {editable ? (
+                <textarea
+                  value={note}
+                  onChange={(event) => onChange(item.id, { note: event.target.value })}
+                  rows={2}
+                  placeholder={t("outdoor.examinerNotes")}
+                  className="mt-2 w-full rounded-lg border p-2 text-xs"
+                />
+              ) : (
+                note && <div className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{note}</div>
+              )}
+              {sketch && <img src={sketch} alt="" className="mt-2 max-h-56 w-full rounded-lg border bg-white object-contain" />}
+            </div>
+          );
+        })}
+        {!items.length && <p className="text-sm text-slate-500">{t("centre.review.noOutdoorScores")}</p>}
+      </div>
+    </div>
+  );
+}
+
+function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, isCorrected, onClose, t }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
       <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white">
@@ -8364,20 +8540,31 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
               {!snapshot.items.length && <p className="text-sm text-slate-500">{t("centre.review.noQuestions")}</p>}
             </div>
           )}
-          {section.kind === "outdoor" && (
-            <div className="space-y-2">
-              <div className="rounded-2xl border bg-slate-50 p-3 text-sm font-semibold">{t("centre.review.outdoorTotal")}: {snapshot.total} / {snapshot.max} b.</div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {snapshot.entries.map(([itemId, value]) => (
-                  <div key={itemId} className="flex items-center justify-between rounded-xl border p-2 text-sm">
-                    <span className="font-mono text-xs">{itemId}</span>
-                    <span className="font-semibold">{value}</span>
-                  </div>
-                ))}
+          {section.kind === "outdoor" && (() => {
+            // Only the candidate's own primary examiner may correct, and only their own column.
+            const canEditPrimary = Boolean(identifiedExaminer && snapshot.primary.examinerId && identifiedExaminer.id === snapshot.primary.examinerId);
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">
+                  <span className="font-semibold">{t("centre.review.outdoorTotal")}: {snapshot.total} / {snapshot.max} b.</span>
+                  {canEditPrimary
+                    ? <StatusPill tone="good">{t("centre.review.outdoor.editing")}</StatusPill>
+                    : <span className="text-xs text-slate-500">{t("centre.review.outdoor.readOnly")}</span>}
+                </div>
+                {/* Primary on the left in the wider frame, secondary on the right. */}
+                <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
+                  <OutdoorExaminerColumn
+                    column={snapshot.primary}
+                    items={snapshot.items}
+                    editable={canEditPrimary}
+                    onChange={(itemId, patch) => onOutdoorCorrection?.(candidate, snapshot.primary.examinerId, itemId, patch)}
+                    t={t}
+                  />
+                  <OutdoorExaminerColumn column={snapshot.secondary} items={snapshot.items} editable={false} onChange={() => {}} t={t} />
+                </div>
               </div>
-              {!snapshot.entries.length && <p className="text-sm text-slate-500">{t("centre.review.noOutdoorScores")}</p>}
-            </div>
-          )}
+            );
+          })()}
           {section.kind === "report" && (
             <div className="space-y-4">
               {snapshot.trees.map(([treeKey, tree]) => (
@@ -8528,7 +8715,7 @@ function CentreReviewCell({ status, onClick, t }) {
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorItemsByLevel, candidateStatus, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -8730,9 +8917,31 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     if (sectionKey === "outdoor") {
       const scores = outdoor?.[candidate.id] || {};
       const entries = Object.entries(scores).filter(([, value]) => value !== "" && value !== null && value !== undefined);
+      const items = Object.entries(outdoorItemsByLevel?.[candidate.level] || {}).flatMap(([section, list]) => (list || []).map((item) => ({ ...item, section })));
+      const max = items.reduce((sum, item) => sum + Number(item.max || 0), 0);
       const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
-      const max = Object.values(outdoorItemsByLevel?.[candidate.level] || {}).flat().reduce((sum, item) => sum + Number(item.max || 0), 0);
-      return { kind: "outdoor", label: "Outdoor", entries, total, max };
+      const byExaminer = outdoorByExaminer?.[candidate.id] || {};
+      const assignment = assignments?.[candidate.id] || {};
+      // Fall back to whatever mode each bucket reports when the roster has no explicit assignment,
+      // so a column is never dropped just because the assignment table is incomplete.
+      const primaryId = assignment.primary || Object.values(byExaminer).find((bucket) => bucket.mode === "primary")?.examinerId || "";
+      const secondaryId = assignment.secondary || Object.values(byExaminer).find((bucket) => bucket.mode === "secondary" && bucket.examinerId !== primaryId)?.examinerId || "";
+      const columnFor = (examinerId, role) => ({
+        role,
+        examinerId,
+        examinerName: examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId || "-",
+        data: byExaminer[examinerId] || { scores: {}, notes: {}, noteDrawings: {}, examSummary: "", submittedAt: null },
+      });
+      return {
+        kind: "outdoor",
+        label: "Outdoor",
+        entries,
+        total,
+        max,
+        items,
+        primary: columnFor(primaryId, "primary"),
+        secondary: columnFor(secondaryId, "secondary"),
+      };
     }
     const draft = reportDrafts?.[candidate.id] || {};
     return { kind: "report", label: "Report", trees: Object.entries(draft) };
@@ -8956,6 +9165,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           candidate={reviewTarget.candidate}
           section={{ ...sections.find((s) => s.key === reviewTarget.sectionKey), kind: reviewTarget.sectionKey === "test" ? "written" : reviewTarget.sectionKey }}
           snapshot={buildSnapshot(reviewTarget.candidate, reviewTarget.sectionKey)}
+          onOutdoorCorrection={onOutdoorCorrection}
           scanAssignments={scanAssignments[reviewTarget.candidate.id]}
           scanFlags={reviewTarget.sectionKey === "test" ? Object.fromEntries([...scanErrorQuestionIds(reviewTarget.candidate.id)].map((id) => [id, true])) : null}
           identifiedExaminer={identifiedExaminer}
@@ -9635,6 +9845,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           <CentreReviewSection
             candidates={candidates}
             examiners={examiners}
+            assignments={assignments}
+            outdoorByExaminer={outdoorByExaminer}
+            onOutdoorCorrection={applyOutdoorCorrection}
             variants={variants}
             testBank={testBank}
             testResponses={testResponses}
@@ -9876,6 +10089,7 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
   const [candidateFieldPackage, setCandidateFieldPackage] = useState(() => loggedCandidate ? readJsonLocalStorage(candidateFieldPackageStorageKey(loggedCandidate), null) : null);
   const [candidateFieldStatus, setCandidateFieldStatus] = useState("");
   const [candidateFieldError, setCandidateFieldError] = useState("");
+  const preparationSyncTimersRef = useRef({});
   const [candidateTreeAPreparation, setCandidateTreeAPreparation] = useState(() => loggedCandidate ? normalizeCandidateTreePreparationDraft(readJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), null)) : normalizeCandidateTreePreparationDraft(null));
   const canShowOfflinePackage = Boolean(
     loggedCandidate &&
@@ -9939,6 +10153,23 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     return () => { cancelled = true; };
   }, [loggedCandidate?.id, loggedCandidate?.level, confirmed]);
 
+  // The preparation used to live only in this browser's localStorage, so the Centre never saw it
+  // and clearing the browser lost it. Both writers now also emit a sync event; the note is debounced
+  // because it fires on every keystroke.
+  function syncCandidatePreparation(key, { note, sketch }) {
+    if (!loggedCandidate) return;
+    const updatedAt = new Date().toISOString();
+    sendSyncEvent({
+      clientEventId: localEventId(`candidate-preparation-saved-${loggedCandidate.id}-${key}`),
+      type: "candidate_preparation.saved",
+      entityType: "candidate_preparation",
+      entityId: `${loggedCandidate.id}:preparation:${key}`,
+      candidateId: loggedCandidate.id,
+      payload: { candidateId: loggedCandidate.id, sectionKey: "preparation", treeKey: key, note, sketch, updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
   function updateCandidateTreePreparationNote(tree, value) {
     if (!tree) return;
     const key = fieldTreeKey(tree);
@@ -9946,19 +10177,26 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
       const normalized = normalizeCandidateTreePreparationDraft(previous);
       const next = { ...normalized, notesByTree: { ...(normalized.notesByTree || {}), [key]: value } };
       if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
+      window.clearTimeout(preparationSyncTimersRef.current[key]);
+      preparationSyncTimersRef.current[key] = window.setTimeout(() => {
+        syncCandidatePreparation(key, { note: value, sketch: next.sketchesByTree?.[key] ?? "" });
+      }, 1500);
       return next;
     });
   }
 
-  function updateCandidateTreePreparationSketch(tree, dataUrl) {
+  async function updateCandidateTreePreparationSketch(tree, rawDataUrl) {
     if (!tree) return;
     const key = fieldTreeKey(tree);
+    const dataUrl = rawDataUrl ? await compressImageToDataUrl(rawDataUrl, { maxBytes: 150_000, maxDim: 1400 }) : rawDataUrl;
     setCandidateTreeAPreparation((previous) => {
       const normalized = normalizeCandidateTreePreparationDraft(previous);
       const sketches = { ...(normalized.sketchesByTree || {}) };
       if (dataUrl) sketches[key] = dataUrl; else delete sketches[key];
       const next = { ...normalized, sketchesByTree: sketches };
       if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
+      // A sketch is one deliberate save, so it goes straight out rather than being debounced.
+      syncCandidatePreparation(key, { note: next.notesByTree?.[key] ?? "", sketch: dataUrl || "" });
       return next;
     });
   }

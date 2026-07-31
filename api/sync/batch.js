@@ -8,6 +8,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "test_response.submitted",
   "report_draft.saved",
   "report_photo.added",
+  "candidate_preparation.saved",
   "outdoor_assessment.opened",
   "outdoor_assessment.submitted",
   "outdoor_score.saved",
@@ -23,12 +24,20 @@ const EVENT_TYPES_BY_ROLE = {
     "test_response.submitted",
     "report_draft.saved",
     "report_photo.added",
+    "candidate_preparation.saved",
   ]),
   Examiner: new Set([
     "outdoor_assessment.opened",
     "outdoor_assessment.submitted",
     "outdoor_score.saved",
     "examiner_score.saved",
+  ]),
+  // The Centre is the exam authority and already reads every candidate in its event; section E lets
+  // an identified primary examiner correct outdoor scores and item notes from the Centre, so those
+  // corrections have to persist. Deliberately narrow: corrections only, no section/test/report
+  // events, and every one is written to the exam audit log on the client.
+  Centre: new Set([
+    "outdoor_score.saved",
   ]),
 };
 
@@ -136,12 +145,20 @@ function scopeError(session, candidateId, dbAssignedCandidateIds) {
     return candidateId === session.subject_id ? null : "Candidate can sync only their own data";
   }
 
+  // The Centre operates on its whole exam event; candidate scoping is enforced by the session's
+  // exam event id on the projection write, not by an assignment table.
+  if (session.role === "Centre") return null;
+
   if (session.role === "Examiner") {
-    // Real rosters live in examiner_assignments (fetched once per request); the hardcoded demo
-    // ASSIGNMENTS stay as a fallback so seeded/demo sessions keep working. Without the DB check a
-    // 4th examiner (E-004…) could log in but every score sync got 403.
-    const assignedInDb = Boolean(dbAssignedCandidateIds && dbAssignedCandidateIds.has(candidateId));
-    return assignedInDb || isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
+    // Real rosters live in examiner_assignments (fetched once per request). When that lookup
+    // succeeded it is the ONLY authority: the hardcoded demo ASSIGNMENTS pair the standard ids
+    // (C-001/E-001…) that every real exam also uses, so consulting them alongside the DB silently
+    // authorised examiners the real roster had not assigned. The demo map is now reached only when
+    // the lookup was unavailable (no backend configured / query failed), i.e. genuine demo mode.
+    if (dbAssignedCandidateIds) {
+      return dbAssignedCandidateIds.has(candidateId) ? null : "Examiner can sync only assigned candidates";
+    }
+    return isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can sync only assigned candidates";
   }
 
   return "Role cannot sync this event";
@@ -295,6 +312,30 @@ async function upsertNormalizedState(session, event, candidateId, examEventId) {
         client_updated_at: updatedAt,
         updated_at: new Date().toISOString(),
       }, examEventId);
+    return true;
+  }
+
+  if (event.type === "candidate_preparation.saved") {
+    const treeKey = payload.treeKey || itemIdFor(event);
+    if (!candidateId || !treeKey) return false;
+    // Same deploy-order tolerance as exam_event_id above: this code can ship before the
+    // 20260735 migration is applied. The raw event is already in sync_events by this point, so a
+    // missing table costs the projection, not the data — and must not fail the client's batch.
+    try {
+      await upsertProjection("candidate_preparations", "candidate_id,tree_key", {
+          candidate_id: candidateId,
+          tree_key: treeKey,
+          note: payload.note ?? null,
+          sketch: payload.sketch ?? null,
+          payload,
+          client_updated_at: updatedAt,
+          updated_at: new Date().toISOString(),
+        }, examEventId);
+    } catch (error) {
+      if (!/candidate_preparations|does not exist|PGRST205|42P01/i.test(String(error?.message || error))) throw error;
+      console.warn("candidate_preparations projection unavailable; event stored raw", error?.message || error);
+      return false;
+    }
     return true;
   }
 

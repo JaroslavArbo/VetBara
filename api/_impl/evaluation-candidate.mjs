@@ -317,13 +317,16 @@ export default async function handler(request, response) {
     if (!allowed) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
     const examEventId = await sessionExamEventId(session);
-    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents] = await Promise.all([
+    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents, preparations] = await Promise.all([
       readRows("candidate_sections", candidateId, examEventId),
       readRows("test_responses", candidateId, examEventId),
       readRows("outdoor_assessments", candidateId, examEventId),
       readRows("outdoor_scores", candidateId, examEventId),
       readReportEvents(candidateId, examEventId),
       readExaminerScoreEvents(candidateId, examEventId),
+      // Tolerate the table not existing yet: code can deploy before the migration is applied, and a
+      // missing preparation must not take the whole evaluation read model down with it.
+      readRows("candidate_preparations", candidateId, examEventId).catch(() => []),
     ]);
 
     const reportDraft = buildReportDraft(reportEvents);
@@ -343,6 +346,7 @@ export default async function handler(request, response) {
       reportDraft,
       reportSummary,
       examinerScores,
+      preparations,
       summary: buildSummary(sections, testResponses, outdoorScores),
     });
   } catch (error) {
