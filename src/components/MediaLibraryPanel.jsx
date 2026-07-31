@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listExamMedia } from "../lib/api";
-import { listLocalMedia, downloadBlob } from "../lib/mediaStore";
+import { listExamMedia, deleteExamMedia } from "../lib/api";
+import { listLocalMedia, deleteLocalMedia, downloadBlob } from "../lib/mediaStore";
 
 function tr(t, key, fallback) {
   const value = typeof t === "function" ? t(key) : null;
@@ -51,6 +51,7 @@ function mergeMedia(remote, local) {
     const existing = map.get(item.clientMediaId) ?? {};
     map.set(item.clientMediaId, {
       ...existing,
+      id: item.id ?? existing.id,
       clientMediaId: item.clientMediaId,
       mediaType: item.mediaType ?? existing.mediaType,
       candidateId: item.candidateId ?? existing.candidateId,
@@ -77,6 +78,9 @@ export function MediaLibraryPanel({ sessionToken, SectionTitle, StatusPill, Butt
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [backendStored, setBackendStored] = useState(false);
+  const [confirmingId, setConfirmingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -130,6 +134,45 @@ export function MediaLibraryPanel({ sessionToken, SectionTitle, StatusPill, Butt
     if (item.downloadUrl) window.open(item.downloadUrl, "_blank", "noopener");
   }
 
+  // Two-step: "Delete" arms a confirm, a second click on "Really delete?" performs it. Removes
+  // both copies an item might have — the backend row + storage bytes, and this device's
+  // IndexedDB copy — so a deleted recording doesn't reappear from whichever copy was missed.
+  async function handleDelete(item) {
+    setDeleteError("");
+    setDeletingId(item.clientMediaId);
+    try {
+      if (item.hasRemote && item.id) await deleteExamMedia(sessionToken, item.id);
+      if (item.hasLocal) await deleteLocalMedia(item.clientMediaId);
+      await refresh();
+    } catch (err) {
+      console.warn("Media delete failed", err);
+      setDeleteError(tr(t, "media.deleteFailed", "Could not delete — check the connection and try again."));
+    } finally {
+      setDeletingId("");
+      setConfirmingId("");
+    }
+  }
+
+  function DeleteControl({ item }) {
+    if (confirmingId === item.clientMediaId) {
+      return (
+        <span className="inline-flex gap-1">
+          <button type="button" onClick={() => handleDelete(item)} disabled={deletingId === item.clientMediaId} className="rounded-lg border border-rose-300 bg-rose-50 px-2 py-1 font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-50">
+            {deletingId === item.clientMediaId ? tr(t, "media.deleting", "Deleting…") : tr(t, "media.deleteConfirm", "Delete permanently?")}
+          </button>
+          <button type="button" onClick={() => setConfirmingId("")} disabled={deletingId === item.clientMediaId} className="rounded-lg border bg-white px-2 py-1 font-medium hover:bg-slate-50 disabled:opacity-50">
+            {tr(t, "media.cancel", "Cancel")}
+          </button>
+        </span>
+      );
+    }
+    return (
+      <button type="button" onClick={() => setConfirmingId(item.clientMediaId)} className="rounded-lg border bg-white px-2 py-1 font-medium text-rose-700 hover:bg-rose-50">
+        {tr(t, "media.delete", "Delete")}
+      </button>
+    );
+  }
+
   function playUrlFor(item) {
     return objectUrls[item.clientMediaId] || item.downloadUrl || null;
   }
@@ -161,6 +204,7 @@ export function MediaLibraryPanel({ sessionToken, SectionTitle, StatusPill, Butt
         </div>
 
         {error && <div className="mb-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{error}</div>}
+        {deleteError && <div className="mb-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-950">{deleteError}</div>}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border bg-white p-4">
@@ -180,10 +224,11 @@ export function MediaLibraryPanel({ sessionToken, SectionTitle, StatusPill, Butt
                       {item.createdAt ? ` · ${new Date(item.createdAt).toLocaleString()}` : ""}
                     </div>
                     {playUrlFor(item) && <audio controls preload="none" src={playUrlFor(item)} className="mt-2 w-full" />}
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Button onClick={() => handleDownload(item)} className="rounded-2xl" disabled={!item.hasLocal && !item.downloadUrl}>
                         {tr(t, "media.download", "Download")}
                       </Button>
+                      <DeleteControl item={item} />
                     </div>
                   </div>
                 ))
@@ -209,6 +254,9 @@ export function MediaLibraryPanel({ sessionToken, SectionTitle, StatusPill, Butt
                     <button type="button" onClick={() => handleDownload(item)} disabled={!item.hasLocal && !item.downloadUrl} className="mt-1 w-full rounded-lg border bg-white px-2 py-1 font-medium hover:bg-slate-50 disabled:opacity-50">
                       {tr(t, "media.download", "Download")}
                     </button>
+                    <div className="mt-1">
+                      <DeleteControl item={item} />
+                    </div>
                   </div>
                 ))
               )}

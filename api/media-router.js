@@ -1,10 +1,12 @@
 // Consolidated media API router → handlers in api/_impl.
 import uploadUrl from "./_impl/media-upload-url.mjs";
 import list from "./_impl/media-list.mjs";
+import del from "./_impl/media-delete.mjs";
 
 const routes = {
   "upload-url": uploadUrl,
   list,
+  delete: del,
 };
 
 export default async function handler(request, response) {

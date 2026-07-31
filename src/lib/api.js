@@ -162,6 +162,14 @@ export function listExamMedia(sessionToken) {
   });
 }
 
+// Centre-only: permanently delete one exam media object (storage bytes + row).
+export function deleteExamMedia(sessionToken, id) {
+  return requestJson("/api/media/delete", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, id }),
+  });
+}
+
 export async function generateEvaluation(sessionToken, payload) {
   const response = await fetch("/api/evaluation/generate", {
     method: "POST",

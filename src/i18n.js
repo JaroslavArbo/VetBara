@@ -655,7 +655,19 @@ Object.assign(translations.en, {
   "media.source.both": "Backend + local",
   "media.source.backend": "Backend",
   "media.source.local": "Local (this tablet)",
-  "media.error.backend": "Backend media list unavailable — showing local recordings only."
+  "media.error.backend": "Backend media list unavailable — showing local recordings only.",
+  "media.delete": "Delete",
+  "media.deleteConfirm": "Delete permanently?",
+  "media.deleting": "Deleting…",
+  "media.deleteFailed": "Could not delete — check the connection and try again.",
+  "media.cancel": "Cancel",
+  "examiner.localMedia.title": "Recordings on this device",
+  "examiner.localMedia.helper": "Voice recordings live here until they upload — the Centre can't see them until then. A recording keeps retrying automatically every minute; use \"Upload now\" if it's been stuck.",
+  "examiner.localMedia.empty": "No recordings on this device yet.",
+  "examiner.localMedia.allUploaded": "Every recording on this device has uploaded to the Centre.",
+  "examiner.localMedia.uploadNow": "Upload now",
+  "examiner.localMedia.uploading": "Uploading…",
+  "examiner.localMedia.retryFailed": "Upload failed — check the connection and try again."
 });
 
 Object.assign(translations.cs, {
@@ -750,7 +762,19 @@ Object.assign(translations.cs, {
   "media.source.both": "Backend + lokálně",
   "media.source.backend": "Backend",
   "media.source.local": "Lokálně (tento tablet)",
-  "media.error.backend": "Seznam médií z backendu není dostupný — zobrazuji jen lokální záznamy."
+  "media.error.backend": "Seznam médií z backendu není dostupný — zobrazuji jen lokální záznamy.",
+  "media.delete": "Smazat",
+  "media.deleteConfirm": "Opravdu trvale smazat?",
+  "media.deleting": "Mažu…",
+  "media.deleteFailed": "Smazání se nezdařilo — zkontrolujte připojení a zkuste to znovu.",
+  "media.cancel": "Zrušit",
+  "examiner.localMedia.title": "Nahrávky na tomto zařízení",
+  "examiner.localMedia.helper": "Hlasové záznamy zůstávají tady, dokud se nenahrají — do té doby je centrum nevidí. Nahrávání se automaticky opakuje každou minutu; pokud záznam uvízl, použijte \"Nahrát nyní\".",
+  "examiner.localMedia.empty": "Na tomto zařízení zatím nejsou žádné záznamy.",
+  "examiner.localMedia.allUploaded": "Všechny záznamy na tomto zařízení jsou nahrané do centra.",
+  "examiner.localMedia.uploadNow": "Nahrát nyní",
+  "examiner.localMedia.uploading": "Nahrávám…",
+  "examiner.localMedia.retryFailed": "Nahrání se nezdařilo — zkontrolujte připojení a zkuste to znovu."
 });
 
 Object.assign(translations.en, {
@@ -1836,6 +1860,7 @@ Object.assign(translations.en, {
   "report.handwritingSaved": "Handwritten note saved among the photos.",
   "outdoor.addSketch": "Add sketch",
   "outdoor.editSketch": "Edit sketch",
+  "outdoor.review.openSketch": "Open sketch",
   "outdoor.editScoreHint": "Double-click to change the score",
   "outdoor.timer.title": "Timer",
   "outdoor.timer.opened": "Opened",
@@ -1904,6 +1929,7 @@ Object.assign(translations.cs, {
   "report.handwritingSaved": "Rukopisná poznámka byla uložena mezi fotografie.",
   "outdoor.addSketch": "Přidat náčrt",
   "outdoor.editSketch": "Upravit náčrt",
+  "outdoor.review.openSketch": "Otevřít náčrtek",
   "outdoor.editScoreHint": "Dvojklikem změníte body",
   "outdoor.timer.title": "Časovač",
   "outdoor.timer.opened": "Otevřeno",

@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -13,7 +13,7 @@ import { LANGUAGES as UI_LANGUAGES, makeTranslator, allTranslationKeys, translat
 import { QRCodeSVG } from "qrcode.react";
 import { uploadExamMedia } from "./lib/api";
 import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder";
-import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia } from "./lib/mediaStore";
+import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -3509,7 +3509,7 @@ function VetBaraPrototype() {
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} activeSessionToken={activeSessionToken} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
@@ -9012,6 +9012,7 @@ function decodeAllQrCodesWithRetry(canvas, maxCodes = 12) {
 // One examiner's column of the Outdoor review. The primary examiner's own column is editable when
 // they have identified themselves; sketches are always read-only (they are drawn in the field).
 function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
+  const [openSketch, setOpenSketch] = useState(null);
   const { scores, notes, noteDrawings } = column.data;
   const scoreOf = (item) => (item.excluded ? 0 : Number(scores?.[item.id] ?? 0));
   const total = items.reduce((sum, item) => sum + scoreOf(item), 0);
@@ -9094,7 +9095,20 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
                       ) : (
                         note && <div className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{note}</div>
                       )}
-                      {sketch && <img src={sketch} alt="" className="mt-2 max-h-56 w-full rounded-lg border bg-white object-contain" />}
+                      {sketch && (
+                        <div className="mt-2">
+                          <button type="button" onClick={() => setOpenSketch(sketch)} className="block w-full">
+                            <img src={sketch} alt="" className="max-h-56 w-full rounded-lg border bg-white object-contain hover:opacity-90" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setOpenSketch(sketch)}
+                            className="mt-1 inline-flex items-center gap-1 rounded-lg border bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            <ExpandIcon className="h-3 w-3" /> {t("outdoor.review.openSketch")}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -9104,6 +9118,14 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
         })}
         {!items.length && <p className="text-sm text-slate-500">{t("centre.review.noOutdoorScores")}</p>}
       </div>
+      {openSketch && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/90 p-4" onClick={() => setOpenSketch(null)}>
+          <img src={openSketch} alt="" className="max-h-full max-w-full rounded-lg" onClick={(event) => event.stopPropagation()} />
+          <button type="button" onClick={() => setOpenSketch(null)} className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1.5 text-sm font-bold text-slate-950">
+            {t("common.close")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -12827,6 +12849,7 @@ function ExaminerView({
   importOfflineCandidatePackageData,
   examinerTimes,
   activeAdminPackageMeta,
+  activeSessionToken,
   t,
 }) {
   return (
@@ -12892,6 +12915,7 @@ function ExaminerView({
                   outdoor={outdoor}
                   outdoorItemsByLevel={outdoorItemsByLevel}
                   examinerTimes={examinerTimes}
+                  activeSessionToken={activeSessionToken}
                   t={t}
                 />
               ) : activePage === "writtenReview" ? (
@@ -14725,6 +14749,7 @@ function ExaminerLanding({
   setScannerMode,
   testBank,
   examinerTimes = {},
+  activeSessionToken,
   t,
 }) {
 
@@ -14803,6 +14828,107 @@ function ExaminerLanding({
           </div>
         )}
       </div>
+
+      <ExaminerLocalMediaPanel sessionToken={activeSessionToken} t={t} />
+    </div>
+  );
+}
+
+// Voice recordings live only in THIS device's IndexedDB until they upload — the Centre's own
+// media library (Section E) can never see them, since browsers don't share storage across
+// devices. A long recording that failed its first PUT (poor field connection) keeps retrying
+// silently every 60s (see retryPendingMediaUploads), but until now there was no way for the
+// examiner to see that from their own tablet — the only way to check was to ask the Centre,
+// which had nothing to show. This panel is that visibility, plus a manual retry/download for
+// when the automatic retry keeps losing to a bad connection.
+function ExaminerLocalMediaPanel({ sessionToken, t }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState("");
+  const [errorId, setErrorId] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const all = await listLocalMedia();
+      setItems(all.filter((item) => item.mediaType === "audio"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 15000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  async function retryUpload(item) {
+    if (!sessionToken || !item.blob) return;
+    setBusyId(item.clientMediaId);
+    setErrorId("");
+    try {
+      const { blob, uploadState, remoteId, id, ...meta } = item;
+      const uploaded = await uploadExamMedia(sessionToken, meta, blob);
+      if (uploaded.stored) {
+        await updateLocalMedia(item.clientMediaId, { uploadState: "uploaded", remoteId: uploaded.id ?? null });
+        await refresh();
+      } else {
+        setErrorId(item.clientMediaId);
+      }
+    } catch {
+      setErrorId(item.clientMediaId);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  function formatSize(bytes) {
+    if (!bytes && bytes !== 0) return "-";
+    return bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
+  }
+  function formatMinutes(ms) {
+    if (!ms) return "-";
+    return `${Math.round(ms / 60000)} min`;
+  }
+
+  const pending = items.filter((item) => item.uploadState !== "uploaded");
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="font-semibold">{t("examiner.localMedia.title")}</h3>
+          <p className="mt-1 text-sm text-slate-600">{t("examiner.localMedia.helper")}</p>
+        </div>
+        <Button onClick={refresh} variant="outline" className="rounded-2xl" disabled={loading}>
+          {loading ? t("media.refreshing") : t("media.refresh")}
+        </Button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm text-slate-600">{t("examiner.localMedia.empty")}</div>
+      ) : pending.length === 0 ? (
+        <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{t("examiner.localMedia.allUploaded")}</div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {pending.map((item) => (
+            <div key={item.clientMediaId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+              <div>
+                <div className="font-medium">{item.candidateId}{item.examinerId ? ` · ${item.examinerId}` : ""}</div>
+                <div className="text-xs text-slate-600">{formatMinutes(item.durationMs)} · {formatSize(item.sizeBytes)}{item.createdAt ? ` · ${new Date(item.createdAt).toLocaleString()}` : ""}</div>
+                {errorId === item.clientMediaId && <div className="mt-1 text-xs font-semibold text-rose-700">{t("examiner.localMedia.retryFailed")}</div>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => retryUpload(item)} disabled={busyId === item.clientMediaId || !sessionToken} className="rounded-2xl">
+                  {busyId === item.clientMediaId ? t("examiner.localMedia.uploading") : t("examiner.localMedia.uploadNow")}
+                </Button>
+                <Button onClick={() => downloadBlob(item.blob, item.fileName)} variant="outline" className="rounded-2xl">{t("media.download")}</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -14816,6 +14942,7 @@ function formatRecordingClock(ms) {
 
 function MicIcon({ className }) { return <IconBase className={className}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><path d="M12 17v5" /><path d="M8 22h8" /></IconBase>; }
 function StopIcon({ className }) { return <IconBase className={className}><rect x="6" y="6" width="12" height="12" rx="2" /></IconBase>; }
+function ExpandIcon({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 
 function PauseIcon({ className }) { return <IconBase className={className}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></IconBase>; }
 function PlayTriangleIcon({ className }) { return <IconBase className={className}><path d="M7 5v14l11-7z" /></IconBase>; }
