@@ -3135,7 +3135,7 @@ function VetBaraPrototype() {
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
-      {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
+      {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
     {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} t={t} />}
@@ -10967,6 +10967,56 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
 // colour as the window closes — green, amber once `warnMinutes` remain, red for the last five —
 // and a short, deliberately quiet tone plays once when the red state is entered, so a candidate
 // with their head down still notices without the room being startled.
+// Keeps a timed candidate section in fullscreen and reports when it isn't. Leaving fullscreen is
+// already written to the audit trail by the session-integrity effect; this is the candidate-facing
+// half, so nobody drops out of the exam view without noticing. Browsers only grant fullscreen from a
+// user gesture, so a blocked request is retried on the next interaction rather than given up on.
+function useExamFullscreen(active) {
+  const [inFullscreen, setInFullscreen] = useState(() => (typeof document === "undefined" ? false : Boolean(document.fullscreenElement || document.webkitFullscreenElement)));
+
+  function requestFullscreen() {
+    const element = document.documentElement;
+    const request = element.requestFullscreen || element.webkitRequestFullscreen;
+    try { request?.call(element); } catch { /* unsupported or blocked - the notice below stays up */ }
+  }
+
+  useEffect(() => {
+    if (!active || typeof document === "undefined") return undefined;
+    const sync = () => setInFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+    sync();
+    requestFullscreen();
+    const onFirstGesture = () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) requestFullscreen();
+      removeGesture();
+    };
+    const removeGesture = () => {
+      document.removeEventListener("pointerdown", onFirstGesture);
+      document.removeEventListener("keydown", onFirstGesture);
+    };
+    document.addEventListener("pointerdown", onFirstGesture);
+    document.addEventListener("keydown", onFirstGesture);
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      removeGesture();
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, [active]);
+
+  return { inFullscreen, requestFullscreen };
+}
+
+function FullscreenExitNotice({ inFullscreen, onReturn, t }) {
+  if (inFullscreen) return null;
+  return (
+    <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+      <span>{t("candidate.fullscreen.exited")}</span>
+      <Button onClick={onReturn} className="rounded-2xl">{t("candidate.fullscreen.return")}</Button>
+    </div>
+  );
+}
+
 function SectionTimerPanel({ openedAt, durationMinutes = 60, warnMinutes = 15, t }) {
   const [now, setNow] = useState(() => new Date());
   const alertedRef = useRef(false);
@@ -10990,17 +11040,24 @@ function SectionTimerPanel({ openedAt, durationMinutes = 60, warnMinutes = 15, t
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
       const ctx = new Ctx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = 660;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.08);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.1);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 1.2);
-      osc.onended = () => ctx.close();
+      // A short three-note rising figure (E5-G5-C6): recognisable as "time is nearly up" without
+      // being an alarm, and each note is shaped so it never clicks at the edges.
+      const notes = [[659.25, 0], [783.99, 0.18], [1046.5, 0.36]];
+      notes.forEach(([frequency, offset], index) => {
+        const start = ctx.currentTime + offset;
+        const length = index === notes.length - 1 ? 0.55 : 0.22;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.07, start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + length + 0.05);
+      });
+      window.setTimeout(() => { try { ctx.close(); } catch { /* already closed */ } }, 1400);
     } catch { /* audio blocked or unavailable - the colour change still carries the warning */ }
   }, [tone]);
 
@@ -11046,6 +11103,7 @@ function SectionTimerPanel({ openedAt, durationMinutes = 60, warnMinutes = 15, t
 
 function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, introAccepted, acceptIntro, openedAt, t }) {
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const { inFullscreen, requestFullscreen } = useExamFullscreen(introAccepted);
   const requestedVariantCode = String(selectedVariantCode || "");
   const effectiveVariantCode = variantCodeMatchesCandidateLevel(candidate, requestedVariantCode)
     ? requestedVariantCode
@@ -11062,7 +11120,8 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
 
   return (
     <div className="rounded-2xl border bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
+      <FullscreenExitNotice inFullscreen={inFullscreen} onReturn={requestFullscreen} t={t} />
+      <div className="sticky top-0 z-20 -mx-4 -mt-4 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white/95 px-4 pb-3 pt-4 backdrop-blur">
         <div>
           <h3 className="font-semibold">{t("test.title")}</h3>
         </div>
@@ -11157,6 +11216,8 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [reportWritingStartedAt, setReportWritingStartedAt] = useState(() => {
     try { return localStorage.getItem(reportStartKey) || ""; } catch { return ""; }
   });
+
+  const { inFullscreen, requestFullscreen } = useExamFullscreen(reportStep === "write");
 
   function beginReportWriting() {
     const startedAt = reportWritingStartedAt || new Date().toISOString();
@@ -11449,6 +11510,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     return (
       <div className="fixed inset-0 z-50 overflow-auto bg-white p-5">
         <div className="mx-auto max-w-7xl">
+          <FullscreenExitNotice inFullscreen={inFullscreen} onReturn={requestFullscreen} t={t} />
           <div className="sticky top-0 z-10 mb-4 rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
