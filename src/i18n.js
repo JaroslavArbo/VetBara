@@ -1198,7 +1198,22 @@ Object.assign(translations.en, {
   "common.ready": "Ready",
   "common.missing": "Missing",
   "common.yes": "yes",
-  "common.no": "no"
+  "common.no": "no",
+  "centre.close.title": "Final exam overview",
+  "centre.close.helper": "Close the exam and generate the two VETcert classification workbooks (Practicing and Consulting) with every candidate and their results filled in. Once closed, sections A–D lock and can only be reopened with the closing password.",
+  "centre.close.button": "Generate final exam overview",
+  "centre.close.generating": "Generating…",
+  "centre.close.closed": "Exam closed",
+  "centre.close.downloadTitle": "Classification workbooks:",
+  "centre.close.confirm": "Really close the exam and generate the classification files?",
+  "centre.close.confirmInfo": "This generates the two .xlsx classification workbooks from the recorded results and locks sections A–D. Reopening a section afterwards requires the closing password.",
+  "centre.close.lockedMessage": "The exam has been closed. Enter the password to reopen this section.",
+  "centre.unlock.title": "Reopen sections A–D",
+  "centre.unlock.helper": "The exam has been closed. Enter the closing password to reopen the Centre setup sections.",
+  "centre.unlock.placeholder": "Password",
+  "centre.unlock.error": "Wrong password.",
+  "centre.unlock.button": "Unlock section",
+  "centre.unlock.confirm": "Unlock"
 });
 
 Object.assign(translations.cs, {
@@ -1320,7 +1335,22 @@ Object.assign(translations.cs, {
   "common.ready": "Připraveno",
   "common.missing": "Chybí",
   "common.yes": "ano",
-  "common.no": "ne"
+  "common.no": "ne",
+  "centre.close.title": "Finální generování přehledu zkoušky",
+  "centre.close.helper": "Uzavře zkoušku a vygeneruje dvě klasifikační tabulky VETcert (Practicing a Consulting) se všemi kandidáty a jejich výsledky. Po uzavření se sekce A–D zamknou a znovu je lze otevřít jen po zadání hesla.",
+  "centre.close.button": "Finální generování přehledu zkoušky",
+  "centre.close.generating": "Generuji…",
+  "centre.close.closed": "Zkouška uzavřena",
+  "centre.close.downloadTitle": "Klasifikační tabulky:",
+  "centre.close.confirm": "Opravdu uzavřít zkoušku a vygenerovat klasifikační soubory?",
+  "centre.close.confirmInfo": "Vygeneruje dvě klasifikační tabulky .xlsx ze zaznamenaných výsledků a zamkne sekce A–D. Opětovné otevření sekce pak vyžaduje heslo.",
+  "centre.close.lockedMessage": "Zkouška byla uzavřena. Pro otevření této sekce zadejte heslo.",
+  "centre.unlock.title": "Otevřít sekce A–D",
+  "centre.unlock.helper": "Zkouška byla uzavřena. Pro otevření sekcí nastavení pracoviště zadejte heslo.",
+  "centre.unlock.placeholder": "Heslo",
+  "centre.unlock.error": "Nesprávné heslo.",
+  "centre.unlock.button": "Odemknout sekci",
+  "centre.unlock.confirm": "Odemknout"
 });
 
 

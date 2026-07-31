@@ -17,6 +17,7 @@ import { saveLocalMedia, updateLocalMedia } from "./lib/mediaStore";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
+import { buildExamWorkbook } from "./lib/examWorkbooks";
 import jsPDF from "jspdf";
 
 async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage }) {
@@ -2601,7 +2602,24 @@ function VetBaraPrototype() {
     addAudit("Centre access failed", centre, raw);
   }
   function toggleLevel(level) { setCentreSetupDirty(true); setEnabledLevels((prev) => prev.includes(level) && prev.length > 1 ? prev.filter((x) => x !== level) : prev.includes(level) ? prev : [...prev, level]); }
-  function addCandidate() { setCentreSetupDirty(true); const id = `C-${String(candidates.length + 1).padStart(3, "0")}`; const level = enabledLevels[0] ?? "Practicing"; const c = { id, name: `New candidate ${candidates.length + 1}`, level, status: "Ready", written: null, outdoor: null, report: null }; setCandidates((prev) => [...prev, c]); setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) })); setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } })); setSelectedCandidateId(id); }
+  function addCandidate() {
+    setCentreSetupDirty(true);
+    // Next free id must avoid COLLISIONS, not just be length+1: after a candidate is removed (or when
+    // the roster was loaded with non-contiguous ids) length+1 can equal an id already in use, and two
+    // candidates sharing an id make the server upsert fail ("ON CONFLICT ... cannot affect row a second
+    // time") → the whole Centre save 400s → the roster never confirms → sections D-F stay locked. Same
+    // guard addExaminer already uses.
+    const used = new Set(candidates.map((candidate) => candidate.id));
+    let nextNumber = candidates.length + 1;
+    let id = `C-${String(nextNumber).padStart(3, "0")}`;
+    while (used.has(id)) { nextNumber += 1; id = `C-${String(nextNumber).padStart(3, "0")}`; }
+    const level = enabledLevels[0] ?? "Practicing";
+    const c = { id, name: `New candidate ${nextNumber}`, level, status: "Ready", written: null, outdoor: null, report: null };
+    setCandidates((prev) => [...prev, c]);
+    setCandidateStatus((prev) => ({ ...prev, [id]: createSectionStatus(level) }));
+    setAssignments((prev) => ({ ...prev, [id]: { primary: examiners[0]?.id ?? "", secondary: examiners[1]?.id ?? "" } }));
+    setSelectedCandidateId(id);
+  }
   function removeCandidate(candidateId) {
     // Keep exactly one candidate as the floor: the UI reads selectedCandidate unconditionally in
     // many places, so an empty roster would crash — but the operator must be able to clear out an
@@ -3293,7 +3311,7 @@ function VetBaraPrototype() {
     {accessError && <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-950 shadow-sm"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><div>{accessError}</div><div className="mt-1 font-normal">{t("access.error.help")}</div></div></div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
@@ -4631,7 +4649,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   );
 }
 
-export function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children, locked, lockedMessage }) {
+export function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children, locked, lockedMessage, onUnlock, unlockLabel }) {
   const isOpen = !locked && activeSection === id;
   return (
     <Card className="rounded-2xl shadow-sm lg:col-span-3">
@@ -4656,6 +4674,21 @@ export function AdminDashboardSection({ id, icon: Icon, title, description, acti
             </span>
           )}
         </button>
+        {/* When a section is locked because the exam has been closed, the operator can reopen it
+            with the closing password — rendered outside the header button so it is a real,
+            clickable control rather than an (invalid) nested button. */}
+        {locked && onUnlock && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={onUnlock}
+              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              <Lock className="h-4 w-4" />
+              {unlockLabel || t("centre.unlock.button")}
+            </button>
+          </div>
+        )}
         {isOpen && <div className="mt-5 border-t pt-5">{children}</div>}
       </CardContent>
     </Card>
@@ -9063,7 +9096,7 @@ function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, activeSessionToken, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, activeSessionToken, centreCode, examDate, place, onExamClosed, examClosed, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -9084,6 +9117,80 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   const [showConnectQr, setShowConnectQr] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
   const [scanGradingCandidate, setScanGradingCandidate] = useState(null);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generatedFiles, setGeneratedFiles] = useState(null);
+
+  // Everything an examiner marked, shaped for buildExamWorkbook: the written questions in order and
+  // the outdoor questions in order (each as a bare score, blank where unmarked), plus the raw
+  // Consulting report marks per tree/section. examWorkbooks.js places these into the exact input
+  // cells of the official form; its totals/percentages/pass-fail are template formulas over them.
+  function candidateWorkbookRows(candidate) {
+    const level = candidateLevel(candidate);
+    const asScore = (value) => (value === undefined || value === null || value === "" ? "" : Number(value));
+
+    const snapshot = computeWrittenTestReview(candidate, variants, testBank, testResponses);
+    const writtenScores = readWrittenQuestionScores(candidate.id);
+    const written = snapshot.items.map((item) => asScore(writtenScores[item.question.id] ?? item.pointsAwarded));
+
+    const outdoorScores = outdoor?.[candidate.id] || {};
+    const outside = Object.values(outdoorItemsByLevel?.[level] || {}).flatMap((items) =>
+      (items || []).map((item) => asScore(outdoorScores[item.id])));
+
+    const report = level === "Consulting" ? readReportMarks(candidate.id) : undefined;
+
+    return {
+      candidate: {
+        name: candidate.name,
+        email: candidate.email || "",
+        gender: candidate.gender || "",
+        birthDate: candidate.birthDate || "",
+        nationality: candidate.nationality || "",
+      },
+      prerequisites: candidate.prerequisites !== false,
+      written,
+      outside,
+      report,
+    };
+  }
+
+  async function generateExamWorkbooks() {
+    setGenerating(true);
+    try {
+      const meta = { centre: centreCode || "", examDate: examDate || "", place: place || "" };
+      const examinerNames = examiners.slice(0, 2).map((examiner) => {
+        const parts = String(examiner.name || "").trim().split(/\s+/);
+        return { first: parts.slice(0, -1).join(" ") || parts[0] || "", last: parts.length > 1 ? parts[parts.length - 1] : "" };
+      });
+      const files = {};
+      for (const level of ["Practicing", "Consulting"]) {
+        const forLevel = candidates.filter((candidate) => candidateLevel(candidate) === level).map(candidateWorkbookRows);
+        files[level] = {
+          blob: await buildExamWorkbook({ level, meta, examiners: examinerNames, candidates: forLevel }),
+          fileName: `${level === "Consulting" ? "01_CONSULTING" : "01_PRACTICING"}_${(centreCode || "VETcert").replace(/[^A-Za-z0-9._-]+/g, "-")}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+          count: forLevel.length,
+        };
+      }
+      setGeneratedFiles(files);
+      onExamClosed?.(files);
+    } finally {
+      setGenerating(false);
+      setCloseConfirmOpen(false);
+    }
+  }
+
+  function downloadGenerated(level) {
+    const entry = generatedFiles?.[level];
+    if (!entry) return;
+    const url = URL.createObjectURL(entry.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = entry.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
   const checkboxLayoutCacheRef = useRef({});
   // A phone that scans the "Připojit tablet/telefon" QR uploads photos to this exam's server-side
   // scan inbox (see ScanCaptureMobilePage); this browser's own Centre session polls for new
@@ -9558,6 +9665,44 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
       {/* Records & photos live with the scan tools: both are the Centre's evidence workspace. */}
       <MediaLibraryPanel sessionToken={activeSessionToken} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} FileSpreadsheet={FileSpreadsheet} t={t} />
 
+      {/* Closing the exam: generates the two VETcert classification workbooks from the recorded
+          results and locks the setup sections behind a password so nothing can shift underneath a
+          file that has already been produced. */}
+      <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4">
+        <h3 className="text-lg font-bold text-emerald-950">{t("centre.close.title")}</h3>
+        <p className="mt-1 text-sm text-emerald-900">{t("centre.close.helper")}</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button onClick={() => setCloseConfirmOpen(true)} disabled={generating} className="rounded-2xl bg-emerald-700 text-white hover:bg-emerald-800">
+            {generating ? t("centre.close.generating") : t("centre.close.button")}
+          </Button>
+          {examClosed && <StatusPill tone="good">{t("centre.close.closed")}</StatusPill>}
+        </div>
+        {generatedFiles && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-3">
+            <span className="text-sm font-semibold">{t("centre.close.downloadTitle")}</span>
+            {["Practicing", "Consulting"].map((level) => (
+              <Button key={level} onClick={() => downloadGenerated(level)} variant="outline" className="rounded-2xl">
+                <FileSpreadsheet className="mr-1 h-4 w-4" />
+                {generatedFiles[level].fileName} ({generatedFiles[level].count})
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {closeConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t("centre.close.confirm")}</h3>
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{t("centre.close.confirmInfo")}</div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button onClick={() => setCloseConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+              <Button onClick={generateExamWorkbooks} disabled={generating} className="rounded-2xl">{t("common.confirm")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <CentreCandidateResultsOverview
         candidates={candidates}
         assignments={assignments}
@@ -9758,7 +9903,7 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
   );
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
@@ -9803,6 +9948,38 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
     if (!centreExamId) return;
     setFieldPrep((current) => (current?.examId && current.examId !== CENTRE_QR_ID ? current : { ...current, examId: centreExamId }));
   }, [centreExamId]);
+
+  // Closing the exam (section E): the two VETcert classification workbooks are generated once, and
+  // to keep them faithful to the data they were produced from, sections A–D lock afterwards. The
+  // "closed" flag is remembered per exam id so the lock survives a reload; reopening a section
+  // needs the closing password ("Vetarbo") and is session-only (deliberately a soft, temporary
+  // gate for corrections, not a security boundary).
+  const examCloseKey = `vetbara.examClosed.${fieldPrepExamId}`;
+  const [examClosed, setExamClosed] = useState(false);
+  useEffect(() => {
+    try { setExamClosed(window.localStorage.getItem(examCloseKey) === "1"); } catch { setExamClosed(false); }
+  }, [examCloseKey]);
+  const [sectionsUnlocked, setSectionsUnlocked] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockValue, setUnlockValue] = useState("");
+  const [unlockError, setUnlockError] = useState(false);
+  const lockClosedSections = examClosed && !sectionsUnlocked;
+  function markExamClosed() {
+    try { window.localStorage.setItem(examCloseKey, "1"); } catch { /* ignore storage errors */ }
+    setExamClosed(true);
+  }
+  function openUnlockDialog() { setUnlockValue(""); setUnlockError(false); setUnlockOpen(true); }
+  function submitUnlock() {
+    if (unlockValue === EXAMINER_FORM_UNLOCK_PASSWORD) {
+      setSectionsUnlocked(true);
+      setUnlockOpen(false);
+      setUnlockValue("");
+      setUnlockError(false);
+    } else {
+      setUnlockError(true);
+    }
+  }
+
   // Local LAN QR mode: see docs/qr-base-url-design-note.md. Production base URL stays the
   // default; switching to a local base URL is explicit, session-only, and never silently
   // rewrites links unless a validated local URL is set.
@@ -10120,6 +10297,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="setup"
           icon={ShieldCheck}
           t={t}
+          locked={lockClosedSections}
+          lockedMessage={lockClosedSections ? t("centre.close.lockedMessage") : undefined}
+          onUnlock={lockClosedSections ? openUnlockDialog : undefined}
           title={t("centre.dashboard.setup.title")}
           description={t("centre.dashboard.setup.description")}
           activeSection={activeCentreSection}
@@ -10128,36 +10308,14 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           <div className="space-y-4">
             <CentreActivePackagePanel setVariants={setVariants} setAvailableVariants={setAvailableVariants} setTestBank={setTestBank} setOutdoorItemsByLevel={setOutdoorItemsByLevel} setActiveAdminPackageMeta={setActiveAdminPackageMeta} setTestImportSummary={setTestImportSummary} setCentreSetupDirty={setCentreSetupDirty} language={language} t={t} />
 
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div className="rounded-2xl border bg-white p-4">
-                <h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>
-                {EXAM_LEVELS.map((level) => (
-                  <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm">
-                    <input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} />
-                    <span>{level}</span>
-                  </label>
-                ))}
-              </div>
-              <div className="rounded-2xl border bg-white p-4 lg:col-span-2">
-                <h3 className="font-semibold">{t("centre.dashboard.examVariants")}</h3>
-                <p className="mt-1 text-sm text-slate-600">{t("centre.dashboard.examVariantsHelper")}</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  {EXAM_LEVELS.map((level) => {
-                    const vars = availableVariants.filter((variant) => variant.level === level && variant.language === language);
-                    return (
-                      <label key={level} className="text-sm font-medium">
-                        {level}
-                        <select value={variants[level] ?? ""} onChange={(event) => { setCentreSetupDirty(true); setVariants((previous) => ({ ...previous, [level]: event.target.value })); }} className="mt-1 w-full rounded-xl border bg-white p-2">
-                          {vars.length ? vars.map((variant) => <option key={variant.code} value={variant.code}>{variant.code}</option>) : <option value="">{t("centre.variants.noImported")}</option>}
-                        </select>
-                      </label>
-                    );
-                  })}
-                </div>
-                {testImportStatus && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{testImportStatus}</div>}
-                {testImportError && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{testImportError}</div>}
-                {testImportSummary && <div className="mt-2 text-xs text-slate-500">{t("centre.variants.importedSummary").replace("{variants}", testImportSummary.variants).replace("{questions}", testImportSummary.questions)}</div>}
-              </div>
+            <div className="rounded-2xl border bg-white p-4">
+              <h3 className="mb-3 font-semibold">{t("centre.levels.title")}</h3>
+              {EXAM_LEVELS.map((level) => (
+                <label key={level} className="mb-3 flex items-center gap-3 rounded-xl border p-3 text-sm">
+                  <input type="checkbox" checked={enabledLevels.includes(level)} onChange={() => toggleLevel(level)} />
+                  <span>{level}</span>
+                </label>
+              ))}
             </div>
 
           </div>
@@ -10167,6 +10325,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="field-preparation"
           icon={MapPin}
           t={t}
+          locked={lockClosedSections}
+          lockedMessage={lockClosedSections ? t("centre.close.lockedMessage") : undefined}
+          onUnlock={lockClosedSections ? openUnlockDialog : undefined}
           title={t("centre.dashboard.fieldPrep.title")}
           description={t("centre.dashboard.fieldPrep.description")}
           activeSection={activeCentreSection}
@@ -10179,6 +10340,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="people"
           icon={Users}
           t={t}
+          locked={lockClosedSections}
+          lockedMessage={lockClosedSections ? t("centre.close.lockedMessage") : undefined}
+          onUnlock={lockClosedSections ? openUnlockDialog : undefined}
           title={t("centre.dashboard.people.title")}
           description={t("centre.dashboard.people.description")}
           activeSection={activeCentreSection}
@@ -10246,6 +10410,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                 </Button>
               </div>
               {rosterConfirmed && <div className="mt-2 text-sm font-semibold text-emerald-800">{String(t("centre.roster.linksIssued")).replace("{count}", issuedLinkCount)}</div>}
+              {/* Surface a failed confirm right here, next to the button: the save error used to
+                  render only in section A, so a failed roster save in section C looked like the
+                  button did nothing and the sections "just stayed locked". */}
+              {!rosterConfirmed && centreSetupError && <div className="mt-2 rounded-xl border border-rose-300 bg-rose-50 p-2 text-sm font-medium text-rose-800">{centreSetupError}</div>}
             </div>
           </div>
         </AdminDashboardSection>
@@ -10254,8 +10422,9 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           id="access"
           icon={QrCodeIcon}
           t={t}
-          locked={!activeAdminPackageMeta || !rosterConfirmed}
-          lockedMessage={!activeAdminPackageMeta ? t("centre.dashboard.lockedNoAdminPackage") : t("centre.dashboard.lockedRosterUnconfirmed")}
+          locked={lockClosedSections || !activeAdminPackageMeta || !rosterConfirmed}
+          lockedMessage={lockClosedSections ? t("centre.close.lockedMessage") : (!activeAdminPackageMeta ? t("centre.dashboard.lockedNoAdminPackage") : t("centre.dashboard.lockedRosterUnconfirmed"))}
+          onUnlock={lockClosedSections ? openUnlockDialog : undefined}
           title={t("centre.dashboard.access.title")}
           description={t("centre.dashboard.access.description")}
           activeSection={activeCentreSection}
@@ -10297,6 +10466,11 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             outdoor={outdoor}
             outdoorItemsByLevel={outdoorItemsByLevel}
             candidateStatus={candidateStatus}
+            centreCode={centreCode}
+            examDate={examDate}
+            place={place}
+            examClosed={examClosed}
+            onExamClosed={markExamClosed}
             t={t}
           />
         </AdminDashboardSection>
@@ -10330,6 +10504,30 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           />
         </AdminDashboardSection>
       </div>
+
+      {/* Password gate for reopening sections A–D after the exam has been closed. */}
+      {unlockOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-center gap-2"><Lock className="h-5 w-5 text-emerald-700" /><h3 className="text-lg font-semibold">{t("centre.unlock.title")}</h3></div>
+            <p className="mt-2 text-sm text-slate-600">{t("centre.unlock.helper")}</p>
+            <input
+              type="password"
+              autoFocus
+              value={unlockValue}
+              onChange={(event) => { setUnlockValue(event.target.value); setUnlockError(false); }}
+              onKeyDown={(event) => { if (event.key === "Enter") submitUnlock(); }}
+              placeholder={t("centre.unlock.placeholder")}
+              className="mt-3 w-full rounded-xl border p-2"
+            />
+            {unlockError && <div className="mt-2 rounded-xl border border-rose-300 bg-rose-50 p-2 text-sm text-rose-800">{t("centre.unlock.error")}</div>}
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button onClick={() => setUnlockOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+              <Button onClick={submitUnlock} className="rounded-2xl bg-emerald-700 text-white hover:bg-emerald-800">{t("centre.unlock.confirm")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
