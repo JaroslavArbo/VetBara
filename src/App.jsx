@@ -8782,59 +8782,92 @@ function imageElementToCanvas(image) {
 // they have identified themselves; sketches are always read-only (they are drawn in the field).
 function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
   const { scores, notes, noteDrawings } = column.data;
-  const total = items.reduce((sum, item) => sum + Number(scores?.[item.id] ?? 0), 0);
-  const max = items.reduce((sum, item) => sum + Number(item.max || 0), 0);
+  const scoreOf = (item) => (item.excluded ? 0 : Number(scores?.[item.id] ?? 0));
+  const total = items.reduce((sum, item) => sum + scoreOf(item), 0);
+  const max = items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.max || 0)), 0);
+  // Group by exercise so the reviewer reads the same running order the examiner worked in,
+  // instead of one flat list of question ids.
+  const groups = [];
+  for (const item of items) {
+    const section = item.section ?? "";
+    const last = groups[groups.length - 1];
+    if (last && last.section === section) last.items.push(item);
+    else groups.push({ section, excluded: Boolean(item.excluded), items: [item] });
+  }
   return (
-    <div className={`rounded-2xl border p-3 ${column.role === "primary" ? "border-slate-300 bg-white" : "border-slate-200 bg-slate-50"}`}>
+    <div className={`min-w-0 rounded-2xl border p-3 ${column.role === "primary" ? "border-slate-300 bg-white" : "border-slate-200 bg-slate-50"}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2">
-        <div>
+        <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{t(`centre.review.outdoor.${column.role}`)}</div>
-          <div className="font-semibold">{column.examinerName}</div>
+          <div className="break-words font-semibold">{column.examinerName}</div>
         </div>
-        <div className="text-sm font-bold">{total} / {max} b.</div>
+        <div className="shrink-0 text-sm font-bold">{formatHalfPointScore(total)} / {max} b.</div>
       </div>
       {column.data.examSummary && (
-        <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-100 p-2 text-xs italic text-slate-700">{column.data.examSummary}</div>
+        <div className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-slate-100 p-2 text-xs italic text-slate-700">{column.data.examSummary}</div>
       )}
-      <div className="mt-2 space-y-2">
-        {items.map((item) => {
-          const sketch = noteDrawings?.[item.id];
-          const note = notes?.[item.id] ?? "";
-          const score = scores?.[item.id] ?? "";
+      <div className="mt-3 space-y-4">
+        {groups.map((group) => {
+          const groupTotal = group.items.reduce((sum, item) => sum + scoreOf(item), 0);
+          const groupMax = group.items.reduce((sum, item) => sum + Number(item.max || 0), 0);
           return (
-            <div key={item.id} className="rounded-xl border bg-white p-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-mono text-[11px] text-slate-500">{item.id}</div>
-                  <div className="truncate text-xs text-slate-700" title={item.text}>{item.text}</div>
-                </div>
-                {editable ? (
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max={item.max}
-                    value={score}
-                    onChange={(event) => onChange(item.id, { score: event.target.value })}
-                    className="w-20 shrink-0 rounded-lg border p-1 text-right text-sm font-semibold"
-                  />
-                ) : (
-                  <span className="shrink-0 text-sm font-semibold">{score === "" ? "-" : score}</span>
-                )}
-                <span className="shrink-0 text-xs text-slate-400">/ {item.max}</span>
+            <div key={group.section} className="min-w-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 pb-1">
+                <div className="min-w-0 break-words text-xs font-bold uppercase tracking-wide text-slate-600">{outdoorSectionTitle(group.section)}</div>
+                {group.excluded
+                  ? <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">{t("outdoor.variant.excluded")}</span>
+                  : <span className="shrink-0 text-xs font-semibold text-slate-500">{formatHalfPointScore(groupTotal)} / {groupMax} b.</span>}
               </div>
-              {editable ? (
-                <textarea
-                  value={note}
-                  onChange={(event) => onChange(item.id, { note: event.target.value })}
-                  rows={2}
-                  placeholder={t("outdoor.examinerNotes")}
-                  className="mt-2 w-full rounded-lg border p-2 text-xs"
-                />
-              ) : (
-                note && <div className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{note}</div>
-              )}
-              {sketch && <img src={sketch} alt="" className="mt-2 max-h-56 w-full rounded-lg border bg-white object-contain" />}
+              <div className="mt-2 space-y-2">
+                {group.items.map((item) => {
+                  const sketch = noteDrawings?.[item.id];
+                  const note = notes?.[item.id] ?? "";
+                  const score = scores?.[item.id] ?? "";
+                  const hasScore = score !== "" && score !== null && score !== undefined;
+                  return (
+                    <div key={item.id} className={`min-w-0 rounded-xl border bg-white p-2 ${group.excluded ? "opacity-60" : ""}`}>
+                      {/* min-w-0 on the text side: without it the item text sets the column's
+                          min-content width and the whole review grid overflows to the right,
+                          pushing the score boxes off screen. */}
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-mono text-[11px] text-slate-500">{item.id}</div>
+                          <div className="whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-700">{item.text}</div>
+                        </div>
+                        <div className="w-24 shrink-0 text-center">
+                          {editable && !group.excluded ? (
+                            <select
+                              value={score}
+                              onChange={(event) => onChange(item.id, { score: event.target.value })}
+                              className={`w-full rounded-xl border-2 p-1.5 text-sm font-bold ${hasScore ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-white"}`}
+                            >
+                              <option value="">-</option>
+                              {outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}
+                            </select>
+                          ) : (
+                            <div className={`w-full rounded-xl border-2 p-1.5 text-sm font-bold ${hasScore ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-400"}`}>
+                              {hasScore ? formatHalfPointScore(Number(score)) : "-"}
+                            </div>
+                          )}
+                          <div className="mt-1 text-[11px] text-slate-500">{t("outdoor.pointsLabel")} / {item.max}</div>
+                        </div>
+                      </div>
+                      {editable && !group.excluded ? (
+                        <textarea
+                          value={note}
+                          onChange={(event) => onChange(item.id, { note: event.target.value })}
+                          rows={2}
+                          placeholder={t("outdoor.examinerNotes")}
+                          className="mt-2 w-full rounded-lg border p-2 text-xs"
+                        />
+                      ) : (
+                        note && <div className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{note}</div>
+                      )}
+                      {sketch && <img src={sketch} alt="" className="mt-2 max-h-56 w-full rounded-lg border bg-white object-contain" />}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
@@ -8847,15 +8880,16 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
 function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, isCorrected, onClose, t }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
-      <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white">
+      {/* Outdoor shows two examiner columns side by side, so it gets the wider frame. */}
+      <div className={`mx-auto flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white ${section.kind === "outdoor" ? "max-w-6xl" : "max-w-4xl"}`}>
         <div className="flex items-center justify-between gap-3 border-b p-4">
-          <div>
-            <h2 className="text-lg font-bold">{candidate.name} · {section.label}</h2>
+          <div className="min-w-0">
+            <h2 className="break-words text-lg font-bold">{candidate.name} · {section.label}</h2>
             <p className="text-sm text-slate-600">{candidate.id} · {candidate.level}</p>
           </div>
-          <Button onClick={onClose} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+          <Button onClick={onClose} variant="outline" className="shrink-0 rounded-2xl">{t("common.close")}</Button>
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="min-w-0 flex-1 overflow-auto p-4">
           {section.kind === "written" && (
             <div className="space-y-4">
               {snapshot.items.map((item) => {
@@ -8896,13 +8930,15 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
             return (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">
-                  <span className="font-semibold">{t("centre.review.outdoorTotal")}: {snapshot.total} / {snapshot.max} b.</span>
+                  <span className="font-semibold">{t("centre.review.outdoorTotal")}: {formatHalfPointScore(snapshot.total)} / {snapshot.max} b.</span>
                   {canEditPrimary
                     ? <StatusPill tone="good">{t("centre.review.outdoor.editing")}</StatusPill>
                     : <span className="text-xs text-slate-500">{t("centre.review.outdoor.readOnly")}</span>}
                 </div>
-                {/* Primary on the left in the wider frame, secondary on the right. */}
-                <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
+                {/* Primary on the left in the wider frame, secondary on the right. minmax(0,…)
+                    rather than plain fr: an fr track's implicit min-width is auto, so a long
+                    question line would stretch the track and overflow the modal. */}
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                   <OutdoorExaminerColumn
                     column={snapshot.primary}
                     items={snapshot.items}
@@ -9480,10 +9516,35 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     if (sectionKey === "outdoor") {
       const scores = outdoor?.[candidate.id] || {};
       const entries = Object.entries(scores).filter(([, value]) => value !== "" && value !== null && value !== undefined);
-      const items = Object.entries(outdoorItemsByLevel?.[candidate.level] || {}).flatMap(([section, list]) => (list || []).map((item) => ({ ...item, section })));
-      const max = items.reduce((sum, item) => sum + Number(item.max || 0), 0);
-      const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+      // Same source and running order the examiner's own form uses: the runtime package when one
+      // is loaded, otherwise the built-in items (a raw outdoorItemsByLevel lookup left section E
+      // empty whenever no package had been imported).
+      const levelItems = effectiveOutdoorItemsForLevel(outdoorItemsByLevel, candidate.level);
+      const sectionNames = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, candidate.level);
       const byExaminer = outdoorByExaminer?.[candidate.id] || {};
+      // Either/or exercises: the Centre does not hold the examiner's variant choice, so derive it
+      // from the data — the variant they actually scored is the one that counts. Falls back to the
+      // same default (first variant) as the examiner form. Both variants stay visible, the one
+      // that does not count is marked and excluded from the totals (summing both double-counts).
+      const scoredSections = new Set(
+        Object.entries(levelItems)
+          .filter(([, list]) => (list || []).some((item) => Object.values(byExaminer).some((bucket) => {
+            const value = bucket?.scores?.[item.id];
+            return value !== "" && value !== null && value !== undefined;
+          })))
+          .map(([section]) => section),
+      );
+      const variantChoice = Object.fromEntries(
+        [...outdoorVariantGroups(sectionNames)].map(([base, group]) => [base, group.find((section) => scoredSections.has(section)) || group[0]]),
+      );
+      const items = sectionNames.flatMap((section) => (levelItems[section] || []).map((item) => ({
+        ...item,
+        section,
+        excluded: outdoorSectionExcluded(sectionNames, variantChoice, section),
+      })));
+      const max = items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.max || 0)), 0);
+      const excludedIds = new Set(items.filter((item) => item.excluded).map((item) => item.id));
+      const total = entries.reduce((sum, [itemId, value]) => sum + (excludedIds.has(itemId) ? 0 : Number(value || 0)), 0);
       const assignment = assignments?.[candidate.id] || {};
       // Fall back to whatever mode each bucket reports when the roster has no explicit assignment,
       // so a column is never dropped just because the assignment table is incomplete.
