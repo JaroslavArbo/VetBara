@@ -12936,6 +12936,7 @@ function ExaminerView({
   examinerTimes,
   activeAdminPackageMeta,
   activeSessionToken,
+  onReportMarked,
   t,
 }) {
   return (
