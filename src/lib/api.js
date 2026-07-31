@@ -128,12 +128,30 @@ export function requestMediaUploadUrl(sessionToken, media) {
 // Upload the raw bytes straight to Supabase Storage using the signed URL.
 // This bypasses the serverless body-size limit, so long voice recordings work.
 export async function uploadMediaBytes(uploadUrl, blob) {
-  const response = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": blob.type || "application/octet-stream", "x-upsert": "true" },
-    body: blob,
-  });
-  if (!response.ok) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let response;
+    try {
+      response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": blob.type || "application/octet-stream", "x-upsert": "true" },
+        body: blob,
+      });
+    } catch (networkError) {
+      // fetch() itself threw: no HTTP response reached us at all - most often the tablet's WiFi
+      // hiccupping right as a large (14-27MB) recording's upload was finishing, which can drop
+      // the connection just as the storage server is sending its response back even though it
+      // already received every byte and saved the file. The upload target path is deterministic
+      // from clientMediaId and x-upsert:true makes a re-PUT of the same bytes a no-op either way,
+      // so a couple of automatic retries are safe and turn most of these into a quiet success
+      // instead of a scary, untranslated "TypeError: Load failed" the examiner can't act on.
+      if (attempt === maxAttempts) throw networkError;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+      continue;
+    }
+    if (response.ok) return true;
+    // A real HTTP error response (bad request, size limit, expired signature, ...) - retrying
+    // the same request won't change the outcome, so it's reported immediately instead.
     // Storage's own error body carries the actual reason (e.g. "The object exceeded the
     // maximum allowed size") — without it every failure just says "Media upload failed: 400"
     // and there is no way to tell a bucket size limit apart from an expired signed URL.

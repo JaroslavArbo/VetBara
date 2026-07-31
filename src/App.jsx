@@ -3178,7 +3178,12 @@ function VetBaraPrototype() {
           // Recorded so ExaminerLocalMediaPanel can show the real reason (expired session vs.
           // storage limit vs. a dropped connection) instead of nothing — this loop runs silently
           // every 60s, so a manual "Upload now" click may not be the attempt that actually failed.
-          await updateLocalMedia(record.clientMediaId, { lastError: error?.reason || error?.message || String(error), lastErrorAt: new Date().toISOString() });
+          // error.reason is a structured reason from a real HTTP response body (uploadMediaBytes);
+          // error.message for a plain network failure is a raw, untranslated engine string (e.g.
+          // Safari's fetch() throws "TypeError: Load failed" for a connection dropped mid-upload,
+          // which the file DOES sometimes still land from - see uploadMediaBytes' own retry) and is
+          // not useful to show an examiner, so it is never used here.
+          await updateLocalMedia(record.clientMediaId, { lastError: error?.reason || t("examiner.localMedia.retryFailed"), lastErrorAt: new Date().toISOString() });
         }
       }
     } catch (error) {
@@ -15036,11 +15041,15 @@ function ExaminerLocalMediaPanel({ sessionToken, t }) {
     } catch (error) {
       setErrorId(item.clientMediaId);
       // 401 means the session this tablet logged in with has expired (8h TTL) — no retry can
-      // fix that, only a fresh QR scan can. Everything else (a real storage limit, a dropped
-      // connection mid-upload) is shown as reported so it is at least distinguishable.
+      // fix that, only a fresh QR scan can. A real HTTP error (a storage limit, an expired
+      // signature) carries its own reason via error.reason and is shown as reported. A plain
+      // network failure has no error.reason - error.message there is a raw, untranslated engine
+      // string (e.g. Safari's fetch() throws "TypeError: Load failed" for a connection dropped
+      // mid-upload, even on an upload the file DOES still land from - see uploadMediaBytes' own
+      // retry), so it falls back to the same friendly "check the connection" text instead.
       const message = error?.status === 401
         ? t("examiner.localMedia.sessionExpired")
-        : (error?.reason || error?.message || t("examiner.localMedia.retryFailed"));
+        : (error?.reason || t("examiner.localMedia.retryFailed"));
       setErrorDetail((prev) => ({ ...prev, [item.clientMediaId]: message }));
     } finally {
       setBusyId("");
