@@ -667,7 +667,8 @@ Object.assign(translations.en, {
   "examiner.localMedia.allUploaded": "Every recording on this device has uploaded to the Centre.",
   "examiner.localMedia.uploadNow": "Upload now",
   "examiner.localMedia.uploading": "Uploading…",
-  "examiner.localMedia.retryFailed": "Upload failed — check the connection and try again."
+  "examiner.localMedia.retryFailed": "Upload failed — check the connection and try again.",
+  "examiner.localMedia.sessionExpired": "Your session has expired. Reopen this device's QR link to get a new one, then try again."
 });
 
 Object.assign(translations.cs, {
@@ -774,7 +775,8 @@ Object.assign(translations.cs, {
   "examiner.localMedia.allUploaded": "Všechny záznamy na tomto zařízení jsou nahrané do centra.",
   "examiner.localMedia.uploadNow": "Nahrát nyní",
   "examiner.localMedia.uploading": "Nahrávám…",
-  "examiner.localMedia.retryFailed": "Nahrání se nezdařilo — zkontrolujte připojení a zkuste to znovu."
+  "examiner.localMedia.retryFailed": "Nahrání se nezdařilo — zkontrolujte připojení a zkuste to znovu.",
+  "examiner.localMedia.sessionExpired": "Vaše session vypršela. Znovu otevřete QR odkaz pro toto zařízení a zkuste to pak znovu."
 });
 
 Object.assign(translations.en, {
@@ -1205,6 +1207,8 @@ Object.assign(translations.en, {
   "centre.scan.emptyState": "No pages scanned yet.",
   "centre.scan.unmatchedTitle": "Could not be sorted automatically",
   "centre.scan.discard": "Discard",
+  "centre.scan.assignPlaceholder": "Assign to candidate…",
+  "centre.scan.assignAllTo": "Assign all {count} to this candidate",
   "centre.scan.ambiguousMark": "Multiple checkboxes appear marked (or the mark is unclear) - please check the scanned original and score by hand.",
   "centre.scan.originalLabel": "Scanned original",
   "centre.scan.connectDevice": "Connect tablet/phone",
@@ -1352,6 +1356,8 @@ Object.assign(translations.cs, {
   "centre.scan.emptyState": "Zatím nejsou naskenované žádné stránky.",
   "centre.scan.unmatchedTitle": "Nepodařilo se automaticky zařadit",
   "centre.scan.discard": "Zahodit",
+  "centre.scan.assignPlaceholder": "Přiřadit kandidátovi…",
+  "centre.scan.assignAllTo": "Přiřadit všech {count} tomuto kandidátovi",
   "centre.scan.ambiguousMark": "Zdá se zaškrtnutých více políček (nebo je zaškrtnutí nejasné) - zkontrolujte prosím naskenovaný originál a ohodnoťte ručně.",
   "centre.scan.originalLabel": "Naskenovaný originál",
   "centre.scan.connectDevice": "Připojit tablet/telefon",

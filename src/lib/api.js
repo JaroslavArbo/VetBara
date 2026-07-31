@@ -134,8 +134,16 @@ export async function uploadMediaBytes(uploadUrl, blob) {
     body: blob,
   });
   if (!response.ok) {
-    const error = new Error(`Media upload failed: ${response.status}`);
+    // Storage's own error body carries the actual reason (e.g. "The object exceeded the
+    // maximum allowed size") — without it every failure just says "Media upload failed: 400"
+    // and there is no way to tell a bucket size limit apart from an expired signed URL.
+    let detail = "";
+    try { detail = await response.text(); } catch { /* ignore */ }
+    let reason = detail;
+    try { reason = JSON.parse(detail)?.message || JSON.parse(detail)?.error || detail; } catch { /* not JSON */ }
+    const error = new Error(reason ? `Media upload failed (${response.status}): ${reason}` : `Media upload failed: ${response.status}`);
     error.status = response.status;
+    error.reason = reason || null;
     throw error;
   }
   return true;

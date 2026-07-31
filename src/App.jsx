@@ -3165,12 +3165,16 @@ function VetBaraPrototype() {
       for (const record of pending) {
         const full = await getLocalMedia(record.clientMediaId);
         if (!full?.blob) continue;
-        const { blob, uploadState, remoteId, id, ...meta } = full;
+        const { blob, uploadState, remoteId, id, lastError, lastErrorAt, ...meta } = full;
         try {
           const uploaded = await uploadExamMedia(activeSessionToken, meta, blob);
-          if (uploaded.stored) await updateLocalMedia(record.clientMediaId, { uploadState: "uploaded", remoteId: uploaded.id ?? null });
+          if (uploaded.stored) await updateLocalMedia(record.clientMediaId, { uploadState: "uploaded", remoteId: uploaded.id ?? null, lastError: null });
         } catch (error) {
           console.warn("Pending media upload retry failed; will try again later", record.clientMediaId, error);
+          // Recorded so ExaminerLocalMediaPanel can show the real reason (expired session vs.
+          // storage limit vs. a dropped connection) instead of nothing — this loop runs silently
+          // every 60s, so a manual "Upload now" click may not be the attempt that actually failed.
+          await updateLocalMedia(record.clientMediaId, { lastError: error?.reason || error?.message || String(error), lastErrorAt: new Date().toISOString() });
         }
       }
     } catch (error) {
@@ -5345,6 +5349,13 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
 const OUTDOOR_CENTRE_RESULT_KEY = "vetbara.outdoorCentreResults.v1";
 const EXAMINER_RESULT_KEY = "vetbara.examinerResults.v1";
 const WRITTEN_QUESTION_SCORES_KEY = "vetbara.writtenQuestionScores.v1";
+// How many physical pages a candidate's printed test runs to, keyed by candidate id. Nothing in
+// the browser can report an exact page count back from window.print() (pagination is realized
+// only by the print/PDF renderer, never exposed to JS), so this has to come from the operator —
+// but it is the SAME number every time the same candidate's already-printed test is scanned, so
+// it is persisted here instead of resetting to blank (forcing a re-type) on every Centre reload.
+const SCAN_EXPECTED_PAGES_KEY = "vetbara.scanExpectedPages.v1";
+
 // Examiner's marks for the Consulting report, per candidate:
 // { [treeName]: { [sectionKey]: { score, comment } }, clarity: { [itemKey]: score } }.
 const REPORT_MARKS_KEY = "vetbara.reportMarks.v1";
@@ -9576,11 +9587,25 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   // testResponses/scanAssignments rather than doing any image work itself.
   const [scans, setScans] = useState({});
   const [scanAssignments, setScanAssignments] = useState({});
-  const [expectedPageCounts, setExpectedPageCounts] = useState({});
+  const [expectedPageCounts, setExpectedPageCounts] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(window.localStorage.getItem(scopedCacheKey(SCAN_EXPECTED_PAGES_KEY)) || "{}");
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(scopedCacheKey(SCAN_EXPECTED_PAGES_KEY), JSON.stringify(expectedPageCounts));
+    } catch { /* private mode - value stays in memory for this session */ }
+  }, [expectedPageCounts]);
   const [processedInfo, setProcessedInfo] = useState({});
   // scanScoreGuesses[candidateId][questionId] = estimated mark read out of the printed score box.
   const [scanScoreGuesses, setScanScoreGuesses] = useState({});
   const [unmatchedScans, setUnmatchedScans] = useState([]);
+  const [bulkAssignCandidateId, setBulkAssignCandidateId] = useState("");
   const [scanBusy, setScanBusy] = useState(false);
   const [scanMessage, setScanMessage] = useState(null);
   const [showConnectQr, setShowConnectQr] = useState(false);
@@ -9835,6 +9860,40 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
 
   function removeScanPage(candidateId, pageId) {
     setScans((prev) => ({ ...prev, [candidateId]: (prev[candidateId] || []).filter((page) => page.id !== pageId) }));
+  }
+
+  // Scanning happens in strict page order, so a page whose small per-question QR did not decode
+  // (bad focus, an angle, print quality) is still known to belong wherever the operator says it
+  // does — there is no auto-detected answer for it, but the photo itself joins that candidate's
+  // stack (counts toward the expected page total, and stays visible for reference during manual
+  // marking) instead of being stuck unmatched forever. Inserted by capture time rather than
+  // appended, so the physical order survives regardless of which unmatched page gets assigned
+  // first.
+  function assignUnmatchedScan(item, candidateId) {
+    if (!candidateId) return;
+    const candidate = candidates.find((c) => c.id === candidateId);
+    if (!candidate) return;
+    const snapshot = resolveCandidateWrittenSnapshot({ candidate, variants, testBank });
+    const page = {
+      id: item.id,
+      dataUrl: item.dataUrl,
+      capturedAt: item.capturedAt || new Date().toISOString(),
+      testCode: candidateScanTestCode(candidate, snapshot.variantCode),
+      variantCode: snapshot.variantCode,
+      anchorQuestions: [],
+      questionResults: {},
+      manuallyAssigned: true,
+    };
+    setScans((prev) => {
+      const merged = [...(prev[candidateId] || []), page].sort((a, b) => String(a.capturedAt).localeCompare(String(b.capturedAt)));
+      return { ...prev, [candidateId]: merged };
+    });
+    setUnmatchedScans((prev) => prev.filter((x) => x.id !== item.id));
+  }
+
+  function assignAllUnmatchedScans(candidateId) {
+    if (!candidateId) return;
+    unmatchedScans.forEach((item) => assignUnmatchedScan(item, candidateId));
   }
 
   // Flattens every scanned page's already-computed per-question results into testResponses
@@ -10197,12 +10256,39 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
 
         {unmatchedScans.length > 0 && (
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3">
-            <div className="text-sm font-semibold text-rose-950">{t("centre.scan.unmatchedTitle")}</div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-rose-950">{t("centre.scan.unmatchedTitle")}</div>
+              {/* Scanning happens in strict page order, so an unmatched run is almost always one
+                  candidate's mis-scanned pages in a row - this assigns the whole bucket in one
+                  action instead of one dropdown per thumbnail. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={bulkAssignCandidateId} onChange={(event) => setBulkAssignCandidateId(event.target.value)} className="rounded-lg border bg-white p-1.5 text-xs">
+                  <option value="">{t("centre.scan.assignPlaceholder")}</option>
+                  {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name || candidate.id} ({candidate.id})</option>)}
+                </select>
+                <Button
+                  onClick={() => { assignAllUnmatchedScans(bulkAssignCandidateId); setBulkAssignCandidateId(""); }}
+                  disabled={!bulkAssignCandidateId}
+                  variant="outline"
+                  className="rounded-2xl"
+                >
+                  {tf("centre.scan.assignAllTo", { count: unmatchedScans.length })}
+                </Button>
+              </div>
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {unmatchedScans.map((item) => (
-                <div key={item.id} className="w-24 rounded-lg border border-rose-200 bg-white p-1">
+                <div key={item.id} className="w-28 rounded-lg border border-rose-200 bg-white p-1">
                   <img src={item.dataUrl} alt="unmatched scan" className="h-16 w-full rounded object-cover" />
                   <div className="mt-1 text-[10px] text-rose-700">{item.reason}</div>
+                  <select
+                    value=""
+                    onChange={(event) => assignUnmatchedScan(item, event.target.value)}
+                    className="mt-1 w-full rounded border bg-white p-1 text-[10px]"
+                  >
+                    <option value="">{t("centre.scan.assignPlaceholder")}</option>
+                    {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name || candidate.id}</option>)}
+                  </select>
                   <button type="button" onClick={() => setUnmatchedScans((prev) => prev.filter((x) => x.id !== item.id))} className="mt-1 text-[10px] font-semibold text-rose-700 underline">
                     {t("centre.scan.discard")}
                   </button>
@@ -14846,6 +14932,11 @@ function ExaminerLocalMediaPanel({ sessionToken, t }) {
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [errorId, setErrorId] = useState("");
+  // The specific reason the last attempt failed, keyed by clientMediaId — an expired session
+  // (re-scan the QR to fix) and a file over the storage size limit (nothing to retry, needs the
+  // Centre involved) both used to show the exact same generic "check the connection" message,
+  // which sent the examiner retrying something a retry could never fix.
+  const [errorDetail, setErrorDetail] = useState({});
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -14872,12 +14963,20 @@ function ExaminerLocalMediaPanel({ sessionToken, t }) {
       const uploaded = await uploadExamMedia(sessionToken, meta, blob);
       if (uploaded.stored) {
         await updateLocalMedia(item.clientMediaId, { uploadState: "uploaded", remoteId: uploaded.id ?? null });
+        setErrorDetail((prev) => { const next = { ...prev }; delete next[item.clientMediaId]; return next; });
         await refresh();
       } else {
         setErrorId(item.clientMediaId);
       }
-    } catch {
+    } catch (error) {
       setErrorId(item.clientMediaId);
+      // 401 means the session this tablet logged in with has expired (8h TTL) — no retry can
+      // fix that, only a fresh QR scan can. Everything else (a real storage limit, a dropped
+      // connection mid-upload) is shown as reported so it is at least distinguishable.
+      const message = error?.status === 401
+        ? t("examiner.localMedia.sessionExpired")
+        : (error?.reason || error?.message || t("examiner.localMedia.retryFailed"));
+      setErrorDetail((prev) => ({ ...prev, [item.clientMediaId]: message }));
     } finally {
       setBusyId("");
     }
@@ -14917,7 +15016,11 @@ function ExaminerLocalMediaPanel({ sessionToken, t }) {
               <div>
                 <div className="font-medium">{item.candidateId}{item.examinerId ? ` · ${item.examinerId}` : ""}</div>
                 <div className="text-xs text-slate-600">{formatMinutes(item.durationMs)} · {formatSize(item.sizeBytes)}{item.createdAt ? ` · ${new Date(item.createdAt).toLocaleString()}` : ""}</div>
-                {errorId === item.clientMediaId && <div className="mt-1 text-xs font-semibold text-rose-700">{t("examiner.localMedia.retryFailed")}</div>}
+                {(errorId === item.clientMediaId || item.lastError) && (
+                  <div className="mt-1 text-xs font-semibold text-rose-700">
+                    {errorDetail[item.clientMediaId] || (errorId === item.clientMediaId ? t("examiner.localMedia.retryFailed") : item.lastError)}
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => retryUpload(item)} disabled={busyId === item.clientMediaId || !sessionToken} className="rounded-2xl">
