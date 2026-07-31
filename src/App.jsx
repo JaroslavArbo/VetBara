@@ -2487,6 +2487,65 @@ function VetBaraPrototype() {
 
   function loginCandidate(id) { setLoggedCandidateId(id); setSelectedCandidateId(id); setActiveCandidateSection("landing"); addAudit("Candidate logged in", candidates.find((c) => c.id === id)?.name ?? id, "QR accepted"); }
   function confirmCandidate() { if (!loggedCandidate) return; setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true })); addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`); }
+  function unconfirmCandidate() {
+    if (!loggedCandidate) return;
+    setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: false }));
+    addAudit("Candidate returned to identity screen", loggedCandidate.name, "Left the report section");
+  }
+
+  // Manual "send to server": re-emits the candidate's answers and report draft so nothing is left
+  // waiting on this device. Returns false when there is no session, so the button stays white
+  // rather than claiming a transfer that never happened.
+  async function resendCandidateData() {
+    if (!loggedCandidate || !activeSessionToken) return false;
+    const candidateId = loggedCandidate.id;
+    const updatedAt = new Date().toISOString();
+    const events = [];
+
+    Object.entries(testResponses[candidateId] ?? {}).forEach(([questionId, answer]) => {
+      events.push({
+        clientEventId: localEventId(`test-response-resend-${candidateId}-${questionId}-${updatedAt}`),
+        type: "test_response.saved",
+        entityType: "test_response",
+        entityId: `${candidateId}:test:${questionId}`,
+        candidateId,
+        payload: { sectionKey: "test", questionId, answer, selectedAnswer: answer, variantCode: variants[loggedCandidate.level] ?? null, updatedAt },
+        createdAt: updatedAt,
+      });
+    });
+
+    Object.entries(reportDrafts[candidateId] ?? {}).forEach(([treeKey, tree]) => {
+      if (!tree || typeof tree !== "object") return;
+      if (tree.fieldNotes !== undefined) {
+        events.push({
+          clientEventId: localEventId(`report-draft-resend-${candidateId}-${treeKey}-fieldNotes-${updatedAt}`),
+          type: "report_draft.saved",
+          entityType: "report_draft",
+          entityId: `${candidateId}:report:${treeKey}:fieldNotes`,
+          candidateId,
+          payload: { candidateId, sectionKey: "report", treeId: treeKey, fieldKey: "fieldNotes", fieldType: "fieldNotes", value: tree.fieldNotes ?? "", updatedAt },
+          createdAt: updatedAt,
+        });
+      }
+      Object.entries(tree.finalSections ?? {}).forEach(([fieldKey, value]) => {
+        events.push({
+          clientEventId: localEventId(`report-draft-resend-${candidateId}-${treeKey}-${fieldKey}-${updatedAt}`),
+          type: "report_draft.saved",
+          entityType: "report_draft",
+          entityId: `${candidateId}:report:${treeKey}:${fieldKey}`,
+          candidateId,
+          payload: { candidateId, sectionKey: "report", treeId: treeKey, fieldKey, fieldType: "finalSection", value, updatedAt },
+          createdAt: updatedAt,
+        });
+      });
+    });
+
+    if (!events.length) return true;
+    await syncBatch(activeSessionToken, events);
+    addAudit("Candidate data sent to server", loggedCandidate.name, `${events.length} record(s)`);
+    return true;
+  }
+
   function openCandidateSection(key) {
     if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return;
     const current = candidateStatus[loggedCandidate.id]?.[key];
@@ -3074,10 +3133,9 @@ function VetBaraPrototype() {
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
-      {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
+      {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} t={t} />}
       {role === "Centre" && <AuditSyncView sync={sync} setSync={setSync} audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
-      {role === "Centre" && <MediaLibraryPanel sessionToken={activeSessionToken} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} FileSpreadsheet={FileSpreadsheet} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
     {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} t={t} />}
@@ -4904,6 +4962,9 @@ const WRITTEN_QUESTION_SCORES_KEY = "vetbara.writtenQuestionScores.v1";
 let activeExamScope = "";
 function setActiveExamScope(scope) {
   activeExamScope = String(scope || "").replace(/[^A-Za-z0-9._-]+/g, "-");
+}
+function getActiveExamScope() {
+  return activeExamScope;
 }
 function scopedCacheKey(baseKey) {
   return activeExamScope ? `${baseKey}.${activeExamScope}` : baseKey;
@@ -8715,7 +8776,7 @@ function CentreReviewCell({ status, onClick, t }) {
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, activeSessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -9151,6 +9212,9 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           </div>
         )}
       </div>
+
+      {/* Records & photos live with the scan tools: both are the Centre's evidence workspace. */}
+      <MediaLibraryPanel sessionToken={activeSessionToken} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} FileSpreadsheet={FileSpreadsheet} t={t} />
 
       <div className="flex flex-wrap gap-4 rounded-2xl border bg-slate-50 p-3 text-xs text-slate-600">
         <span className="font-semibold">{t("centre.review.legendTitle")}:</span>
@@ -9848,6 +9912,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             assignments={assignments}
             outdoorByExaminer={outdoorByExaminer}
             onOutdoorCorrection={applyOutdoorCorrection}
+            activeSessionToken={activeSessionToken}
             variants={variants}
             testBank={testBank}
             testResponses={testResponses}
@@ -10043,7 +10108,11 @@ function candidateTreeCharacteristics(tree) {
 }
 
 function candidateFieldExamIds() {
-  return Array.from(new Set([CENTRE_QR_ID, CENTRE_ACCESS_TOKEN, "VETBARA-CENTRE-ARBOR-2026"].filter(Boolean)));
+  // The session's own exam event comes first: the constants below are hardcoded to ARBOR-2026, so
+  // relying on them served every candidate that one certification's preparation regardless of which
+  // exam they belong to — the Orientation map then disagreed with the Centre's section B. The
+  // constants stay as a last-resort fallback so a session without a resolved scope still works.
+  return Array.from(new Set([getActiveExamScope(), CENTRE_QR_ID, CENTRE_ACCESS_TOKEN].filter(Boolean)));
 }
 
 function normalizeCandidateFieldPackage(data, candidate) {
@@ -10077,8 +10146,49 @@ async function fetchCandidateFieldPackage(candidate) {
   throw lastError || new Error("Field package is not available.");
 }
 
-function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, t }) {
+function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  // "" | "sending" | "done" — the button is white until a transfer succeeds, then green, and goes
+  // back to white on the next change so it always reflects the *current* state, never a stale one.
+  const [candidateSendState, setCandidateSendState] = useState("");
+
+  async function sendCandidateDataToServer() {
+    setCandidateSendState("sending");
+    try {
+      const ok = await resendCandidateData?.();
+      setCandidateSendState(ok === false ? "" : "done");
+    } catch {
+      setCandidateSendState("");
+    }
+  }
+
+  // Any change to the candidate's own answers or report invalidates the green confirmation.
+  useEffect(() => { setCandidateSendState(""); }, [testResponses, reportDrafts]);
+
+  // Leaving mid-exam (tab close, browser Back) can strand work that has not reached the server yet.
+  // The browser only allows a generic confirmation dialog here — the wording is the browser's, not
+  // ours — but it does force a deliberate second decision instead of a single stray click.
+  useEffect(() => {
+    if (!loggedCandidate) return undefined;
+    const onBeforeUnload = (event) => { event.preventDefault(); event.returnValue = t("candidate.leaveWarning"); return event.returnValue; };
+    const onPopState = () => {
+      if (window.confirm(t("candidate.leaveWarning"))) return;
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.history.pushState(null, "", window.location.href);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [loggedCandidate, t]);
+
+  function returnToIdentity() {
+    setActiveSection("landing");
+    unconfirmCandidate?.();
+  }
+
   const resolvedWrittenSnapshot = loggedCandidate ? resolveCandidateWrittenSnapshot({ candidate: loggedCandidate, variants, testBank }) : { variantCode: "", questions: [] };
   const selectedVariantCode = resolvedWrittenSnapshot.variantCode || (loggedCandidate ? variants[loggedCandidate.level] : "");
   const candidateQuestionSnapshot = resolvedWrittenSnapshot.questions;
@@ -10272,12 +10382,12 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} updatePreparationSketch={updateCandidateTreePreparationSketch} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} t={t} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill><StatusPill>{selectedVariantCode}</StatusPill></div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><Button onClick={logoutCandidate} variant="outline" className="mt-3 rounded-2xl">{t("common.logout")}</Button></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} className={`rounded-2xl ${candidateSendState === "done" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-white text-slate-950 hover:bg-slate-50"} border`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},
 // which is the only place title renders — kept empty rather than a hardcoded-language default.
-function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition, heightClass = "h-[430px]", allowPan = true, minZoom = 17, maxZoom = 20, title = "", showHeader = true }) {
+function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition, heightClass = "h-[430px]", allowPan = true, minZoom = 17, maxZoom = 20, title = "", showHeader = true, onLocate = null, gpsActive = false }) {
   const [center, setCenter] = useState(mapCenter);
   const [zoom, setZoom] = useState(mapZoom);
   const gestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: mapZoom });
@@ -10401,7 +10511,14 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
       </div>}
       <div onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onWheel={wheel} className="relative min-h-0 flex-1 touch-none overflow-hidden bg-slate-200">
         {tiles().map((tile) => <img key={tile.key} src={tile.src} alt="" draggable={false} className="absolute h-[256px] w-[256px] select-none" style={tile.style} />)}
-        <div className="absolute left-3 top-3 z-10 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">N ▲</div>
+        <div className="absolute left-3 top-3 z-30 flex flex-col items-center gap-2">
+          <div className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">N ▲</div>
+          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setZoom((current) => clamp(current + 1))} aria-label="Zoom in" title="Zoom in" className="flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm active:scale-95">+</button>
+          <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setZoom((current) => clamp(current - 1))} aria-label="Zoom out" title="Zoom out" className="flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm active:scale-95">−</button>
+          {onLocate && (
+            <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={onLocate} aria-label="GPS" title="GPS" aria-pressed={gpsActive} className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm active:scale-95 ${gpsActive ? "border-blue-600 bg-blue-600 text-white" : "bg-white/95 text-slate-700"}`}><MapPin className="h-4 w-4" /></button>
+          )}
+        </div>
         {markers.map((marker) => (
           <div key={marker.key} className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 ${marker.kind === "center" ? "text-rose-600" : "text-slate-950"}`} style={pointStyle(marker.latitude, marker.longitude)}>
             <div className={`rounded-full px-3 py-2 text-xs font-black shadow-lg ring-4 ring-white ${marker.kind === "center" ? "bg-rose-600 text-white" : marker.checked ? "bg-white text-slate-950 ring-emerald-600" : "bg-white text-slate-950"}`}>{marker.label}</div>
@@ -10420,7 +10537,7 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
 }
 
 function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, preparationDraft, updatePreparationNote, updatePreparationSketch, setActiveSection, mode = "orientation", t }) {
-  const [mapLayer, setMapLayer] = useState("cuzk");
+  const [mapLayer, setMapLayer] = useState(mode === "trees" ? "esri" : "osm");
   const [gpsPosition, setGpsPosition] = useState(null);
   const [sketchOpen, setSketchOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState("");
@@ -10463,7 +10580,6 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
     <div className="flex flex-wrap items-center gap-2 border-b bg-white/95 p-3 shadow-sm">
       <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
       <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? t("candidateSections.trees.title") : t("candidateSections.orientation.title")}</div>
-      <Button onClick={locate} variant="outline" className="rounded-2xl">GPS</Button>
       <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} className="rounded-2xl border bg-white px-3 py-2 text-sm font-medium text-slate-700">
         <option value="cuzk">{t("map.layer.cuzk")}</option>
         <option value="esri">{t("map.layer.esri")}</option>
@@ -10489,7 +10605,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <div className="fixed inset-0 z-50 flex flex-col bg-white">
         {toolbar}
         <div className="min-h-0 flex-1">
-          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} />
+          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
         </div>
       </div>
     );
@@ -10501,7 +10617,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
       <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
         <div className="grid h-full gap-0 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="h-64 border-b bg-slate-100 lg:h-full lg:border-b-0 lg:border-r">
-            <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={18} maxZoom={20} title={t("candidateField.treePreparation")} showHeader={false} />
+            <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={17} maxZoom={21} title={t("candidateField.treePreparation")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
           </div>
           <div className="bg-white p-4 lg:min-h-0 lg:overflow-y-auto">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -10690,6 +10806,10 @@ function candidateScanTestCode(candidate, variantCode) {
   return suffix ? `${levelChar}${suffix[1].toUpperCase()}` : levelChar;
 }
 
+function isInternalVariantCode(code) {
+  return /_ADMIN_PACKAGE$/.test(String(code || ""));
+}
+
 function variantCodeForCandidate(candidate, variants) {
   const level = candidateLevel(candidate);
 
@@ -10842,7 +10962,89 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
   );
 }
 
-function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, introAccepted, acceptIntro, t }) {
+// Time indicator for the candidate's timed sections (written test, report writing): an analog clock
+// on the current time, the moment the section opened, and the deadline. The deadline block changes
+// colour as the window closes — green, amber once `warnMinutes` remain, red for the last five —
+// and a short, deliberately quiet tone plays once when the red state is entered, so a candidate
+// with their head down still notices without the room being startled.
+function SectionTimerPanel({ openedAt, durationMinutes = 60, warnMinutes = 15, t }) {
+  const [now, setNow] = useState(() => new Date());
+  const alertedRef = useRef(false);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const openedDate = openedAt ? new Date(openedAt) : null;
+  const validOpen = openedDate && !Number.isNaN(openedDate.getTime());
+  const endDate = validOpen ? new Date(openedDate.getTime() + durationMinutes * 60000) : null;
+  const minutesLeft = endDate ? (endDate.getTime() - now.getTime()) / 60000 : null;
+  const tone = minutesLeft === null ? "neutral" : minutesLeft <= 5 ? "red" : minutesLeft <= warnMinutes ? "amber" : "green";
+
+  useEffect(() => {
+    if (tone !== "red" || alertedRef.current) return;
+    alertedRef.current = true;
+    // Generated rather than loaded: no asset to ship and it still works fully offline.
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 660;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.1);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 1.2);
+      osc.onended = () => ctx.close();
+    } catch { /* audio blocked or unavailable - the colour change still carries the warning */ }
+  }, [tone]);
+
+  const clockTime = (date) => date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const seconds = now.getSeconds();
+  const minutes = now.getMinutes() + seconds / 60;
+  const hours = (now.getHours() % 12) + minutes / 60;
+  const hand = (angleDeg, length, width, color) => {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return <line x1="50" y1="50" x2={50 + length * Math.cos(rad)} y2={50 + length * Math.sin(rad)} stroke={color} strokeWidth={width} strokeLinecap="round" />;
+  };
+  const toneClass = {
+    green: "border-emerald-300 bg-emerald-50 text-emerald-950",
+    amber: "border-amber-400 bg-amber-100 text-amber-950",
+    red: "border-rose-400 bg-rose-100 text-rose-950",
+    neutral: "border-slate-200 bg-slate-50 text-slate-700",
+  }[tone];
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-2 rounded-2xl border bg-white p-3 shadow-sm">
+      <svg viewBox="0 0 100 100" className="h-24 w-24" role="img" aria-label={clockTime(now)}>
+        <circle cx="50" cy="50" r="47" fill="#fff" stroke="#0f172a" strokeWidth="3" />
+        {Array.from({ length: 12 }, (_, i) => {
+          const rad = ((i * 30 - 90) * Math.PI) / 180;
+          return <circle key={i} cx={50 + 39 * Math.cos(rad)} cy={50 + 39 * Math.sin(rad)} r={i % 3 === 0 ? 2.6 : 1.4} fill="#0f172a" />;
+        })}
+        {hand(hours * 30, 24, 4.5, "#0f172a")}
+        {hand(minutes * 6, 34, 3, "#0f172a")}
+        {hand(seconds * 6, 37, 1.4, "#dc2626")}
+        <circle cx="50" cy="50" r="3" fill="#0f172a" />
+      </svg>
+      <div className="w-full space-y-1 text-center text-xs">
+        <div className="rounded-lg bg-slate-100 px-2 py-1 font-semibold text-slate-700">
+          {t("candidate.timer.openedAt")}: {validOpen ? clockTime(openedDate) : "-"}
+        </div>
+        <div className={`rounded-lg border px-2 py-1 font-bold ${toneClass}`}>
+          {t("candidate.timer.endsAt")}: {endDate ? clockTime(endDate) : "-"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, introAccepted, acceptIntro, openedAt, t }) {
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const requestedVariantCode = String(selectedVariantCode || "");
   const effectiveVariantCode = variantCodeMatchesCandidateLevel(candidate, requestedVariantCode)
@@ -10860,13 +11062,16 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
 
   return (
     <div className="rounded-2xl border bg-white p-4">
-      <div className="flex justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">{t("test.title")}</h3>
         </div>
-        <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">
-          {t("common.back")}
-        </Button>
+        <div className="flex items-start gap-3">
+          <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">
+            {t("common.back")}
+          </Button>
+          <SectionTimerPanel openedAt={openedAt} durationMinutes={60} warnMinutes={15} t={t} />
+        </div>
       </div>
 
       {questions.length === 0 ? (
@@ -10945,6 +11150,23 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [photoStatus, setPhotoStatus] = useState("");
   const [reportStep, setReportStep] = useState("field");
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [startConfirmOpen, setStartConfirmOpen] = useState(false);
+  // Persisted: the 60-minute report window must survive a reload, otherwise a refresh would silently
+  // restart the clock. Keyed per candidate so two candidates on one device never share a deadline.
+  const reportStartKey = `vetbara-report-writing-started-${candidate.id}`;
+  const [reportWritingStartedAt, setReportWritingStartedAt] = useState(() => {
+    try { return localStorage.getItem(reportStartKey) || ""; } catch { return ""; }
+  });
+
+  function beginReportWriting() {
+    const startedAt = reportWritingStartedAt || new Date().toISOString();
+    if (!reportWritingStartedAt) {
+      setReportWritingStartedAt(startedAt);
+      try { localStorage.setItem(reportStartKey, startedAt); } catch { /* private mode - the clock still runs for this session */ }
+    }
+    setStartConfirmOpen(false);
+    setReportStep("write");
+  }
   const [photoViewer, setPhotoViewer] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
@@ -11215,7 +11437,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         )}
 
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button onClick={() => setReportStep("write")} className="rounded-2xl">
+          <Button onClick={() => setStartConfirmOpen(true)} className="rounded-2xl">
             {t("report.continueWriting")}
           </Button>
         </div>
@@ -11233,13 +11455,11 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                 <h3 className="text-2xl font-bold">{t("report.writingStepTitle")}</h3>
                 <p className="mt-1 text-sm text-slate-600">{candidate.name} · {activeReportTree}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => setReportStep("field")} variant="outline" className="rounded-2xl">
-                  {t("report.backToFieldData")}
-                </Button>
+              <div className="flex flex-wrap items-start gap-3">
                 <Button onClick={handleSubmitReport} className="rounded-2xl">
                   <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
                 </Button>
+                <SectionTimerPanel openedAt={reportWritingStartedAt} durationMinutes={60} warnMinutes={30} t={t} />
               </div>
             </div>
           </div>
@@ -11322,6 +11542,21 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   return (
     <>
       {reportStep === "field" ? FieldCollectionStep() : ReportWritingStep()}
+
+      {startConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold">{t("candidate.report.startConfirm")}</h3>
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              {t("candidate.report.startConfirmInfo")}
+            </div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <Button onClick={() => setStartConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+              <Button onClick={beginReportWriting} className="rounded-2xl">{t("common.confirm")}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {submitConfirmOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
