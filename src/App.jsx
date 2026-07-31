@@ -11,8 +11,9 @@ import { decodeAllQrCodes, parseScanSortPayload, mapOffsetToPhoto, classifyMark,
 import { cropScoreBox, recognizeScore } from "./lib/scanScoreDetection";
 import { LANGUAGES as UI_LANGUAGES, makeTranslator, allTranslationKeys, translationFor, englishSourceFor, applyTranslationOverrides } from "./i18n";
 import { QRCodeSVG } from "qrcode.react";
-import { uploadExamMedia } from "./lib/api";
+import { uploadExamMedia, listExamMedia } from "./lib/api";
 import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder";
+import { OUTDOOR_AI_DRAFT_NOTES } from "./lib/outdoorAiDraftNotes";
 import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
@@ -9074,12 +9075,49 @@ function decodeAllQrCodesEnsemble(baseCanvas, maxCodes = 12) {
   return { canvas: baseCanvas, results: [], enhanced: false };
 }
 
+// Collapsed by default, next to a question that has a manually-curated draft note (see
+// outdoorAiDraftNotes.js). This is reference material for the Centre to weigh alongside the
+// examiner's own score - a transcript excerpt and a suggested point value/reasoning drafted from
+// the candidate's recording, never written into outdoor_scores itself. Always shown collapsed and
+// always labeled as a draft to verify against the linked recording, so it can't be mistaken for an
+// automatic or authoritative score.
+function OutdoorAiNotePanel({ note, audioUrl, t }) {
+  const [open, setOpen] = useState(false);
+  if (!note) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-[11px] font-semibold text-amber-900"
+      >
+        <span>{t("outdoor.review.aiNote.toggle")}</span>
+        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-amber-200 px-2 py-2 text-[11px] text-amber-950">
+          <div className="font-semibold text-amber-800">{t("outdoor.review.aiNote.disclaimer")}</div>
+          {note.transcript && <p className="italic">&ldquo;{note.transcript}&rdquo;</p>}
+          <div className="font-semibold">
+            {t("outdoor.review.aiNote.suggested")}: {formatHalfPointScore(note.pointsAwarded)} / {note.pointsMax}
+          </div>
+          {note.positive && <p><span className="font-semibold">+</span> {note.positive}</p>}
+          {note.deduction && <p><span className="font-semibold">&minus;</span> {note.deduction}</p>}
+          {audioUrl
+            ? <audio controls preload="none" src={audioUrl} className="mt-1 w-full" />
+            : <p className="text-amber-700">{t("outdoor.review.aiNote.noRecording")}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Final-review modal: shows every question with the candidate's answer highlighted next to the
 // correct answer / scoring help, any scanned handwriting crops assigned to that question, and
 // (once an Examiner has identified themselves) a "mark as corrected" action.
 // One examiner's column of the Outdoor review. The primary examiner's own column is editable when
 // they have identified themselves; sketches are always read-only (they are drawn in the field).
-function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
+function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId, audioUrl, t }) {
   const [openSketch, setOpenSketch] = useState(null);
   const { scores, notes, noteDrawings } = column.data;
   const scoreOf = (item) => (item.excluded ? 0 : Number(scores?.[item.id] ?? 0));
@@ -9122,6 +9160,7 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
                 {group.items.map((item) => {
                   const sketch = noteDrawings?.[item.id];
                   const note = notes?.[item.id] ?? "";
+                  const aiNote = OUTDOOR_AI_DRAFT_NOTES[candidateId]?.[item.id];
                   const score = scores?.[item.id] ?? "";
                   const hasScore = score !== "" && score !== null && score !== undefined;
                   return (
@@ -9177,6 +9216,7 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
                           </button>
                         </div>
                       )}
+                      <OutdoorAiNotePanel note={aiNote} audioUrl={audioUrl} t={t} />
                     </div>
                   );
                 })}
@@ -9198,7 +9238,26 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
   );
 }
 
-function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, onWrittenCorrection, onReportCorrection, isCorrected, onClose, t }) {
+function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, onWrittenCorrection, onReportCorrection, isCorrected, onClose, sessionToken, t }) {
+  // Fetched once per candidate (not per examiner column - both columns share the same recording)
+  // so OutdoorAiNotePanel's draft note can link straight to the candidate's own outdoor recording
+  // instead of sending the reviewer hunting for it in Records & photos.
+  const [outdoorAudioUrl, setOutdoorAudioUrl] = useState(null);
+  useEffect(() => {
+    setOutdoorAudioUrl(null);
+    if (section.kind !== "outdoor" || !sessionToken) return undefined;
+    let cancelled = false;
+    listExamMedia(sessionToken)
+      .then((result) => {
+        if (cancelled) return;
+        const media = Array.isArray(result?.media) ? result.media : [];
+        const match = media.find((item) => item.mediaType === "audio" && item.sectionKey === "outdoor" && item.candidateId === candidate.id);
+        if (match?.downloadUrl) setOutdoorAudioUrl(match.downloadUrl);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [section.kind, sessionToken, candidate.id]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
       {/* Outdoor shows two examiner columns side by side, so it gets the wider frame. */}
@@ -9288,9 +9347,11 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                     items={snapshot.items}
                     editable={canEditPrimary}
                     onChange={(itemId, patch) => onOutdoorCorrection?.(candidate, snapshot.primary.examinerId, itemId, patch)}
+                    candidateId={candidate.id}
+                    audioUrl={outdoorAudioUrl}
                     t={t}
                   />
-                  <OutdoorExaminerColumn column={snapshot.secondary} items={snapshot.items} editable={false} onChange={() => {}} t={t} />
+                  <OutdoorExaminerColumn column={snapshot.secondary} items={snapshot.items} editable={false} onChange={() => {}} candidateId={candidate.id} audioUrl={outdoorAudioUrl} t={t} />
                 </div>
               </div>
             );
@@ -10466,6 +10527,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           onMarkCorrected={markCorrected}
           isCorrected={cellStatus(reviewTarget.candidate, reviewTarget.sectionKey) === "corrected"}
           onClose={() => setReviewTarget(null)}
+          sessionToken={activeSessionToken}
           t={t}
         />
       )}
