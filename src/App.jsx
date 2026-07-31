@@ -12357,7 +12357,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
           <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">
             {t("common.back")}
           </Button>
-          <SectionTimerPanel openedAt={openedAt} durationMinutes={60} warnMinutes={15} t={t} />
+          <SectionTimerPanel openedAt={openedAt} durationMinutes={candidateLevel(candidate) === "Consulting" ? 120 : 60} warnMinutes={15} t={t} />
         </div>
       </div>
 
@@ -12749,7 +12749,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                 <Button onClick={handleSubmitReport} className="rounded-2xl">
                   <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
                 </Button>
-                <SectionTimerPanel openedAt={reportWritingStartedAt} durationMinutes={60} warnMinutes={30} t={t} />
+                <SectionTimerPanel openedAt={reportWritingStartedAt} durationMinutes={120} warnMinutes={30} t={t} />
               </div>
             </div>
           </div>

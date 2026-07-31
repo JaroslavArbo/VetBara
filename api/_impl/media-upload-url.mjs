@@ -71,7 +71,13 @@ function isAssignedExaminer(examinerId, candidateId) {
   return Boolean(assignment && (assignment.primary === examinerId || assignment.secondary === examinerId));
 }
 
-function scopeError(session, media) {
+// Real rosters live in examiner_assignments (fetched once per request, see handler below). When
+// that lookup succeeded it is the ONLY authority — the hardcoded ASSIGNMENTS above only pairs the
+// 4 standard demo ids (C-001..004/E-001..003), so consulting it alongside a real roster of more
+// than 4 candidates silently rejected every examiner assigned to candidate 5+ ("Examiner can
+// upload only for assigned candidates" even though the Centre's own roster shows them assigned).
+// The demo map is reached only when the lookup was unavailable (no backend / query failed).
+function scopeError(session, media, dbAssignedCandidateIds) {
   const candidateId = media.candidateId ? String(media.candidateId) : null;
 
   // Centre/Admin upload field-preparation site photos, which are keyed by exam
@@ -89,7 +95,10 @@ function scopeError(session, media) {
   }
   if (session.role === "Examiner") {
     if (media.mediaType !== "audio") return "Examiner can upload only audio recordings";
-    return isAssignedExaminer(session.subject_id, candidateId) ? null : "Examiner can upload only for assigned candidates";
+    const assigned = dbAssignedCandidateIds
+      ? dbAssignedCandidateIds.has(candidateId)
+      : isAssignedExaminer(session.subject_id, candidateId);
+    return assigned ? null : "Examiner can upload only for assigned candidates";
   }
   return "Role cannot upload media";
 }
@@ -156,7 +165,15 @@ export default async function handler(request, response) {
     const media = normalizeMedia(rawMedia);
     if (!media.clientMediaId) return sendJson(response, 400, { error: "Missing clientMediaId" });
 
-    const scope = scopeError(session, media);
+    let dbAssignedCandidateIds = null;
+    if (session.role === "Examiner" && envReady()) {
+      try {
+        const rows = await supabase(`examiner_assignments?examiner_id=eq.${encodeURIComponent(session.subject_id)}&select=candidate_id`);
+        dbAssignedCandidateIds = new Set(rows.map((row) => row.candidate_id));
+      } catch { dbAssignedCandidateIds = null; }
+    }
+
+    const scope = scopeError(session, media, dbAssignedCandidateIds);
     if (scope) return sendJson(response, 403, { error: scope });
 
     // Demo / no backend configured: client keeps the local IndexedDB copy only.
