@@ -9414,10 +9414,19 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
 // The corner QR is rendered with includeMargin:true (see scanSortQr in printCandidateTest),
 // which bakes a fixed 4-module quiet zone into the SVG's own viewBox — e.g. a 21x21-module QR
 // becomes a 29x29 viewBox. jsQR's detected corners bound only the actual module grid (the quiet
-// zone isn't part of the symbol by definition), so that inner grid — not the full 13mm rendered
+// zone isn't part of the symbol by definition), so that inner grid — not the full 15mm rendered
 // box — is the ruler a photographed QR actually gives us. QR_MARGIN_MODULES mirrors
 // qrcode.react's own SPEC_MARGIN_SIZE constant.
 const QR_MARGIN_MODULES = 4;
+// Real scanned test photos showed jsQR's success rate on the small per-question corner QR
+// dropping sharply at the previous 13mm print size — the 21-module V1 code plus its 4-module
+// quiet zone on each side works out to roughly a 0.45mm module, well under the ~1mm most phone
+// cameras need to resolve reliably at typical scanning distance/lighting (see the QR ensemble
+// retry in decodeAllQrCodesEnsemble, added for the same real-world failures). This drives both
+// the print CSS (below and in printCandidateTest) and the offscreen checkbox-layout measurement
+// (measureCandidateCheckboxLayout) — both must move together or the two stop agreeing on where a
+// question's checkboxes sit relative to its QR.
+const SCAN_QR_PRINT_MM = 15;
 function qrModuleGridMm(svgMarkup, renderedMm) {
   const match = svgMarkup.match(/viewBox="0 0 (\d+) (\d+)"/);
   const totalUnits = match ? Number(match[1]) : null;
@@ -9448,7 +9457,7 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
     #vetbara-scan-measure .pt-question-head{font-size:8pt}
     #vetbara-scan-measure .pt-question-head::after{content:"";display:block;clear:both}
     #vetbara-scan-measure .pt-corner-qr{background:#fff;padding:1mm}
-    #vetbara-scan-measure .pt-corner-qr svg{width:13mm;height:13mm;display:block}
+    #vetbara-scan-measure .pt-corner-qr svg{width:${SCAN_QR_PRINT_MM}mm;height:${SCAN_QR_PRINT_MM}mm;display:block}
     #vetbara-scan-measure .pt-corner-qr-options{float:right;display:block;margin:0 0 1.5mm 3mm}
     #vetbara-scan-measure .pt-options::after{content:"";display:block;clear:both}
     #vetbara-scan-measure .pt-qtext{font-weight:700;margin:2.5mm 0;font-size:11.5pt;clear:both}
@@ -9492,12 +9501,12 @@ function measureCandidateCheckboxLayout(questions, testCode, candidateNumber) {
   document.body.appendChild(container);
   const layout = {};
   sections.forEach(({ question, section, qrSvg }) => {
-    // The module grid jsQR actually bounds sits inset from the rendered 13mm SVG box by the
-    // quiet-zone margin on every side.
+    // The module grid jsQR actually bounds sits inset from the rendered SCAN_QR_PRINT_MM SVG box
+    // by the quiet-zone margin on every side.
     const svgRect = section.querySelector(".pt-corner-qr svg").getBoundingClientRect();
-    const pxPerMm = svgRect.width / 13;
-    const moduleGridMm = qrModuleGridMm(qrSvg, 13);
-    const marginMm = (13 - moduleGridMm) / 2;
+    const pxPerMm = svgRect.width / SCAN_QR_PRINT_MM;
+    const moduleGridMm = qrModuleGridMm(qrSvg, SCAN_QR_PRINT_MM);
+    const marginMm = (SCAN_QR_PRINT_MM - moduleGridMm) / 2;
     const moduleGridLeft = svgRect.left + marginMm * pxPerMm;
     const moduleGridTop = svgRect.top + marginMm * pxPerMm;
     const options = [...section.querySelectorAll(".pt-checkbox")].map((boxEl, index) => {
@@ -10929,7 +10938,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
       .pt-question-head::after{content:"";display:block;clear:both}
       .pt-qcode{float:left}
       .pt-corner-qr{float:right;background:#fff;padding:1mm}
-      .pt-corner-qr svg{width:13mm;height:13mm}
+      .pt-corner-qr svg{width:${SCAN_QR_PRINT_MM}mm;height:${SCAN_QR_PRINT_MM}mm}
       .pt-corner-qr-options{float:right;display:block;margin:0 0 1.5mm 3mm}
       .pt-section{break-after:avoid;font-size:12pt;margin:7mm 0 3mm;padding-bottom:1.5mm;border-bottom:1.5pt solid #102018;color:#0f3d2e}
       .pt-section:first-child{margin-top:0}
