@@ -10681,12 +10681,22 @@ function candidateTreeCharacteristics(tree) {
   ];
 }
 
+// The Centre saves its field preparation under its OWN subject id (fieldPrepExamId = centreExamId,
+// e.g. "Casalgrande_Italy-2026-07-31"), but a candidate/examiner session's resolved scope is the
+// exam EVENT id "EXAM-<centreId>-CURRENT" (defaultExamEventId). Recover the centre id from the event
+// id so the field package is fetched under the same key section B wrote to.
+function centreExamIdFromScope(scope) {
+  const match = /^EXAM-(.+)-CURRENT$/.exec(String(scope || ""));
+  return match ? match[1] : "";
+}
+
 function candidateFieldExamIds() {
-  // The session's own exam event comes first: the constants below are hardcoded to ARBOR-2026, so
-  // relying on them served every candidate that one certification's preparation regardless of which
-  // exam they belong to — the Orientation map then disagreed with the Centre's section B. The
-  // constants stay as a last-resort fallback so a session without a resolved scope still works.
-  return Array.from(new Set([getActiveExamScope(), CENTRE_QR_ID, CENTRE_ACCESS_TOKEN].filter(Boolean)));
+  // Order matters: the derived centre id (where the preparation actually lives) is tried first, then
+  // the raw scope, then the ARBOR-2026 constants as a last resort. Before this, a candidate's scope
+  // was the event id, which never matches the stored preparation, so the fetch 404'd and the
+  // Orientation map fell back to the ARBOR site instead of showing the Centre's section B map.
+  const scope = getActiveExamScope();
+  return Array.from(new Set([centreExamIdFromScope(scope), scope, CENTRE_QR_ID, CENTRE_ACCESS_TOKEN].filter(Boolean)));
 }
 
 function normalizeCandidateFieldPackage(data, candidate) {
