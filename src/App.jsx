@@ -2201,6 +2201,30 @@ function VetBaraPrototype() {
     });
   }
 
+  // Closing the scan-marking window feeds the marks into the candidate's written classification the
+  // same way an examiner's own review does — one examiner_score.saved event per candidate carrying
+  // the total, plus an audit entry naming who marked it.
+  function applyScanGrading(candidate, scores, identifiedExaminer) {
+    if (!candidate?.id) return;
+    const total = Object.values(scores).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const updatedAt = new Date().toISOString();
+    const examinerId = identifiedExaminer?.id || null;
+
+    setCandidates((prev) => prev.map((item) => (item.id === candidate.id ? { ...item, written: total } : item)));
+    addAudit("Scanned test graded", candidate.name, `${total} points · ${identifiedExaminer?.name || "unidentified"}`);
+
+    if (!examinerId) return;
+    sendSyncEvent({
+      clientEventId: localEventId(`scan-grading-${candidate.id}-${examinerId}-${updatedAt}`),
+      type: "examiner_score.saved",
+      entityType: "examiner_score",
+      entityId: `${candidate.id}:written`,
+      candidateId: candidate.id,
+      payload: { candidateId: candidate.id, examinerId, mode: "primary", role: "primary", field: "written", value: total, scores, source: "scan", updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
   function applyCentreSetup(result) {
     if (Array.isArray(result.candidates)) {
       setCandidates(result.candidates.map((candidate) => ({
@@ -8768,15 +8792,92 @@ function loadImageFromDataUrl(dataUrl) {
 
 const CENTRE_REVIEW_STATUS_COLORS = { locked: "bg-slate-200 text-slate-500", open: "bg-amber-400 text-amber-950", closed: "bg-rose-500 text-white", corrected: "bg-emerald-500 text-white" };
 
-function CentreReviewCell({ status, onClick, t }) {
+// Marking a consolidated paper test: the scanned pages on the left, and on the right every question
+// with its classification aid and a score box. Scores are written to the same per-question store the
+// examiner's own written review uses, so closing this feeds straight into the candidate's marks.
+function ScanGradingModal({ candidate, pages, questions, initialScores, onSave, onClose, t }) {
+  const [scores, setScores] = useState(() => ({ ...initialScores }));
+  const total = questions.reduce((sum, question) => sum + (Number(scores[question.id]) || 0), 0);
+  const max = questions.reduce((sum, question) => sum + Number(question.points || 0), 0);
+
   return (
-    <button type="button" onClick={onClick} className={`w-full rounded-xl px-2 py-2 text-center text-xs font-bold ${CENTRE_REVIEW_STATUS_COLORS[status] || CENTRE_REVIEW_STATUS_COLORS.locked}`}>
+    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950/80 p-4">
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col rounded-2xl bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+          <div>
+            <h2 className="text-lg font-bold">{candidate.name} · {t("centre.scan.gradingTitle")}</h2>
+            <p className="text-sm text-slate-600">{candidate.id} · {candidate.level}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-bold">{total} / {max} b.</span>
+            <Button onClick={() => { onSave(scores); onClose(); }} className="rounded-2xl">{t("centre.scan.saveGrading")}</Button>
+            <Button onClick={onClose} variant="outline" className="rounded-2xl">{t("common.close")}</Button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-2">
+          <div className="min-h-0 overflow-auto rounded-2xl border bg-slate-100 p-3">
+            {pages.length === 0
+              ? <div className="rounded-xl bg-white p-3 text-sm text-slate-600">{t("centre.scan.emptyState")}</div>
+              : pages.map((page, index) => (
+                  <img key={page.id} src={page.dataUrl} alt={`scan page ${index + 1}`} className="mb-3 w-full rounded-xl border bg-white" />
+                ))}
+          </div>
+
+          <div className="min-h-0 space-y-3 overflow-auto pr-1">
+            {questions.map((question, index) => (
+              <div key={question.id} className="rounded-2xl border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs text-slate-500">{index + 1}. {question.id}</div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm font-medium">{cleanQuestionText(question.text)}</div>
+                  </div>
+                  <label className="shrink-0 text-xs font-semibold text-slate-600">
+                    {t("centre.scan.score")} / {question.points ?? "-"}
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max={question.points ?? undefined}
+                      value={scores[question.id] ?? ""}
+                      onChange={(event) => setScores((current) => ({ ...current, [question.id]: event.target.value }))}
+                      className="mt-1 block w-24 rounded-lg border p-1 text-right text-sm font-bold"
+                    />
+                  </label>
+                </div>
+                {question.correctAnswer && (
+                  <div className="mt-2 text-xs text-slate-500">{t("centre.review.correctAnswer")}: {question.correctAnswer}</div>
+                )}
+                {question.scoringHelp && (
+                  <div className="mt-2 whitespace-pre-wrap rounded-xl bg-amber-50 p-2 text-xs text-amber-950">
+                    <span className="font-semibold">{t("centre.review.scoringHelp")}: </span>{question.scoringHelp}
+                  </div>
+                )}
+              </div>
+            ))}
+            {!questions.length && <p className="text-sm text-slate-500">{t("centre.review.noQuestions")}</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={locked}
+      title={locked ? lockedTitle : undefined}
+      className={`w-full rounded-xl px-2 py-2 text-center text-xs font-bold ${CENTRE_REVIEW_STATUS_COLORS[status] || CENTRE_REVIEW_STATUS_COLORS.locked} ${locked ? "cursor-not-allowed opacity-50" : ""}`}
+    >
       {t(`centre.review.status.${status}`)}
     </button>
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, activeSessionToken, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, activeSessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -8794,6 +8895,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   const [scanMessage, setScanMessage] = useState(null);
   const [showConnectQr, setShowConnectQr] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
+  const [scanGradingCandidate, setScanGradingCandidate] = useState(null);
   const checkboxLayoutCacheRef = useRef({});
   // A phone that scans the "Připojit tablet/telefon" QR uploads photos to this exam's server-side
   // scan inbox (see ScanCaptureMobilePage); this browser's own Centre session polls for new
@@ -8955,6 +9057,27 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     setProcessedInfo((prev) => ({ ...prev, [candidate.id]: { at: new Date().toISOString(), pageCount: pages.length, errorCount } }));
   }
 
+  // The examiner must not see a test or report while the candidate is still working on it, so a
+  // cell only opens once that section is closed (outdoor is the examiner's own form, so it is
+  // reviewable whenever it has been submitted).
+  // One pass over everyone who has scanned pages: assemble each candidate's test from their pages
+  // and run the same detection that the per-candidate button does, so the Centre does not have to
+  // confirm and process every candidate by hand before marking can start.
+  function consolidateAllScans() {
+    const withPages = candidates.filter((candidate) => (scans[candidate.id] || []).length);
+    if (!withPages.length) {
+      setScanMessage({ tone: "warn", text: t("centre.scan.emptyState") });
+      return;
+    }
+    withPages.forEach((candidate) => processCandidateScans(candidate));
+    setScanMessage({ tone: "good", text: tf("centre.scan.consolidatedInfo", { count: withPages.length }) });
+  }
+
+  function cellReviewable(candidate, sectionKey) {
+    if (sectionKey === "outdoor") return true;
+    return candidateStatus?.[candidate.id]?.[sectionKey] === "closed";
+  }
+
   function cellStatus(candidate, sectionKey) {
     const key = `${candidate.id}:${sectionKey}`;
     if (correctionStatus[key]) return "corrected";
@@ -9084,7 +9207,13 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
                   if (section.consultingOnly && candidate.level !== "Consulting") return <td key={section.key} className="py-2 pr-3 text-center text-slate-300">—</td>;
                   return (
                     <td key={section.key} className="py-2 pr-3">
-                      <CentreReviewCell status={cellStatus(candidate, section.key)} t={t} onClick={() => setReviewTarget({ candidate, sectionKey: section.key })} />
+                      <CentreReviewCell
+                        status={cellStatus(candidate, section.key)}
+                        locked={!cellReviewable(candidate, section.key)}
+                        lockedTitle={t("centre.review.notSubmittedYet")}
+                        t={t}
+                        onClick={() => { if (cellReviewable(candidate, section.key)) setReviewTarget({ candidate, sectionKey: section.key }); }}
+                      />
                     </td>
                   );
                 })}
@@ -9195,6 +9324,13 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           )}
         </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button onClick={consolidateAllScans} disabled={!candidates.some((candidate) => (scans[candidate.id] || []).length)} className="rounded-2xl">
+            {t("centre.scan.consolidateAll")}
+          </Button>
+          <span className="text-xs text-slate-500">{t("centre.scan.consolidateAllHelper")}</span>
+        </div>
+
         {unmatchedScans.length > 0 && (
           <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-3">
             <div className="text-sm font-semibold text-rose-950">{t("centre.scan.unmatchedTitle")}</div>
@@ -9216,6 +9352,21 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
       {/* Records & photos live with the scan tools: both are the Centre's evidence workspace. */}
       <MediaLibraryPanel sessionToken={activeSessionToken} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} FileSpreadsheet={FileSpreadsheet} t={t} />
 
+      <CentreCandidateResultsOverview
+        candidates={candidates}
+        assignments={assignments}
+        examiners={examiners}
+        variants={variants}
+        testBank={testBank}
+        testResponses={testResponses}
+        reportDrafts={reportDrafts}
+        outdoor={outdoor}
+        outdoorItemsByLevel={outdoorItemsByLevel}
+        scanPagesFor={(candidateId) => scans[candidateId] || []}
+        onOpenScanGrading={(candidate) => { if (!identifiedExaminer) { requireIdentify(); return; } setScanGradingCandidate(candidate); }}
+        t={t}
+      />
+
       <div className="flex flex-wrap gap-4 rounded-2xl border bg-slate-50 p-3 text-xs text-slate-600">
         <span className="font-semibold">{t("centre.review.legendTitle")}:</span>
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-slate-200" /> {t("centre.review.status.locked")}</span>
@@ -9223,6 +9374,25 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-rose-500" /> {t("centre.review.status.closed")}</span>
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-full bg-emerald-500" /> {t("centre.review.status.corrected")}</span>
       </div>
+
+      {scanGradingCandidate && (() => {
+        const questions = computeWrittenTestReview(scanGradingCandidate, variants, testBank, testResponses).items.map((item) => item.question);
+        return (
+          <ScanGradingModal
+            candidate={scanGradingCandidate}
+            pages={scans[scanGradingCandidate.id] || []}
+            questions={questions}
+            initialScores={readWrittenQuestionScores(scanGradingCandidate.id)}
+            onSave={(scores) => {
+              const numeric = Object.fromEntries(Object.entries(scores).map(([id, value]) => [id, value === "" ? "" : Number(value)]));
+              writeWrittenQuestionScores(scanGradingCandidate.id, numeric);
+              onScanGradingSaved?.(scanGradingCandidate, numeric, identifiedExaminer);
+            }}
+            onClose={() => setScanGradingCandidate(null)}
+            t={t}
+          />
+        );
+      })()}
 
       {reviewTarget && (
         <CentreReviewModal
@@ -9891,7 +10061,6 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
               <StatusPill>{peopleMeta}</StatusPill>
             </div>
             <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintAllTests={printAllCandidateTests} onPrintCandidateTest={printCandidateTest} />
-            <CentreCandidateResultsOverview candidates={candidates} assignments={assignments} examiners={examiners} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorItemsByLevel={outdoorItemsByLevel} t={t} />
           </div>
         </AdminDashboardSection>
 
@@ -9912,6 +10081,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             assignments={assignments}
             outdoorByExaminer={outdoorByExaminer}
             onOutdoorCorrection={applyOutdoorCorrection}
+            onScanGradingSaved={applyScanGrading}
             activeSessionToken={activeSessionToken}
             variants={variants}
             testBank={testBank}
@@ -13422,7 +13592,7 @@ function examinerReportSummary(candidate, reportDrafts) {
   };
 }
 
-function CentreCandidateResultsOverview({ candidates, assignments, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel, t }) {
+function CentreCandidateResultsOverview({ candidates, assignments, examiners, variants, testBank, testResponses, reportDrafts, outdoor, outdoorItemsByLevel, scanPagesFor, onOpenScanGrading, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [storedOutdoorResults, setStoredOutdoorResults] = useState(() => readOutdoorCentreResults());
   const [examinerResults, setExaminerResults] = useState(() => readExaminerResultsLocal());
@@ -13459,6 +13629,7 @@ function CentreCandidateResultsOverview({ candidates, assignments, examiners, va
               <th className="py-2 pr-3">{t("centre.resultsOverview.candidateNumber")}</th>
               <th className="py-2 pr-3">{t("centre.resultsOverview.name")}</th>
               <th className="py-2 pr-3">{t("centre.resultsOverview.testResult")}</th>
+              <th className="py-2 pr-3">{t("centre.resultsOverview.scan")}</th>
               <th className="py-2 pr-3">{t("centre.resultsOverview.outdoorResult")}</th>
               <th className="py-2 pr-3">{t("centre.resultsOverview.reportResult")}</th>
             </tr>
@@ -13489,6 +13660,7 @@ function CentreCandidateResultsOverview({ candidates, assignments, examiners, va
                   <td className="py-3 pr-3"><div className="font-semibold">{candidate.id}</div><div className="text-xs text-slate-500">{candidate.level}</div></td>
                   <td className="py-3 pr-3"><div className="font-medium">{candidate.name}</div></td>
                   <td className="py-3 pr-3"><StatusPill tone={written.closed ? "good" : written.answered ? "warn" : "default"}>{written.score} / {written.max}</StatusPill><div className="mt-1 text-xs text-slate-500">{tf("centre.resultsOverview.answeredCount", { answered: written.answered, total: written.total })}{written.updatedAt ? ` · ${new Date(written.updatedAt).toLocaleString("cs-CZ")}` : ""}</div></td>
+                  <td className="py-3 pr-3">{scanPagesFor?.(candidate.id)?.length ? <Button onClick={() => onOpenScanGrading?.(candidate)} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{t("centre.resultsOverview.scan")}</Button> : <span className="text-slate-300">—</span>}</td>
                   <td className="py-3 pr-3"><StatusPill tone={outdoorSummary.closed || submittedOutdoorRows.length ? "good" : outdoorSummary.answered ? "warn" : "default"}>{outdoorSummary.total} / {outdoorSummary.max}</StatusPill><div className="mt-1 text-xs text-slate-500">{t("centre.resultsOverview.primary")}: {examinerNameById(examiners, assignment.primary)} · {t("centre.resultsOverview.secondary")}: {examinerNameById(examiners, assignment.secondary)}</div>{(submittedOutdoorRows.length > 0 || outdoorSummary.closed) && <div className="mt-1 text-xs text-emerald-700">{t("centre.resultsOverview.closed")}: {submittedOutdoorRows.length ? submittedOutdoorRows.map((row) => `${row.mode || row.role || "examiner"} ${row.total ?? 0}/${row.max ?? outdoorSummary.max}`).join(" · ") : `${storedOutdoorResult?.role || storedOutdoorResult?.examinerName || "examiner"} ${outdoorSummary.total}/${outdoorSummary.max}`}</div>}{(() => { const summaryRow = submittedOutdoorRows.find((row) => String(row.examSummary || "").trim()) || (String(storedOutdoorResult?.examSummary || "").trim() ? storedOutdoorResult : null); return summaryRow ? <div className="mt-1 max-w-md whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs italic text-slate-700"><span className="font-semibold not-italic">{t("outdoor.summary.title")}: </span>{summaryRow.examSummary}</div> : null; })()}</td>
                   <td className="py-3 pr-3">{candidate.level === "Consulting" ? <><StatusPill tone={report.complete ? "good" : report.sections ? "warn" : "default"}>{report.label}</StatusPill></> : <span className="text-slate-400">{t("centre.resultsOverview.notRequired")}</span>}</td>
                 </tr>

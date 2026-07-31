@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function tr(t, key, fallback) {
   return typeof t === "function" ? t(key) : fallback;
@@ -40,6 +40,12 @@ export function translateAuditAction(t, action) {
 // Leaving the exam interface is the one thing a remote invigilator has to notice immediately, so
 // these two actions are pulled out of the stream visually rather than being one row among hundreds.
 const ALERT_ACTIONS = new Set(["Exited fullscreen", "Switched away from app"]);
+
+// A device that has stopped reporting is a different problem from a candidate who tabbed away: the
+// Centre simply cannot see them any more, so their strip entry is stale rather than alarming. The
+// audit stream is the only liveness signal available, so "no event for this long" is the test.
+const OFFLINE_AFTER_MS = 3 * 60 * 1000;
+const OFFLINE_ACTIONS = new Set(["Backend unavailable", "QR resolve failed"]);
 
 // addAudit()'s `target` is whichever person/entity the event concerns (not necessarily who
 // clicked something — e.g. an examiner opening a candidate's outdoor form logs the candidate as
@@ -90,7 +96,7 @@ function groupAuditByDate(entries) {
 // Live per-candidate supervision state derived from the stream: which section each person currently
 // has open, and whether they are outside the exam interface right now. The audit list is newest
 // first, so the first matching entry per person is their current state.
-function buildLiveState(rows) {
+function buildLiveState(rows, now = Date.now()) {
   const state = new Map();
   [...rows].reverse().forEach((row) => {
     const key = row.person.id;
@@ -99,10 +105,17 @@ function buildLiveState(rows) {
     if (row.item.action === "Candidate section closed") entry.openSection = "";
     if (row.item.action === "Switched away from app" || row.item.action === "Exited fullscreen") { entry.away = true; entry.alerts += 1; }
     if (row.item.action === "Returned to app" || row.item.action === "Entered fullscreen") entry.away = false;
+    if (OFFLINE_ACTIONS.has(row.item.action)) entry.lostBackend = true;
+    else entry.lostBackend = false;
     entry.lastAt = row.item.createdAt || entry.lastAt;
     state.set(key, entry);
   });
-  return [...state.values()].filter((entry) => entry.person.kind !== "centre");
+  return [...state.values()]
+    .filter((entry) => entry.person.kind !== "centre")
+    .map((entry) => ({
+      ...entry,
+      offline: entry.lostBackend || (entry.lastAt ? now - new Date(entry.lastAt).getTime() > OFFLINE_AFTER_MS : false),
+    }));
 }
 
 export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionTitle, StatusPill, Button, Card, CardContent, t }) {
@@ -136,7 +149,12 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
     return true;
   });
 
-  const liveState = useMemo(() => buildLiveState(rows), [rows]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+  const liveState = useMemo(() => buildLiveState(rows, now), [rows, now]);
   const alertCount = rows.filter((row) => ALERT_ACTIONS.has(row.item.action)).length;
   const auditGroups = groupAuditByDate(filtered.slice(0, 400).map((row) => row.item));
   const personOf = new Map(filtered.map((row) => [row.item.id, row.person]));
@@ -155,14 +173,16 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
         {liveState.length > 0 && (
           <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {liveState.map((entry) => (
-              <div key={entry.person.id} className={`rounded-2xl border p-3 text-sm ${entry.away ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
+              <div key={entry.person.id} className={`rounded-2xl border p-3 text-sm ${entry.offline ? "border-blue-400 bg-blue-50" : entry.away ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"}`}>
                 <div className="font-semibold">{entry.person.label}</div>
                 <div className="mt-1 text-xs text-slate-600">
                   {entry.openSection
                     ? `${tr(t, "auditSync.live.openSection", "Open section")}: ${entry.openSection}`
                     : tr(t, "auditSync.live.noOpenSection", "No open section")}
                 </div>
-                {entry.away && <div className="mt-1 text-xs font-bold text-amber-900">{tr(t, "auditSync.live.away", "Outside the exam interface")}</div>}
+                {entry.offline
+                  ? <div className="mt-1 text-xs font-bold text-blue-900">{tr(t, "auditSync.live.offline", "Device offline - no report received")}</div>
+                  : entry.away && <div className="mt-1 text-xs font-bold text-amber-900">{tr(t, "auditSync.live.away", "Outside the exam interface")}</div>}
                 {entry.alerts > 0 && <div className="mt-1 text-xs text-slate-500">{tr(t, "auditSync.live.alerts", "Alerts")}: {entry.alerts}</div>}
               </div>
             ))}
@@ -209,10 +229,11 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
                     {group.entries.map((item) => {
                       const person = personOf.get(item.id);
                       const alert = ALERT_ACTIONS.has(item.action);
+                      const offline = OFFLINE_ACTIONS.has(item.action);
                       return (
                         <div
                           key={item.id}
-                          className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-lg px-2 py-1.5 text-xs leading-snug sm:grid-cols-[auto_14rem_minmax(0,1fr)] ${alert ? "border border-amber-300 bg-amber-50 font-semibold text-amber-950" : "hover:bg-slate-50"}`}
+                          className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-lg px-2 py-1.5 text-xs leading-snug sm:grid-cols-[auto_14rem_minmax(0,1fr)] ${alert ? "border border-amber-300 bg-amber-50 font-semibold text-amber-950" : offline ? "border border-blue-300 bg-blue-50 font-semibold text-blue-950" : "hover:bg-slate-50"}`}
                         >
                           <span className="font-mono text-slate-500">{timeOf(item)}</span>
                           <span className={alert ? "" : "font-medium text-slate-800"}>{person?.label}</span>
