@@ -302,6 +302,20 @@ async function upsertNormalizedState(session, event, candidateId, examEventId) {
 
   if (event.type === "candidate_section.opened" || event.type === "candidate_section.reopened" || event.type === "candidate_section.closed") {
     if (!candidateId || !sectionKey) return false;
+    // Plain "opened" must never resurrect an already-closed section - the client only sends
+    // "opened" when its own local candidateStatus doesn't think the section is closed, but that
+    // local state can be stale right after a fresh page load/reconnect (before the server's real
+    // status has been hydrated back in), and this upsert replaces the whole row on conflict same
+    // as every other merge-duplicates projection write here. A stray one would flip an
+    // already-submitted section back to "open" in the Centre's status view. "reopened" is the
+    // deliberate, proctor-password-gated path (confirmReopenRequest in App.jsx) and is always
+    // honored - same pattern as the outdoor_assessment.opened guard above.
+    if (event.type === "candidate_section.opened") {
+      const existing = await supabase(
+        `candidate_sections?candidate_id=eq.${encodeURIComponent(candidateId)}&section_key=eq.${encodeURIComponent(sectionKey)}&select=closed_at&limit=1`,
+      );
+      if (existing?.[0]?.closed_at) return true;
+    }
     const closed = event.type === "candidate_section.closed";
     const status = closed ? "closed" : "open";
     const openedAt = payload.openedAt || payload.openedAtIso || (!closed ? event.createdAt : null);
