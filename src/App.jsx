@@ -9013,14 +9013,23 @@ function imageElementToCanvas(image) {
   canvas.getContext("2d").drawImage(image, 0, 0);
   return canvas;
 }
-// A modern phone camera photo can be 4000-9000px on the long edge. jsQR needs the corner QR to
-// be at most a few dozen pixels across, not thousands, and every downstream pass (histogram
-// enhance, repeated jsQR scans, upload payload size) scales with pixel count — a 12MP source
-// makes those seconds slower for no detection benefit. Downscaling first is the single biggest
-// lever on both "scanning is slow" and "the QR is clearly there but wasn't found" (jsQR's own
-// decoder gets noticeably less reliable on very large/noisy source images). The QR-relative
-// checkbox math (mapOffsetToPhoto) rebuilds its ruler from the QR's own detected corner distance
-// each time, so it is scale-invariant - downscaling never changes what gets read off a page.
+function cloneCanvas(canvas) {
+  const copy = document.createElement("canvas");
+  copy.width = canvas.width;
+  copy.height = canvas.height;
+  copy.getContext("2d").drawImage(canvas, 0, 0);
+  return copy;
+}
+// A modern phone camera photo can be 4000-9000px on the long edge, and the corner QR is only a
+// few dozen pixels across in it - jsQR needs downscaling to find it reliably most of the time.
+// But tested against real scans that a single fixed size+enhance config failed on (see
+// decodeAllQrCodesEnsemble below), no one size is reliable enough on its own: the same photo
+// that a downscaled pass missed sometimes decodes fine at native resolution, and vice versa -
+// motion blur, print DPI and JPEG compression each interact differently with jsQR depending on
+// the pixel scale and contrast it's given. The QR-relative checkbox math (mapOffsetToPhoto)
+// rebuilds its ruler from the QR's own detected corner distance each time, so it is
+// scale-invariant - whichever size ends up decoding the QR, reading checkboxes off that same
+// canvas afterwards works the same way.
 function resizeCanvasToMaxDimension(canvas, maxDimension) {
   const longest = Math.max(canvas.width, canvas.height);
   if (longest <= maxDimension) return canvas;
@@ -9031,27 +9040,33 @@ function resizeCanvasToMaxDimension(canvas, maxDimension) {
   resized.getContext("2d").drawImage(canvas, 0, 0, resized.width, resized.height);
   return resized;
 }
-// Second attempt at a different scale for a page whose corner QR is visibly present but didn't
-// decode: jsQR occasionally misses on the resolution it was first given (motion blur, moire from
-// downscaling, a finder pattern that lands on a bad pixel boundary) and succeeds on another. Kept
-// to one extra size (75%) rather than a whole pyramid - each attempt re-scans the full image.
-function decodeAllQrCodesWithRetry(canvas, maxCodes = 12) {
-  const first = decodeAllQrCodes(canvas, maxCodes);
-  if (first.length) return first;
-  const resized = resizeCanvasToMaxDimension(canvas, Math.round(Math.max(canvas.width, canvas.height) * 0.75));
-  if (resized === canvas) return first;
-  const scaleX = canvas.width / resized.width;
-  const scaleY = canvas.height / resized.height;
-  const scalePoint = (point) => ({ x: point.x * scaleX, y: point.y * scaleY });
-  return decodeAllQrCodes(resized, maxCodes).map((result) => ({
-    ...result,
-    location: {
-      topLeftCorner: scalePoint(result.location.topLeftCorner),
-      topRightCorner: scalePoint(result.location.topRightCorner),
-      bottomLeftCorner: scalePoint(result.location.bottomLeftCorner),
-      bottomRightCorner: scalePoint(result.location.bottomRightCorner),
-    },
-  }));
+// Ordered cheapest/most-common-case first. Measured against 15 real scan photos that the old
+// single fixed config (2200px + enhance, kept here as the first entry) failed on almost
+// entirely (3/15): trying these four in sequence and stopping at the first that decodes
+// anything recovered 9/15 - the same coverage as testing seven different size/enhance
+// combinations, so the extra three bought nothing once these four were included. The last
+// entry (true native resolution, enhanced) is the most expensive and is only reached when
+// everything cheaper already failed.
+const QR_ENSEMBLE_CONFIGS = [
+  { maxDimension: 2200, enhance: true },
+  { maxDimension: 1600, enhance: false },
+  { maxDimension: null, enhance: false },
+  { maxDimension: null, enhance: true },
+];
+// Tries each config against baseCanvas (never mutated) until one decodes at least one QR code,
+// returning the canvas that config actually used - its pixel dimensions are what the caller's
+// checkbox math and stored photo need to agree with, so the winning canvas (not baseCanvas) is
+// the one to keep using downstream. `enhanced` tells the caller whether that canvas already got
+// the histogram stretch, so it doesn't get applied twice.
+function decodeAllQrCodesEnsemble(baseCanvas, maxCodes = 12) {
+  for (const config of QR_ENSEMBLE_CONFIGS) {
+    const resized = config.maxDimension ? resizeCanvasToMaxDimension(baseCanvas, config.maxDimension) : baseCanvas;
+    const canvas = config.enhance ? cloneCanvas(resized) : resized;
+    if (config.enhance) autoEnhanceCanvas(canvas);
+    const results = decodeAllQrCodes(canvas, maxCodes);
+    if (results.length) return { canvas, results, enhanced: config.enhance };
+  }
+  return { canvas: baseCanvas, results: [], enhanced: false };
 }
 
 // Final-review modal: shows every question with the candidate's answer highlighted next to the
@@ -9758,9 +9773,12 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   // file-capture button and the remote scan-inbox poller (see the "Připojit tablet/telefon" QR),
   // which both just need to hand it an already-loaded image.
   async function processScanImage(image) {
-    const canvas = resizeCanvasToMaxDimension(imageElementToCanvas(image), 2200);
-    autoEnhanceCanvas(canvas);
-    const decoded = decodeAllQrCodesWithRetry(canvas);
+    const baseCanvas = imageElementToCanvas(image);
+    const { canvas: qrCanvas, results: decoded, enhanced } = decodeAllQrCodesEnsemble(baseCanvas);
+    // Nothing decoded at any size: fall back to the same small enhanced preview the app always
+    // stored here, rather than keeping whatever huge native-resolution canvas the ensemble's
+    // last attempt left behind - there's no QR location to make use of that resolution for.
+    const canvas = decoded.length ? (enhanced ? qrCanvas : autoEnhanceCanvas(cloneCanvas(qrCanvas))) : autoEnhanceCanvas(resizeCanvasToMaxDimension(baseCanvas, 2200));
     const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
     if (!decoded.length) {
