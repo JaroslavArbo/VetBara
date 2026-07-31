@@ -366,6 +366,20 @@ async function upsertNormalizedState(session, event, candidateId, examEventId) {
     const examinerId = examinerIdFor(session, event);
     const outdoorSection = sectionKey || payload.sectionKey || "outdoor";
     if (!candidateId || !examinerId) return false;
+    if (event.type === "outdoor_assessment.opened") {
+      // This upsert replaces the whole row (payload included) on conflict, same as every other
+      // merge-duplicates projection write here — fine for "opened" landing first, but a stray
+      // "opened" that arrives AFTER "submitted" (a re-visit whose client hadn't yet restored
+      // closedAt from the server, e.g. hydrateExaminerOutdoorProgress is fire-and-forget and not
+      // awaited before the Examiner UI becomes clickable) would silently blank out the submitted
+      // payload's scores/notes/sketches and set submitted_at back to null. A submission is a
+      // terminal state for this (candidate, examiner, section): once it exists, a later "opened"
+      // carries no information that should ever downgrade it, so it's a no-op instead.
+      const existing = await supabase(
+        `outdoor_assessments?candidate_id=eq.${encodeURIComponent(candidateId)}&examiner_id=eq.${encodeURIComponent(examinerId)}&section_key=eq.${encodeURIComponent(outdoorSection)}&select=submitted_at&limit=1`,
+      );
+      if (existing?.[0]?.submitted_at) return true;
+    }
     await upsertProjection("outdoor_assessments", "candidate_id,examiner_id,section_key", {
         candidate_id: candidateId,
         examiner_id: examinerId,
