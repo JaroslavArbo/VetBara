@@ -1,5 +1,17 @@
 import crypto from "node:crypto";
 
+// Session-integrity signals: a logged-in Candidate or Examiner leaving fullscreen or switching
+// away from the app. They are the Centre's invigilation feed (the Centre runs on its own device
+// and cannot observe a tablet any other way), so they must cross the wire like any other event.
+// They describe the signed-in subject, not a candidate's answers, so they have no projection
+// table — they live in sync_events and are read back by the evaluation read model.
+const SESSION_EVENT_TYPES = new Set([
+  "session.fullscreen_entered",
+  "session.fullscreen_exited",
+  "session.app_backgrounded",
+  "session.app_foregrounded",
+]);
+
 const SUPPORTED_EVENT_TYPES = new Set([
   "candidate_section.opened",
   "candidate_section.closed",
@@ -13,6 +25,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "outdoor_assessment.submitted",
   "outdoor_score.saved",
   "examiner_score.saved",
+  ...SESSION_EVENT_TYPES,
 ]);
 
 const EVENT_TYPES_BY_ROLE = {
@@ -25,19 +38,23 @@ const EVENT_TYPES_BY_ROLE = {
     "report_draft.saved",
     "report_photo.added",
     "candidate_preparation.saved",
+    ...SESSION_EVENT_TYPES,
   ]),
   Examiner: new Set([
     "outdoor_assessment.opened",
     "outdoor_assessment.submitted",
     "outdoor_score.saved",
     "examiner_score.saved",
+    ...SESSION_EVENT_TYPES,
   ]),
   // The Centre is the exam authority and already reads every candidate in its event; section E lets
-  // an identified primary examiner correct outdoor scores and item notes from the Centre, so those
-  // corrections have to persist. Deliberately narrow: corrections only, no section/test/report
+  // an identified examiner correct outdoor scores/notes and written/report marks from the Centre
+  // (a closed test or report has no other route back to the examiner's own device), so those
+  // corrections have to persist. Deliberately narrow: corrections only, no section-open/close
   // events, and every one is written to the exam audit log on the client.
   Centre: new Set([
     "outdoor_score.saved",
+    "examiner_score.saved",
   ]),
 };
 
@@ -138,8 +155,14 @@ function isAssignedExaminer(examinerId, candidateId) {
   return Boolean(assignment && (assignment.primary === examinerId || assignment.secondary === examinerId));
 }
 
-function scopeError(session, candidateId, dbAssignedCandidateIds) {
-  if (!candidateId) return "Missing candidate id for scoped sync event";
+function scopeError(session, candidateId, dbAssignedCandidateIds, eventType) {
+  // A session-integrity event is scoped by the session itself: it reports on the signed-in
+  // subject's own device. A Candidate's carries their id (and is checked below like any other
+  // event); an Examiner's has no candidate at all, so requiring one would 403 every one of them.
+  if (!candidateId) {
+    if (SESSION_EVENT_TYPES.has(eventType) && (session.role === "Candidate" || session.role === "Examiner")) return null;
+    return "Missing candidate id for scoped sync event";
+  }
 
   if (session.role === "Candidate") {
     return candidateId === session.subject_id ? null : "Candidate can sync only their own data";
@@ -177,7 +200,7 @@ function validateEvent(session, event, dbAssignedCandidateIds) {
   if (conflict) return { status: 400, error: "Conflicting candidate id references", details: conflict };
 
   const candidateId = candidateIdFor(event);
-  const error = scopeError(session, candidateId, dbAssignedCandidateIds);
+  const error = scopeError(session, candidateId, dbAssignedCandidateIds, event.type);
   if (error) return { status: 403, error, candidateId };
 
   return { candidateId };

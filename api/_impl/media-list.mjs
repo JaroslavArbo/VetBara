@@ -38,7 +38,7 @@ async function resolveSession(sessionToken) {
   const rows = await supabase(`app_sessions?token_hash=eq.${hash(sessionToken)}&revoked_at=is.null&select=id,role,subject_id,expires_at&limit=1`);
   const session = rows[0];
   if (!session || new Date(session.expires_at) <= new Date()) return null;
-  return { id: session.id, role: session.role, subjectId: session.subject_id };
+  return { id: session.id, role: session.role, subject_id: session.subject_id };
 }
 
 async function createSignedDownloadUrl(path) {

@@ -155,6 +155,28 @@ async function readExaminerScoreEvents(candidateId, examEventId) {
   return scopedRead((scope) => `sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&event_type=in.(${types})&select=*&order=created_at.asc`, examEventId);
 }
 
+// Session-integrity signals (fullscreen exits, app switching) recorded on the candidate's own
+// device. The Centre invigilates from a separate device, so its audit trail can only show these
+// once they have travelled through sync_events — hence reading them back here.
+const INTEGRITY_EVENT_TYPES = "session.fullscreen_entered,session.fullscreen_exited,session.app_backgrounded,session.app_foregrounded";
+
+async function readIntegrityEvents(candidateId, examEventId) {
+  if (!envReady()) return [];
+  const types = encodeURIComponent(INTEGRITY_EVENT_TYPES);
+  return scopedRead((scope) => `sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&event_type=in.(${types})&select=id,event_type,role,subject_id,payload,created_at&order=created_at.asc`, examEventId);
+}
+
+function buildIntegrityEvents(events) {
+  return events.map((event) => ({
+    id: event.id,
+    type: event.event_type,
+    subjectKind: event.payload?.subjectKind ?? (event.role === "Examiner" ? "examiner" : "candidate"),
+    subjectId: event.payload?.subjectId ?? event.subject_id ?? null,
+    subjectName: event.payload?.subjectName ?? null,
+    at: event.payload?.at ?? event.created_at ?? null,
+  }));
+}
+
 function buildExaminerScores(events) {
   const byKey = {};
   for (const event of events) {
@@ -174,6 +196,11 @@ function buildExaminerScores(events) {
       closedAt: p.closedAt ?? null,
       submittedAt: p.submittedAt ?? null,
       updatedAt: p.updatedAt ?? event.created_at ?? null,
+      // Per-question written overrides / per-section report marks, when this save carried them
+      // (Section E corrections always do). Without these the Centre can only see the rolled-up
+      // total — not which question or report section the correction actually touched.
+      scores: p.scores ?? null,
+      marks: p.marks ?? null,
     };
   }
   return Object.values(byKey);
@@ -317,13 +344,14 @@ export default async function handler(request, response) {
     if (!allowed) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
     const examEventId = await sessionExamEventId(session);
-    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents, preparations] = await Promise.all([
+    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents, integrityEventRows, preparations] = await Promise.all([
       readRows("candidate_sections", candidateId, examEventId),
       readRows("test_responses", candidateId, examEventId),
       readRows("outdoor_assessments", candidateId, examEventId),
       readRows("outdoor_scores", candidateId, examEventId),
       readReportEvents(candidateId, examEventId),
       readExaminerScoreEvents(candidateId, examEventId),
+      readIntegrityEvents(candidateId, examEventId).catch(() => []),
       // Tolerate the table not existing yet: code can deploy before the migration is applied, and a
       // missing preparation must not take the whole evaluation read model down with it.
       readRows("candidate_preparations", candidateId, examEventId).catch(() => []),
@@ -346,6 +374,7 @@ export default async function handler(request, response) {
       reportDraft,
       reportSummary,
       examinerScores,
+      integrityEvents: buildIntegrityEvents(integrityEventRows),
       preparations,
       summary: buildSummary(sections, testResponses, outdoorScores),
     });

@@ -806,6 +806,15 @@ function cleanQuestionText(text) {
 }
 
 function nowStamp() { return new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+// Session-integrity sync events → the exact audit actions the supervision console keys off
+// (AuditSyncView's ALERT_ACTIONS and its live "away" state), so an alert raised on a candidate's
+// tablet reads identically in the Centre's own trail.
+const INTEGRITY_EVENT_ACTIONS = {
+  "session.fullscreen_exited": "Exited fullscreen",
+  "session.fullscreen_entered": "Entered fullscreen",
+  "session.app_backgrounded": "Switched away from app",
+  "session.app_foregrounded": "Returned to app",
+};
 export function tomorrowIsoDate() {
   const d = new Date();
   d.setDate(d.getDate() + 1);
@@ -1240,6 +1249,14 @@ function VetBaraPrototype() {
   // submittedAt }. The flat `outdoor` state merges every examiner together, which is fine for a
   // total but loses who scored what — section E needs the primary and secondary side by side.
   const [outdoorByExaminer, setOutdoorByExaminer] = useState({});
+  // Section E corrections to a CLOSED written test / Consulting report, keyed the same way as
+  // outdoorByExaminer: writtenScoresByExaminer[candidateId][examinerId] = { scores: {questionId:
+  // points} }; reportMarksByExaminer[candidateId][examinerId] = { marks: <same shape as
+  // readReportMarks/writeReportMarks> }. Hydrated from the examiner_score.saved events the
+  // correction sends (see applyWrittenCorrection/applyReportCorrection), and from whatever the
+  // examiner's own device already submitted (hydrateCentreResults).
+  const [writtenScoresByExaminer, setWrittenScoresByExaminer] = useState({});
+  const [reportMarksByExaminer, setReportMarksByExaminer] = useState({});
   const [activeReportTree, setActiveReportTree] = useState("Tree A");
   // Examiner login id is set only after the openQrSession effect verifies the token with the
   // server (via resolveAccessWithFallback -> applyResolvedAccess -> loginExaminer). It used to
@@ -1307,6 +1324,26 @@ function VetBaraPrototype() {
   const activeScoreLimits = useMemo(() => scoreLimitsForCandidate(selectedCandidate, variants, testBank, outdoorItemsByLevel), [selectedCandidate, variants, testBank, outdoorItemsByLevel]);
   const summary = useMemo(() => ({ total: candidates.length, practicing: candidates.filter((c) => c.level === "Practicing").length, consulting: candidates.filter((c) => c.level === "Consulting").length }), [candidates]);
   const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp(), createdAt: new Date().toISOString() }, ...prev]);
+  // Audit entries that happened on ANOTHER device and arrive later through the read model. They
+  // carry their own timestamp, so they are merged into the (newest-first) list by time rather
+  // than prepended, and each server event id is applied only once across polls.
+  const mergedAuditIdsRef = useRef(new Set());
+  const mergeRemoteAudit = (entries) => {
+    const fresh = (entries ?? []).filter((entry) => entry.id && !mergedAuditIdsRef.current.has(entry.id));
+    if (!fresh.length) return;
+    fresh.forEach((entry) => mergedAuditIdsRef.current.add(entry.id));
+    setAudit((prev) => [
+      ...fresh.map((entry) => ({
+        id: `SYNC-${entry.id}`,
+        action: entry.action,
+        target: entry.target,
+        detail: entry.detail ?? "",
+        time: entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : nowStamp(),
+        createdAt: entry.createdAt ?? new Date().toISOString(),
+      })),
+      ...prev,
+    ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)));
+  };
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
   const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => {
     const url = new URL(window.location.pathname || "/", portableLanOrigin() || window.location.origin);
@@ -1554,9 +1591,37 @@ function VetBaraPrototype() {
               closed: Boolean(row.closed),
               closedAt: row.closedAt ?? null,
               submittedAt: row.submittedAt ?? null,
+              scores: row.scores ?? null,
+              marks: row.marks ?? null,
               updatedAt: row.updatedAt ?? null,
             });
+            // Same rows, split into the per-question / per-section stores Section E's correction
+            // UI reads and edits (CentreReviewModal) — whatever the examiner's own device already
+            // submitted, or an earlier correction made from the Centre on a different session.
+            if (row.field === "written" && row.examinerId && row.scores && typeof row.scores === "object") {
+              setWrittenScoresByExaminer((prev) => ({
+                ...prev,
+                [candidate.id]: { ...(prev[candidate.id] ?? {}), [row.examinerId]: { examinerId: row.examinerId, scores: row.scores, updatedAt: row.updatedAt ?? null } },
+              }));
+            }
+            if (row.field === "report" && row.examinerId && row.marks && typeof row.marks === "object") {
+              setReportMarksByExaminer((prev) => ({
+                ...prev,
+                [candidate.id]: { ...(prev[candidate.id] ?? {}), [row.examinerId]: { examinerId: row.examinerId, marks: row.marks, updatedAt: row.updatedAt ?? null } },
+              }));
+            }
           });
+          // Fullscreen exits and app switching recorded on the candidate's own device → the
+          // Centre's audit trail, which is where the supervision console reads them from.
+          mergeRemoteAudit((Array.isArray(result.integrityEvents) ? result.integrityEvents : [])
+            .filter((row) => INTEGRITY_EVENT_ACTIONS[row.type])
+            .map((row) => ({
+              id: row.id,
+              action: INTEGRITY_EVENT_ACTIONS[row.type],
+              target: row.subjectName || candidate.name || candidate.id,
+              detail: row.subjectId || candidate.id,
+              createdAt: row.at,
+            })));
           // Candidate section status/times (opened/closed on the candidate's device) → the
           // Section E review status table, which reads candidateStatus/candidateTimes.
           const sectionRows = Array.isArray(result.sections) ? result.sections : [];
@@ -2359,7 +2424,72 @@ function VetBaraPrototype() {
       entityType: "examiner_score",
       entityId: `${candidate.id}:report`,
       candidateId: candidate.id,
-      payload: { candidateId: candidate.id, examinerId: loggedExaminer.id, mode: "primary", role: "primary", field: "report", value: total, max: REPORT_MARKING_TOTAL, updatedAt },
+      payload: { candidateId: candidate.id, examinerId: loggedExaminer.id, mode: "primary", role: "primary", field: "report", value: total, max: REPORT_MARKING_TOTAL, marks, updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
+  // Section E correction of a closed written test / Consulting report by the identified examiner
+  // (mirrors applyOutdoorCorrection below): a candidate-closed section has no route back to the
+  // examiner's own device, so the Centre is the only place left to fix a mis-marked question or
+  // report section. Sent as the same "examiner_score.saved" event applyScanGrading/applyReportMarking
+  // already use, full scores/marks map each time (the Centre role is allowed exactly this one event
+  // type for exactly this reason — see api/sync/batch.js EVENT_TYPES_BY_ROLE.Centre).
+  function applyWrittenCorrection(candidate, examinerId, questionId, points) {
+    if (!candidate?.id || !examinerId || !questionId) return;
+    const updatedAt = new Date().toISOString();
+    let nextScores = null;
+    setWrittenScoresByExaminer((prev) => {
+      const forCandidate = prev[candidate.id] ?? {};
+      const bucket = forCandidate[examinerId] ?? { examinerId, scores: {} };
+      const scores = { ...bucket.scores, [questionId]: points === "" ? "" : Number(points) };
+      nextScores = scores;
+      return { ...prev, [candidate.id]: { ...forCandidate, [examinerId]: { ...bucket, scores, updatedAt } } };
+    });
+    const total = computeWrittenTestReview(candidate, variants, testBank, testResponses).items
+      .reduce((sum, item) => {
+        const override = nextScores[item.question.id];
+        const value = override !== undefined && override !== "" ? Number(override) : item.pointsAwarded;
+        return sum + (Number(value) || 0);
+      }, 0);
+    setCandidates((prev) => prev.map((item) => (item.id === candidate.id ? { ...item, written: total } : item)));
+    const examinerName = examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId;
+    addAudit("Written test corrected in Centre", `${candidate.name} / ${questionId}`, `${examinerName} · score → ${points === "" ? "-" : points}`);
+    sendSyncEvent({
+      clientEventId: localEventId(`written-correction-${candidate.id}-${examinerId}-${questionId}-${updatedAt}`),
+      type: "examiner_score.saved",
+      entityType: "examiner_score",
+      entityId: `${candidate.id}:written`,
+      candidateId: candidate.id,
+      payload: { candidateId: candidate.id, examinerId, mode: "primary", role: "primary", field: "written", value: total, scores: nextScores, source: "centre-correction", updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
+  function applyReportCorrection(candidate, examinerId, treeName, sectionOrItemKey, patch, scope = "section") {
+    if (!candidate?.id || !examinerId || !sectionOrItemKey) return;
+    const updatedAt = new Date().toISOString();
+    let nextMarks = null;
+    setReportMarksByExaminer((prev) => {
+      const forCandidate = prev[candidate.id] ?? {};
+      const bucket = forCandidate[examinerId] ?? { examinerId, marks: {} };
+      const marks = scope === "clarity"
+        ? { ...bucket.marks, clarity: { ...(bucket.marks.clarity || {}), [sectionOrItemKey]: patch } }
+        : { ...bucket.marks, [treeName]: { ...(bucket.marks[treeName] || {}), [sectionOrItemKey]: { ...(bucket.marks[treeName]?.[sectionOrItemKey] || {}), ...patch } } };
+      nextMarks = marks;
+      return { ...prev, [candidate.id]: { ...forCandidate, [examinerId]: { ...bucket, marks, updatedAt } } };
+    });
+    const total = reportMarksTotal(nextMarks);
+    setCandidates((prev) => prev.map((item) => (item.id === candidate.id ? { ...item, report: total } : item)));
+    const examinerName = examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId;
+    addAudit("Report corrected in Centre", `${candidate.name} / ${treeName || "clarity"}:${sectionOrItemKey}`, examinerName);
+    sendSyncEvent({
+      clientEventId: localEventId(`report-correction-${candidate.id}-${examinerId}-${treeName || "clarity"}-${sectionOrItemKey}-${updatedAt}`),
+      type: "examiner_score.saved",
+      entityType: "examiner_score",
+      entityId: `${candidate.id}:report`,
+      candidateId: candidate.id,
+      payload: { candidateId: candidate.id, examinerId, mode: "primary", role: "primary", field: "report", value: total, max: REPORT_MARKING_TOTAL, marks: nextMarks, source: "centre-correction", updatedAt },
       createdAt: updatedAt,
     });
   }
@@ -3377,7 +3507,7 @@ function VetBaraPrototype() {
     {accessError && <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-950 shadow-sm"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><div>{accessError}</div><div className="mt-1 font-normal">{t("access.error.help")}</div></div></div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
@@ -8877,7 +9007,7 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, t }) {
   );
 }
 
-function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, isCorrected, onClose, t }) {
+function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, onWrittenCorrection, onReportCorrection, isCorrected, onClose, t }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
       {/* Outdoor shows two examiner columns side by side, so it gets the wider frame. */}
@@ -8892,16 +9022,39 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
         <div className="min-w-0 flex-1 overflow-auto p-4">
           {section.kind === "written" && (
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">
+                <span className="font-semibold">{t("centre.review.total")}: {formatHalfPointScore(snapshot.total)} / {snapshot.max} b.</span>
+                {identifiedExaminer
+                  ? <StatusPill tone="good">{t("centre.review.editing")}</StatusPill>
+                  : <span className="text-xs text-slate-500">{t("centre.review.readOnlyIdentify")}</span>}
+              </div>
               {snapshot.items.map((item) => {
                 const crop = scanAssignments?.[item.question.id];
                 const flagged = scanFlags?.[item.question.id];
                 return (
-                  <div key={item.question.id} className={`rounded-2xl border p-3 ${flagged ? "border-rose-300" : ""}`}>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-mono">{item.question.id}</span>
-                      <span>{item.pointsAwarded} / {item.question.points ?? "-"} b.</span>
+                  <div key={item.question.id} className={`rounded-2xl border p-3 ${flagged ? "border-rose-300" : item.corrected ? "border-emerald-300" : ""}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-xs text-slate-500">{item.question.id}</div>
+                        <div className="mt-1 whitespace-pre-wrap font-medium">{item.question.text}</div>
+                      </div>
+                      <div className="shrink-0 text-center">
+                        {identifiedExaminer ? (
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max={item.question.points ?? undefined}
+                            value={item.pointsAwarded ?? ""}
+                            onChange={(event) => onWrittenCorrection?.(candidate, identifiedExaminer.id, item.question.id, event.target.value)}
+                            className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${item.corrected ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
+                          />
+                        ) : (
+                          <span className="text-sm font-semibold">{item.pointsAwarded} / {item.question.points ?? "-"} b.</span>
+                        )}
+                        {identifiedExaminer && <div className="mt-1 text-[11px] text-slate-500">/ {item.question.points ?? "-"} b.</div>}
+                      </div>
                     </div>
-                    <div className="mt-1 font-medium">{item.question.text}</div>
                     {flagged && (
                       <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs font-semibold text-rose-950">
                         {t("centre.scan.ambiguousMark")}
@@ -8951,21 +9104,112 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
               </div>
             );
           })()}
-          {section.kind === "report" && (
-            <div className="space-y-4">
-              {snapshot.trees.map(([treeKey, tree]) => (
-                <div key={treeKey} className="rounded-2xl border p-3">
-                  <div className="font-semibold">{treeKey}</div>
-                  <div className="mt-1 whitespace-pre-wrap rounded-xl bg-slate-50 p-2 text-sm">{tree.fieldNotes || <em>{t("centre.review.noAnswer")}</em>}</div>
-                  {tree.photos?.length > 0 && (
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      {tree.photos.map((photo) => <img key={photo.id} src={photo.url || photo.dataUrl} alt={photo.caption || "photo"} className="h-20 w-full rounded-lg object-cover" />)}
-                    </div>
-                  )}
+          {section.kind === "report" && (() => {
+            const marks = snapshot.marks || {};
+            const treeDrafts = Object.fromEntries(snapshot.trees);
+            return (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">
+                  <span className="font-semibold">{t("centre.review.total")}: {formatHalfPointScore(snapshot.total)} / {snapshot.max} b.</span>
+                  {identifiedExaminer
+                    ? <StatusPill tone="good">{t("centre.review.editing")}</StatusPill>
+                    : <span className="text-xs text-slate-500">{t("centre.review.readOnlyIdentify")}</span>}
                 </div>
-              ))}
-            </div>
-          )}
+                {REPORT_TREES.map((treeName) => {
+                  const tree = treeDrafts[treeName] || {};
+                  const treeMarks = marks[treeName] || {};
+                  const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + (Number(treeMarks[section.key]?.score) || 0), 0);
+                  const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
+                  return (
+                    <div key={treeName} className="rounded-2xl border bg-slate-50 p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-semibold">{treeName}</div>
+                        <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(treeTotal)} / {treeMax} b.</span>
+                      </div>
+                      <div className="whitespace-pre-wrap rounded-xl bg-white p-2 text-sm">{tree.fieldNotes || <em>{t("centre.review.noAnswer")}</em>}</div>
+                      {tree.photos?.length > 0 && (
+                        <div className="mt-2 grid grid-cols-3 gap-2">
+                          {tree.photos.map((photo) => <img key={photo.id} src={photo.url || photo.dataUrl} alt={photo.caption || "photo"} className="h-20 w-full rounded-lg object-cover" />)}
+                        </div>
+                      )}
+                      <div className="mt-3 space-y-2">
+                        {REPORT_MARKING_SECTIONS.map((section, index) => {
+                          const sectionText = String(tree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim() || (index === 0 ? String(tree.fieldNotes ?? "").trim() : "");
+                          const mark = treeMarks[section.key] || {};
+                          return (
+                            <div key={section.key} className="min-w-0 rounded-xl border bg-white p-2">
+                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                              {sectionText && (
+                                <div className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{sectionText}</div>
+                              )}
+                              <div className="mt-2 flex items-start gap-3">
+                                {identifiedExaminer && (
+                                  <ul className="min-w-0 flex-1 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-slate-600">
+                                    {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
+                                  </ul>
+                                )}
+                                <div className="shrink-0 text-center">
+                                  {identifiedExaminer ? (
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      min="0"
+                                      max={section.perTreeMax}
+                                      value={mark.score ?? ""}
+                                      onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, treeName, section.key, { score: event.target.value })}
+                                      className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${mark.score ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
+                                    />
+                                  ) : (
+                                    <span className="text-sm font-semibold">{mark.score ? formatHalfPointScore(Number(mark.score)) : "-"}</span>
+                                  )}
+                                  <div className="mt-1 text-[11px] text-slate-500">/ {section.perTreeMax} b.</div>
+                                </div>
+                              </div>
+                              {identifiedExaminer ? (
+                                <textarea
+                                  value={mark.comment ?? ""}
+                                  onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, treeName, section.key, { comment: event.target.value })}
+                                  rows={2}
+                                  placeholder={t("examiner.reportReview.commentPlaceholder")}
+                                  className="mt-2 w-full rounded-lg border p-2 text-xs"
+                                />
+                              ) : (
+                                mark.comment && <div className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{mark.comment}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="rounded-2xl border bg-slate-50 p-3">
+                  <div className="font-semibold">{t("examiner.reportReview.clarityTitle")}</div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    {REPORT_CLARITY_ITEMS.map((item) => (
+                      <label key={item.key} className="rounded-xl border bg-white p-2 text-xs font-medium">
+                        {item.title}
+                        {identifiedExaminer ? (
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max={item.max}
+                            value={marks.clarity?.[item.key] ?? ""}
+                            onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, null, item.key, event.target.value, "clarity")}
+                            className="mt-1 block w-full rounded-lg border p-1 text-right text-sm font-bold"
+                          />
+                        ) : (
+                          <div className="mt-1 text-right text-sm font-bold">{marks.clarity?.[item.key] ? formatHalfPointScore(Number(marks.clarity[item.key])) : "-"}</div>
+                        )}
+                        <span className="mt-1 block text-right text-[11px] font-normal text-slate-500">/ {item.max}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
         <div className="border-t p-4">
           {isCorrected ? (
@@ -9198,7 +9442,7 @@ function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, activeSessionToken, centreCode, examDate, place, onExamClosed, examClosed, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreCode, examDate, place, onExamClosed, examClosed, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -9510,8 +9754,23 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
 
   function buildSnapshot(candidate, sectionKey) {
     if (sectionKey === "test") {
-      const snapshot = computeWrittenTestReview(candidate, variants, testBank, testResponses);
-      return { kind: "written", label: "Test", items: snapshot.items };
+      const auto = computeWrittenTestReview(candidate, variants, testBank, testResponses);
+      // A correction overlays the auto-graded score per question, so a free-text question (no
+      // correctAnswer, always 0 until an examiner reads it) can be marked at all, and a wrong
+      // exact-match auto-grade can be fixed. Prefer the identified examiner's own correction; fall
+      // back to whichever examiner's correction already exists (there is normally only one).
+      const overrideBucket = writtenScoresByExaminer?.[candidate.id] || {};
+      const overrideExaminerId = identifiedExaminer?.id && overrideBucket[identifiedExaminer.id]
+        ? identifiedExaminer.id
+        : Object.keys(overrideBucket)[0];
+      const overrideScores = overrideExaminerId ? overrideBucket[overrideExaminerId]?.scores || {} : {};
+      const items = auto.items.map((item) => {
+        const override = overrideScores[item.question.id];
+        const hasOverride = override !== undefined && override !== null && override !== "";
+        return { ...item, pointsAwarded: hasOverride ? Number(override) : item.pointsAwarded, corrected: hasOverride };
+      });
+      const total = items.reduce((sum, item) => sum + (Number(item.pointsAwarded) || 0), 0);
+      return { kind: "written", label: "Test", items, total, max: auto.totalMax, correctionExaminerId: overrideExaminerId || null };
     }
     if (sectionKey === "outdoor") {
       const scores = outdoor?.[candidate.id] || {};
@@ -9568,7 +9827,22 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
       };
     }
     const draft = reportDrafts?.[candidate.id] || {};
-    return { kind: "report", label: "Report", trees: Object.entries(draft) };
+    // Same pattern as the written test: prefer the identified examiner's own marks, fall back to
+    // whichever examiner already has some (normally the one primary examiner who marked it).
+    const marksBucket = reportMarksByExaminer?.[candidate.id] || {};
+    const marksExaminerId = identifiedExaminer?.id && marksBucket[identifiedExaminer.id]
+      ? identifiedExaminer.id
+      : Object.keys(marksBucket)[0];
+    const marks = marksExaminerId ? marksBucket[marksExaminerId]?.marks || {} : {};
+    return {
+      kind: "report",
+      label: "Report",
+      trees: Object.entries(draft),
+      marks,
+      total: reportMarksTotal(marks),
+      max: REPORT_MARKING_TOTAL,
+      correctionExaminerId: marksExaminerId || null,
+    };
   }
 
   function requireIdentify() { setPendingIdentify(true); }
@@ -9878,6 +10152,8 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
           section={{ ...sections.find((s) => s.key === reviewTarget.sectionKey), kind: reviewTarget.sectionKey === "test" ? "written" : reviewTarget.sectionKey }}
           snapshot={buildSnapshot(reviewTarget.candidate, reviewTarget.sectionKey)}
           onOutdoorCorrection={onOutdoorCorrection}
+          onWrittenCorrection={onWrittenCorrection}
+          onReportCorrection={onReportCorrection}
           scanAssignments={scanAssignments[reviewTarget.candidate.id]}
           scanFlags={reviewTarget.sectionKey === "test" ? Object.fromEntries([...scanErrorQuestionIds(reviewTarget.candidate.id)].map((id) => [id, true])) : null}
           identifiedExaminer={identifiedExaminer}
@@ -10030,7 +10306,7 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
   );
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
@@ -10584,6 +10860,10 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             outdoorByExaminer={outdoorByExaminer}
             onOutdoorCorrection={applyOutdoorCorrection}
             onScanGradingSaved={applyScanGrading}
+            writtenScoresByExaminer={writtenScoresByExaminer}
+            reportMarksByExaminer={reportMarksByExaminer}
+            onWrittenCorrection={applyWrittenCorrection}
+            onReportCorrection={applyReportCorrection}
             activeSessionToken={activeSessionToken}
             variants={variants}
             testBank={testBank}
