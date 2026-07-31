@@ -31,9 +31,13 @@ export class OutdoorVoiceRecorder {
     this.stream = null;
     this.context = null;
     this.recorder = null;
+    this.analyser = null;
     this.chunks = [];
     this.mimeType = "";
     this.startedAt = 0;
+    // Pause bookkeeping so the reported duration counts only the time actually recorded.
+    this.pausedAtMs = null;
+    this.pausedTotalMs = 0;
   }
 
   async start() {
@@ -77,6 +81,12 @@ export class OutdoorVoiceRecorder {
     presence.connect(compressor);
     compressor.connect(destination);
 
+    // Passive tap for the live level histogram (does not affect the recorded signal).
+    this.analyser = this.context.createAnalyser();
+    this.analyser.fftSize = 256;
+    this.analyser.smoothingTimeConstant = 0.7;
+    compressor.connect(this.analyser);
+
     this.mimeType = pickMimeType();
     const options = this.mimeType ? { mimeType: this.mimeType, audioBitsPerSecond: 32000 } : {};
     this.recorder = new MediaRecorder(destination.stream, options);
@@ -93,9 +103,48 @@ export class OutdoorVoiceRecorder {
     return Boolean(this.recorder && this.recorder.state !== "inactive");
   }
 
+  isPaused() {
+    return Boolean(this.recorder && this.recorder.state === "paused");
+  }
+
+  pause() {
+    if (this.recorder && this.recorder.state === "recording") {
+      try { this.recorder.pause(); this.pausedAtMs = Date.now(); return true; } catch { /* ignore */ }
+    }
+    return false;
+  }
+
+  resume() {
+    if (this.recorder && this.recorder.state === "paused") {
+      try {
+        this.recorder.resume();
+        if (this.pausedAtMs) { this.pausedTotalMs += Date.now() - this.pausedAtMs; this.pausedAtMs = null; }
+        return true;
+      } catch { /* ignore */ }
+    }
+    return false;
+  }
+
+  // 0..1 bar heights for a live histogram; empty until start(). Cheap enough to poll on rAF.
+  getFrequencyBins(binCount = 28) {
+    if (!this.analyser) return [];
+    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(data);
+    const bins = [];
+    const step = Math.max(1, Math.floor(data.length / binCount));
+    for (let i = 0; i < binCount; i += 1) {
+      let sum = 0;
+      let n = 0;
+      for (let j = i * step; j < (i + 1) * step && j < data.length; j += 1) { sum += data[j]; n += 1; }
+      bins.push(n ? sum / n / 255 : 0);
+    }
+    return bins;
+  }
+
   async stop() {
     if (!this.recorder) return null;
-    const durationMs = this.startedAt ? Date.now() - this.startedAt : 0;
+    const pausedExtra = this.pausedAtMs ? Date.now() - this.pausedAtMs : 0;
+    const durationMs = this.startedAt ? Math.max(0, Date.now() - this.startedAt - this.pausedTotalMs - pausedExtra) : 0;
     const recorder = this.recorder;
     const mimeType = this.mimeType || recorder.mimeType || "audio/webm";
 

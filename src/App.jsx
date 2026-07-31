@@ -13,7 +13,7 @@ import { LANGUAGES as UI_LANGUAGES, makeTranslator, allTranslationKeys, translat
 import { QRCodeSVG } from "qrcode.react";
 import { uploadExamMedia } from "./lib/api";
 import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder";
-import { saveLocalMedia, updateLocalMedia } from "./lib/mediaStore";
+import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia } from "./lib/mediaStore";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -1281,6 +1281,7 @@ function VetBaraPrototype() {
   const [centreSetupDirty, setCentreSetupDirty] = useState(false);
   // Examiner outdoor voice recording. status: idle | recording | processing | saved | error
   const voiceRecorderRef = useRef(null);
+  const mediaRetryBusyRef = useRef(false);
   const [voiceRecording, setVoiceRecording] = useState({ status: "idle", candidateId: null, startedAt: null, elapsedMs: 0, error: "", detail: "", lastSaved: null });
   const voiceRecordingSupported = useMemo(() => isRecordingSupported(), []);
 
@@ -2939,6 +2940,18 @@ function VetBaraPrototype() {
   // Stop the microphone if the component unmounts mid-recording.
   useEffect(() => () => { voiceRecorderRef.current?.cleanupStream(); }, []);
 
+  // Drain stranded media uploads (e.g. a large voice recording whose first upload failed) on load,
+  // when the device comes back online, and periodically while a session is open.
+  useEffect(() => {
+    if (!activeSessionToken) return undefined;
+    retryPendingMediaUploads();
+    const onOnline = () => retryPendingMediaUploads();
+    window.addEventListener("online", onOnline);
+    const id = window.setInterval(() => retryPendingMediaUploads(), 60000);
+    return () => { window.removeEventListener("online", onOnline); window.clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionToken]);
+
   async function startVoiceRecording() {
     if (!loggedExaminer || selectedMode === "unassigned") return;
     if (!voiceRecordingSupported) {
@@ -2977,9 +2990,12 @@ function VetBaraPrototype() {
       const clientMediaId = localEventId(`voice-${candidateId}-${examinerId}`);
       const ext = result.mimeType.includes("mp4") ? "m4a" : result.mimeType.includes("ogg") ? "ogg" : "webm";
       const fileName = `outdoor_${candidateId}_${examinerId}_${new Date().toISOString().replace(/[:.]/g, "-")}.${ext}`;
+      // exam_id scopes the recording to this certification at the Centre alongside candidate_id, so
+      // the media list finds it even if the roster read misses (see media-list scoping).
+      const examId = centreExamIdFromScope(getActiveExamScope()) || getActiveExamScope() || null;
       const meta = {
         clientMediaId, type: "audio", mediaType: "audio", candidateId, examinerId: loggedExaminer?.id ?? null,
-        sectionKey: "outdoor", fileName, mimeType: result.mimeType, sizeBytes: result.blob.size,
+        examId, sectionKey: "outdoor", fileName, mimeType: result.mimeType, sizeBytes: result.blob.size,
         durationMs: result.durationMs, cleaned: true, caption: `${candidate?.name ?? candidateId} — outdoor`,
       };
       // Offline-first: always keep a local copy first.
@@ -2993,7 +3009,7 @@ function VetBaraPrototype() {
           uploadState = uploaded.stored ? "uploaded" : "local";
           await updateLocalMedia(clientMediaId, { uploadState, remoteId: uploaded.id ?? null });
         } catch (error) {
-          console.warn("Voice recording upload failed; local copy kept", error);
+          console.warn("Voice recording upload failed; local copy kept, will retry", error);
           await updateLocalMedia(clientMediaId, { uploadState: "local" });
         }
       }
@@ -3006,8 +3022,58 @@ function VetBaraPrototype() {
     }
   }
 
+  // Large voice recordings can fail their first upload (a flaky field connection, a slow PUT); the
+  // bytes then sit only in this tablet's IndexedDB and the Centre never sees them. Re-push anything
+  // still marked non-"uploaded" whenever there is a session and we are online.
+  async function retryPendingMediaUploads() {
+    if (mediaRetryBusyRef.current || !activeSessionToken) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    mediaRetryBusyRef.current = true;
+    try {
+      const records = await listLocalMedia();
+      const pending = (records || []).filter((record) => record.uploadState !== "uploaded" && record.clientMediaId);
+      for (const record of pending) {
+        const full = await getLocalMedia(record.clientMediaId);
+        if (!full?.blob) continue;
+        const { blob, uploadState, remoteId, id, ...meta } = full;
+        try {
+          const uploaded = await uploadExamMedia(activeSessionToken, meta, blob);
+          if (uploaded.stored) await updateLocalMedia(record.clientMediaId, { uploadState: "uploaded", remoteId: uploaded.id ?? null });
+        } catch (error) {
+          console.warn("Pending media upload retry failed; will try again later", record.clientMediaId, error);
+        }
+      }
+    } catch (error) {
+      console.warn("Could not scan local media for retry", error);
+    } finally {
+      mediaRetryBusyRef.current = false;
+    }
+  }
+
+  function pauseVoiceRecording() {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder || voiceRecording.status !== "recording") return;
+    if (recorder.pause()) {
+      // Freeze the clock at the elapsed-so-far; the paused span is excluded from the final duration.
+      setVoiceRecording((prev) => ({ ...prev, status: "paused", elapsedMs: prev.startedAt ? Date.now() - prev.startedAt : prev.elapsedMs, detail: t("voice.status.paused") }));
+      addAudit("Voice recording paused", selectedCandidate?.name ?? "", loggedExaminer?.name ?? "");
+    }
+  }
+  function resumeVoiceRecording() {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder || voiceRecording.status !== "paused") return;
+    if (recorder.resume()) {
+      // Re-anchor startedAt so the ticker continues from where it froze (pause time not counted).
+      setVoiceRecording((prev) => ({ ...prev, status: "recording", startedAt: Date.now() - (prev.elapsedMs || 0), detail: "" }));
+    }
+  }
+  // Poll target for the live histogram (returns 0..1 bar heights while recording).
+  function voiceLevelBins() {
+    return voiceRecorderRef.current?.getFrequencyBins?.() ?? [];
+  }
+
   function toggleVoiceRecording() {
-    if (voiceRecording.status === "recording") finalizeVoiceRecording();
+    if (voiceRecording.status === "recording" || voiceRecording.status === "paused") finalizeVoiceRecording();
     else startVoiceRecording();
   }
   function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", examiners.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
@@ -3313,7 +3379,7 @@ function VetBaraPrototype() {
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} t={t} />}
-      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
+      {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => setScannerMode(null)} t={t} />}
@@ -12273,6 +12339,9 @@ function ExaminerView({
   submitOutdoor,
   voiceRecording,
   toggleVoiceRecording,
+  pauseVoiceRecording,
+  resumeVoiceRecording,
+  getVoiceLevels,
   voiceRecordingSupported,
   archivePlan,
   practicingArchive,
@@ -12403,6 +12472,9 @@ function ExaminerView({
                   submitOutdoor={submitOutdoor}
                   voiceRecording={voiceRecording}
                   toggleVoiceRecording={toggleVoiceRecording}
+                  pauseVoiceRecording={pauseVoiceRecording}
+                  resumeVoiceRecording={resumeVoiceRecording}
+                  getVoiceLevels={getVoiceLevels}
                   voiceRecordingSupported={voiceRecordingSupported}
                   archivePlan={archivePlan}
                   practicingArchive={practicingArchive}
@@ -14275,14 +14347,42 @@ function formatRecordingClock(ms) {
 function MicIcon({ className }) { return <IconBase className={className}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><path d="M12 17v5" /><path d="M8 22h8" /></IconBase>; }
 function StopIcon({ className }) { return <IconBase className={className}><rect x="6" y="6" width="12" height="12" rx="2" /></IconBase>; }
 
-function OutdoorVoiceRecorderBar({ voiceRecording, toggleVoiceRecording, voiceRecordingSupported, selectedMode, selectedCandidate, t }) {
+function PauseIcon({ className }) { return <IconBase className={className}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></IconBase>; }
+function PlayTriangleIcon({ className }) { return <IconBase className={className}><path d="M7 5v14l11-7z" /></IconBase>; }
+
+// Live microphone level bars, polled on rAF while actively recording (frozen on pause).
+function VoiceHistogram({ getVoiceLevels, active }) {
+  const [bins, setBins] = useState([]);
+  const getLevelsRef = useRef(getVoiceLevels);
+  getLevelsRef.current = getVoiceLevels;
+  useEffect(() => {
+    if (!active) return undefined;
+    let raf = 0;
+    const tick = () => { setBins(getLevelsRef.current?.() ?? []); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active]);
+  const data = bins.length ? bins : new Array(28).fill(0);
+  return (
+    <div className="flex h-9 items-center gap-[2px]" aria-hidden="true">
+      {data.map((value, index) => (
+        <span key={index} className={`w-1 rounded-full ${active ? "bg-red-500/80" : "bg-amber-400/70"}`} style={{ height: `${Math.max(8, Math.round(value * 100))}%` }} />
+      ))}
+    </div>
+  );
+}
+
+function OutdoorVoiceRecorderBar({ voiceRecording, toggleVoiceRecording, pauseVoiceRecording, resumeVoiceRecording, getVoiceLevels, voiceRecordingSupported, selectedMode, selectedCandidate, t }) {
   const status = voiceRecording?.status ?? "idle";
   const recording = status === "recording";
+  const paused = status === "paused";
   const processing = status === "processing";
   const disabled = selectedMode === "unassigned" || processing || !voiceRecordingSupported;
   const forThisCandidate = !voiceRecording?.candidateId || voiceRecording.candidateId === selectedCandidate.id;
 
-  const tone = recording
+  const tone = paused
+    ? "border-amber-400 bg-amber-50"
+    : recording
     ? "border-red-300 bg-red-50"
     : status === "saved"
     ? "border-emerald-300 bg-emerald-50"
@@ -14291,16 +14391,21 @@ function OutdoorVoiceRecorderBar({ voiceRecording, toggleVoiceRecording, voiceRe
     : "border-slate-300 bg-white";
 
   return (
-    <div className={`sticky top-2 z-30 mb-4 rounded-2xl border shadow-sm ${tone}`}>
+    // On pause the whole panel pulses a gentle orange — the fill/border animate (not opacity), so the
+    // blink is calm and the Resume/Stop buttons stay fully legible and clickable.
+    <div className={`sticky top-2 z-30 mb-4 rounded-2xl border shadow-sm ${tone}`} style={paused ? { animation: "vetbaraPausePulse 1.8s ease-in-out infinite" } : undefined}>
+      <style>{"@keyframes vetbaraPausePulse{0%,100%{background-color:#fef3c7;border-color:#f59e0b}50%{background-color:#fffbeb;border-color:#fcd34d}}"}</style>
       <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          <span className={`flex h-11 w-11 items-center justify-center rounded-full ${recording ? "bg-red-600 text-white animate-pulse" : "bg-slate-900 text-white"}`}>
-            {recording ? <StopIcon className="h-5 w-5" /> : <MicIcon className="h-5 w-5" />}
+          <span className={`flex h-11 w-11 items-center justify-center rounded-full ${paused ? "bg-amber-500 text-white" : recording ? "bg-red-600 text-white animate-pulse" : "bg-slate-900 text-white"}`}>
+            {paused ? <PauseIcon className="h-5 w-5" /> : recording ? <StopIcon className="h-5 w-5" /> : <MicIcon className="h-5 w-5" />}
           </span>
           <div>
             <div className="text-base font-semibold text-slate-950">{t("voice.title")}</div>
             <div className="text-xs text-slate-600">
-              {recording
+              {paused
+                ? `${t("voice.status.paused")} · ${formatRecordingClock(voiceRecording.elapsedMs)}`
+                : recording
                 ? `${t("voice.recordingFor")} ${selectedCandidate.name} · ${formatRecordingClock(voiceRecording.elapsedMs)}`
                 : processing
                 ? voiceRecording.detail || t("voice.status.processing")
@@ -14310,18 +14415,32 @@ function OutdoorVoiceRecorderBar({ voiceRecording, toggleVoiceRecording, voiceRe
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleVoiceRecording}
-            disabled={disabled}
-            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
-          >
-            {recording ? <><StopIcon className="h-5 w-5" /> {t("voice.stop")}</> : <><MicIcon className="h-5 w-5" /> {t("voice.start")}</>}
-          </button>
+        <div className="flex items-center gap-3">
+          {(recording || paused) && <VoiceHistogram getVoiceLevels={getVoiceLevels} active={recording} />}
+          <div className="flex items-center gap-2">
+            {recording && (
+              <button type="button" onClick={pauseVoiceRecording} disabled={disabled} className="inline-flex items-center gap-2 rounded-2xl border-2 border-amber-400 bg-white px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50">
+                <PauseIcon className="h-5 w-5" /> {t("voice.pause")}
+              </button>
+            )}
+            {paused && (
+              <button type="button" onClick={resumeVoiceRecording} disabled={disabled} className="inline-flex items-center gap-2 rounded-2xl border-2 border-emerald-500 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
+                <PlayTriangleIcon className="h-5 w-5" /> {t("voice.resume")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={toggleVoiceRecording}
+              disabled={disabled}
+              className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+            >
+              {(recording || paused) ? <><StopIcon className="h-5 w-5" /> {t("voice.stop")}</> : <><MicIcon className="h-5 w-5" /> {t("voice.start")}</>}
+            </button>
+          </div>
         </div>
       </div>
       {recording && <div className="border-t border-red-200 px-4 py-2 text-xs text-red-800">{t("voice.recordingNote")}</div>}
+      {paused && <div className="border-t border-amber-200 px-4 py-2 text-xs font-medium text-amber-800">{t("voice.pausedNote")}</div>}
       {status === "error" && voiceRecording.error && <div className="border-t border-red-200 px-4 py-2 text-xs font-medium text-red-800">{voiceRecording.error}</div>}
       {!voiceRecordingSupported && <div className="border-t border-slate-200 px-4 py-2 text-xs text-slate-600">{t("voice.error.unsupported")}</div>}
       {!forThisCandidate && recording && <div className="border-t border-red-200 px-4 py-2 text-xs text-red-800">{t("voice.otherCandidate")}</div>}
@@ -14329,8 +14448,63 @@ function OutdoorVoiceRecorderBar({ voiceRecording, toggleVoiceRecording, voiceRe
   );
 }
 
-function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorNoteDrawings, outdoorVariantChoice = {}, setOutdoorVariantChoice, outdoorExamSummaries = {}, updateOutdoorExamSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, updateOutdoorNoteDrawing, outdoorTotal, outdoorMax, submitOutdoor, voiceRecording, toggleVoiceRecording, voiceRecordingSupported, archivePlan, practicingArchive, setActivePage, examinerName, time, activeAdminPackageMeta, t }) {
+function ClockIcon({ className }) { return <IconBase className={className}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></IconBase>; }
+
+// Small always-visible examiner timer (bottom-left of the outdoor form): shows when the exam was
+// opened and a countdown "minutka" that defaults to 30 min and can be adjusted in 5-min steps.
+// Turns amber under 5 min and rose once it runs out; collapsible so it never blocks the scoring.
+function OutdoorExaminerTimer({ openedAtIso, t }) {
+  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const openedMs = openedAtIso ? Date.parse(openedAtIso) : NaN;
+  if (!Number.isFinite(openedMs)) return null;
+  const endMs = openedMs + durationMinutes * 60000;
+  const remainingMs = Math.max(0, endMs - nowMs);
+  const totalSec = Math.round(remainingMs / 1000);
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
+  const ss = String(totalSec % 60).padStart(2, "0");
+  const over = nowMs >= endMs;
+  const warn = !over && remainingMs <= 5 * 60000;
+  const tone = over ? "border-rose-400 bg-rose-50 text-rose-800" : warn ? "border-amber-400 bg-amber-50 text-amber-900" : "border-slate-300 bg-white text-slate-800";
+  const openedLabel = new Date(openedMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className={`fixed bottom-4 left-4 z-40 select-none rounded-2xl border shadow-lg ${tone}`}>
+      {collapsed ? (
+        <button type="button" onClick={() => setCollapsed(false)} className="flex items-center gap-2 px-3 py-2 text-sm font-bold" title={t("outdoor.timer.title")}>
+          <ClockIcon className="h-4 w-4" /> {over ? "00:00" : `${mm}:${ss}`}
+        </button>
+      ) : (
+        <div className="p-3">
+          <div className="flex items-center justify-between gap-4">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide opacity-70"><ClockIcon className="h-3.5 w-3.5" /> {t("outdoor.timer.title")}</span>
+            <button type="button" onClick={() => setCollapsed(true)} className="rounded-full px-2 text-sm leading-none opacity-60 hover:opacity-100" aria-label={t("common.close")}>–</button>
+          </div>
+          <div className="mt-1 text-[11px] opacity-80">{t("outdoor.timer.opened")}: <strong>{openedLabel}</strong></div>
+          <div className="mt-1 font-mono text-3xl font-bold tabular-nums leading-none">{over ? "00:00" : `${mm}:${ss}`}</div>
+          {over && <div className="mt-0.5 text-xs font-bold">{t("outdoor.timer.over")}</div>}
+          <div className="mt-2 flex items-center gap-1">
+            <button type="button" onClick={() => setDurationMinutes((m) => Math.max(5, m - 5))} className="h-7 w-7 rounded-lg border bg-white/70 text-sm font-bold hover:bg-white">−</button>
+            <span className="min-w-16 text-center text-xs font-semibold">{durationMinutes} min</span>
+            <button type="button" onClick={() => setDurationMinutes((m) => Math.min(180, m + 5))} className="h-7 w-7 rounded-lg border bg-white/70 text-sm font-bold hover:bg-white">+</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, setActiveOutdoorSection, outdoor, outdoorNotes, outdoorNoteDrawings, outdoorVariantChoice = {}, setOutdoorVariantChoice, outdoorExamSummaries = {}, updateOutdoorExamSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, updateOutdoor, updateOutdoorNote, updateOutdoorNoteDrawing, outdoorTotal, outdoorMax, submitOutdoor, voiceRecording, toggleVoiceRecording, pauseVoiceRecording, resumeVoiceRecording, getVoiceLevels, voiceRecordingSupported, archivePlan, practicingArchive, setActivePage, examinerName, time, activeAdminPackageMeta, t }) {
   const [drawingItemId, setDrawingItemId] = useState(null);
+  // A scored item shows a green, locked chip (double-click to reopen the select); this tracks which
+  // items the examiner has explicitly reopened for editing.
+  const [editingScoreIds, setEditingScoreIds] = useState(() => new Set());
+  const unlockScoreEdit = (id) => setEditingScoreIds((prev) => { const next = new Set(prev); next.add(id); return next; });
+  const lockScoreEdit = (id) => setEditingScoreIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const outdoorSections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, selectedCandidate.level);
   const effectiveActiveOutdoorSection = outdoorSections.includes(activeOutdoorSection)
     ? activeOutdoorSection
@@ -14464,7 +14638,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div>{introModal}<OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="inline-flex items-center gap-2 rounded-2xl border-2 border-slate-400 px-5 py-2.5 text-base font-bold hover:bg-slate-50"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button>{outdoorIntroText && <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button>}</div><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}<select value={outdoor[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoor(item.id, e.target.value)} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select></label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" className="h-12 w-20 rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}</div></div></div></div>;
+  return <div>{introModal}<OutdoorExaminerTimer openedAtIso={time?.openedAtIso} closedAt={time?.closedAt} t={t} /><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={getVoiceLevels} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div><div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="inline-flex items-center gap-2 rounded-2xl border-2 border-slate-400 px-5 py-2.5 text-base font-bold hover:bg-slate-50"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button>{outdoorIntroText && <Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button>}</div><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}{(() => { const scoreVal = outdoor[selectedCandidate.id]?.[item.id]; const hasScore = scoreVal !== undefined && scoreVal !== null && scoreVal !== ""; const editing = editingScoreIds.has(item.id); return hasScore && !editing ? <div onDoubleClick={() => unlockScoreEdit(item.id)} title={t("outdoor.editScoreHint")} className="mt-1 flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-50 p-2 text-base font-bold text-emerald-800">{formatHalfPointScore(scoreVal)}</div> : <select autoFocus={editing} value={scoreVal ?? ""} onChange={(e) => { updateOutdoor(item.id, e.target.value); if (e.target.value !== "") lockScoreEdit(item.id); }} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select>; })()}</label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" onDoubleClick={() => setDrawingItemId(item.id)} title={t("outdoor.editSketch")} className="h-12 w-20 cursor-pointer rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}</div></div></div></div>;
 }
 
 export default function VetBaraApp() {

@@ -26,10 +26,12 @@ const CANVAS_HEIGHT = 900;
 const ERASER_RADIUS = 16;
 const STROKE_OPTIONS = { thinning: 0.6, smoothing: 0.5, streamline: 0.5 };
 
+// Blue first, so the default pen color on open is blue (examiner request); the others stay
+// one tap away.
 const COLORS = [
+  { key: "blue", value: "#2563eb" },
   { key: "black", value: "#0f172a" },
   { key: "red", value: "#dc2626" },
-  { key: "blue", value: "#2563eb" },
   { key: "green", value: "#16a34a" },
 ];
 
@@ -124,7 +126,10 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // `tallCanvas` doubles the vertical writing area (a genuinely taller viewBox, not just a
   // letterboxed box), giving ~2× the room the examiner asked for; the extra height overflows the
   // dialog and is reached by scrolling (with a finger — see the touch branch below).
-  const canvasHeight = tallCanvas ? CANVAS_HEIGHT * 2 : CANVAS_HEIGHT;
+  // Maximizing does NOT scale the drawing up (the examiner asked to keep pen/text size constant) —
+  // it keeps the same width and only LENGTHENS the canvas (3× height), so full-screen just gives
+  // more room to write, not a bigger, wider drawing.
+  const canvasHeight = CANVAS_HEIGHT * (maximized ? 3 : tallCanvas ? 2 : 1);
 
   // Task 1: the item's helper texts (without the question text) are copied into the sketch as a
   // light-grey template the examiner annotates over. It is part of the drawing (not the stripped
@@ -334,12 +339,15 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const currentPath = currentPoints && currentPoints.length > 1 ? getSvgPathFromStroke(getStroke(currentPoints, { ...STROKE_OPTIONS, size })) : "";
   // Non-maximized tall canvas: give the <svg> its true aspect ratio so the doubled height is real
   // drawing space (which then overflows the dialog and scrolls) rather than a letterboxed band.
-  const svgSizeClass = maximized ? "min-h-0 flex-1" : tallCanvas ? "w-full" : "h-[420px]";
-  const svgSizeStyle = !maximized && tallCanvas ? { aspectRatio: `${CANVAS_WIDTH} / ${canvasHeight}`, height: "auto" } : {};
+  // Maximized reuses the same full-width, true-aspect-ratio box as a tall canvas (so the horizontal
+  // scale — and thus pen/text size — is unchanged); the taller `canvasHeight` above is what makes it
+  // longer, overflowing into the scroll container.
+  const svgSizeClass = (maximized || tallCanvas) ? "w-full" : "h-[420px]";
+  const svgSizeStyle = (maximized || tallCanvas) ? { aspectRatio: `${CANVAS_WIDTH} / ${canvasHeight}`, height: "auto" } : {};
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 ${maximized ? "p-0" : "p-4"}`}>
-      <div ref={scrollRef} className={`flex w-full flex-col overflow-auto bg-white shadow-xl ${maximized ? "h-full max-h-none max-w-none rounded-none p-3" : "max-h-[95vh] max-w-4xl rounded-2xl p-4"}`}>
+      <div ref={scrollRef} className={`flex w-full flex-col overflow-auto bg-white shadow-xl ${maximized ? "h-full max-h-none max-w-4xl rounded-none p-3" : "max-h-[95vh] max-w-4xl rounded-2xl p-4"}`}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
