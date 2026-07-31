@@ -1498,7 +1498,7 @@ function VetBaraPrototype() {
           const assessmentRows = Array.isArray(result.outdoorAssessments) ? result.outdoorAssessments : [];
           const perExaminer = {};
           const examinerBucket = (examinerId) => {
-            if (!perExaminer[examinerId]) perExaminer[examinerId] = { examinerId, mode: "", scores: {}, notes: {}, noteDrawings: {}, examSummary: "", submittedAt: null };
+            if (!perExaminer[examinerId]) perExaminer[examinerId] = { examinerId, mode: "", scores: {}, notes: {}, noteDrawings: {}, itemTimestamps: {}, examSummary: "", submittedAt: null };
             return perExaminer[examinerId];
           };
           (Array.isArray(result.outdoorScores) ? result.outdoorScores : []).forEach((row) => {
@@ -1517,6 +1517,11 @@ function VetBaraPrototype() {
             // rather than only arriving in the bulk submit payload below.
             const drawing = row.payload?.noteDrawing;
             if (drawing) bucket.noteDrawings[itemId] = drawing;
+            // When this item's score/note was actually saved - a rough proxy for when the
+            // candidate was answering it, since scoring during an oral exam happens close to live
+            // (see OutdoorAiNotePanel, which lines this up against the recording's own start time).
+            const savedAt = row.client_updated_at || row.updated_at || row.payload?.updatedAt;
+            if (savedAt) bucket.itemTimestamps[itemId] = savedAt;
             if (!bucket.mode) bucket.mode = row.payload?.mode || row.mode || "";
           });
           assessmentRows.forEach((row) => {
@@ -3132,6 +3137,12 @@ function VetBaraPrototype() {
         clientMediaId, type: "audio", mediaType: "audio", candidateId, examinerId: loggedExaminer?.id ?? null,
         examId, sectionKey: "outdoor", fileName, mimeType: result.mimeType, sizeBytes: result.blob.size,
         durationMs: result.durationMs, cleaned: true, caption: `${candidate?.name ?? candidateId} — outdoor`,
+        // Wall-clock time the recording actually started (not when it was uploaded/finalized) -
+        // lets the Centre later line up an outdoor question's own score-save timestamp against
+        // roughly where in the recording it was answered (see media-list.mjs's recordingStartedAt
+        // and OutdoorAiNotePanel's offset calculation). No per-word precision, but real data
+        // instead of the placeholder paragraph indices a manual transcript alone can offer.
+        payload: { recordingStartedAt: voiceRecording.startedAt ? new Date(voiceRecording.startedAt).toISOString() : null },
       };
       // Offline-first: always keep a local copy first.
       await saveLocalMedia({ ...meta, blob: result.blob });
@@ -9075,15 +9086,37 @@ function decodeAllQrCodesEnsemble(baseCanvas, maxCodes = 12) {
   return { canvas: baseCanvas, results: [], enhanced: false };
 }
 
+// A rough "where in the recording was this question answered" position: the wall-clock moment
+// this item's score/note was last saved, minus the wall-clock moment the recording started. Not
+// per-word accurate (score entry can lag the actual answer by however long the examiner takes to
+// mark it, and a paused/resumed recording keeps advancing this wall-clock offset even though the
+// audio itself didn't), but it costs nothing beyond data already being recorded, unlike running a
+// forced-alignment tool (Aeneas/Gentle) or a full re-transcription (Whisper) against the source
+// audio - and it only ever nudges playback to roughly the right neighbourhood, never claims exact
+// boundaries the way a fabricated timestamp would.
+function outdoorAudioOffsetSeconds(recordingStartedAt, itemTimestamp) {
+  if (!recordingStartedAt || !itemTimestamp) return null;
+  const startMs = new Date(recordingStartedAt).getTime();
+  const itemMs = new Date(itemTimestamp).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(itemMs)) return null;
+  const offsetSeconds = Math.round((itemMs - startMs) / 1000);
+  return offsetSeconds >= 0 ? offsetSeconds : null;
+}
+
 // Collapsed by default, next to a question that has a manually-curated draft note (see
 // outdoorAiDraftNotes.js). This is reference material for the Centre to weigh alongside the
 // examiner's own score - a transcript excerpt and a suggested point value/reasoning drafted from
 // the candidate's recording, never written into outdoor_scores itself. Always shown collapsed and
 // always labeled as a draft to verify against the linked recording, so it can't be mistaken for an
 // automatic or authoritative score.
-function OutdoorAiNotePanel({ note, audioUrl, t }) {
+function OutdoorAiNotePanel({ note, audioUrl, recordingStartedAt, itemTimestamp, t }) {
   const [open, setOpen] = useState(false);
   if (!note) return null;
+  const offsetSeconds = outdoorAudioOffsetSeconds(recordingStartedAt, itemTimestamp);
+  // The Media Fragments URI spec (#t=seconds) seeks a plain HTML5 <audio> element to that start
+  // position on load, no JS wiring needed - but only recordings captured after recordingStartedAt
+  // started being stored carry this at all, so older recordings just play from the start as before.
+  const seekableUrl = audioUrl && offsetSeconds !== null ? `${audioUrl}#t=${offsetSeconds}` : audioUrl;
   return (
     <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50">
       <button
@@ -9103,9 +9136,16 @@ function OutdoorAiNotePanel({ note, audioUrl, t }) {
           </div>
           {note.positive && <p><span className="font-semibold">+</span> {note.positive}</p>}
           {note.deduction && <p><span className="font-semibold">&minus;</span> {note.deduction}</p>}
-          {audioUrl
-            ? <audio controls preload="none" src={audioUrl} className="mt-1 w-full" />
-            : <p className="text-amber-700">{t("outdoor.review.aiNote.noRecording")}</p>}
+          {audioUrl ? (
+            <div>
+              {offsetSeconds !== null && (
+                <div className="text-amber-700">{t("outdoor.review.aiNote.approxPosition")}: ~{formatRecordingClock(offsetSeconds * 1000)}</div>
+              )}
+              <audio controls preload="none" src={seekableUrl} className="mt-1 w-full" />
+            </div>
+          ) : (
+            <p className="text-amber-700">{t("outdoor.review.aiNote.noRecording")}</p>
+          )}
         </div>
       )}
     </div>
@@ -9117,9 +9157,9 @@ function OutdoorAiNotePanel({ note, audioUrl, t }) {
 // (once an Examiner has identified themselves) a "mark as corrected" action.
 // One examiner's column of the Outdoor review. The primary examiner's own column is editable when
 // they have identified themselves; sketches are always read-only (they are drawn in the field).
-function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId, audioUrl, t }) {
+function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId, audioUrl, recordingStartedAt, t }) {
   const [openSketch, setOpenSketch] = useState(null);
-  const { scores, notes, noteDrawings } = column.data;
+  const { scores, notes, noteDrawings, itemTimestamps } = column.data;
   const scoreOf = (item) => (item.excluded ? 0 : Number(scores?.[item.id] ?? 0));
   const total = items.reduce((sum, item) => sum + scoreOf(item), 0);
   const max = items.reduce((sum, item) => sum + (item.excluded ? 0 : Number(item.max || 0)), 0);
@@ -9216,7 +9256,7 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId,
                           </button>
                         </div>
                       )}
-                      <OutdoorAiNotePanel note={aiNote} audioUrl={audioUrl} t={t} />
+                      <OutdoorAiNotePanel note={aiNote} audioUrl={audioUrl} recordingStartedAt={recordingStartedAt} itemTimestamp={itemTimestamps?.[item.id]} t={t} />
                     </div>
                   );
                 })}
@@ -9241,10 +9281,14 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId,
 function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, onWrittenCorrection, onReportCorrection, isCorrected, onClose, sessionToken, t }) {
   // Fetched once per candidate (not per examiner column - both columns share the same recording)
   // so OutdoorAiNotePanel's draft note can link straight to the candidate's own outdoor recording
-  // instead of sending the reviewer hunting for it in Records & photos.
+  // instead of sending the reviewer hunting for it in Records & photos. recordingStartedAt (when
+  // present - only recordings captured after that field existed carry it) lets the panel seek
+  // close to the right moment instead of always starting from 0:00.
   const [outdoorAudioUrl, setOutdoorAudioUrl] = useState(null);
+  const [outdoorRecordingStartedAt, setOutdoorRecordingStartedAt] = useState(null);
   useEffect(() => {
     setOutdoorAudioUrl(null);
+    setOutdoorRecordingStartedAt(null);
     if (section.kind !== "outdoor" || !sessionToken) return undefined;
     let cancelled = false;
     listExamMedia(sessionToken)
@@ -9253,6 +9297,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
         const media = Array.isArray(result?.media) ? result.media : [];
         const match = media.find((item) => item.mediaType === "audio" && item.sectionKey === "outdoor" && item.candidateId === candidate.id);
         if (match?.downloadUrl) setOutdoorAudioUrl(match.downloadUrl);
+        if (match?.recordingStartedAt) setOutdoorRecordingStartedAt(match.recordingStartedAt);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -9349,9 +9394,10 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                     onChange={(itemId, patch) => onOutdoorCorrection?.(candidate, snapshot.primary.examinerId, itemId, patch)}
                     candidateId={candidate.id}
                     audioUrl={outdoorAudioUrl}
+                    recordingStartedAt={outdoorRecordingStartedAt}
                     t={t}
                   />
-                  <OutdoorExaminerColumn column={snapshot.secondary} items={snapshot.items} editable={false} onChange={() => {}} candidateId={candidate.id} audioUrl={outdoorAudioUrl} t={t} />
+                  <OutdoorExaminerColumn column={snapshot.secondary} items={snapshot.items} editable={false} onChange={() => {}} candidateId={candidate.id} audioUrl={outdoorAudioUrl} recordingStartedAt={outdoorRecordingStartedAt} t={t} />
                 </div>
               </div>
             );
@@ -10152,7 +10198,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
         role,
         examinerId,
         examinerName: examiners.find((examiner) => examiner.id === examinerId)?.name || examinerId || "-",
-        data: byExaminer[examinerId] || { scores: {}, notes: {}, noteDrawings: {}, examSummary: "", submittedAt: null },
+        data: byExaminer[examinerId] || { scores: {}, notes: {}, noteDrawings: {}, itemTimestamps: {}, examSummary: "", submittedAt: null },
       });
       return {
         kind: "outdoor",

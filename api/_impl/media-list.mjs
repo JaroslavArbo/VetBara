@@ -95,7 +95,7 @@ export default async function handler(request, response) {
       // Fail closed: without a roster we still scope by exam id rather than listing everything.
       console.warn("Media list could not resolve the exam roster", error?.message || error);
     }
-    const columns = "id,client_media_id,media_type,candidate_id,examiner_id,exam_id,section_key,tree,storage_path,file_name,mime_type,size_bytes,duration_ms,caption,cleaned,created_at";
+    const columns = "id,client_media_id,media_type,candidate_id,examiner_id,exam_id,section_key,tree,storage_path,file_name,mime_type,size_bytes,duration_ms,caption,cleaned,created_at,payload";
     // PostgREST needs the commas/parentheses of an `or=(...)` group literal, so values are
     // double-quoted (which also makes ids containing separators safe) instead of URL-encoded.
     const quote = (value) => `"${String(value).replace(/"/g, '\\"')}"`;
@@ -120,6 +120,11 @@ export default async function handler(request, response) {
         caption: row.caption,
         cleaned: row.cleaned,
         createdAt: row.created_at,
+        // Wall-clock time recording actually started (set at capture, see finalizeVoiceRecording
+        // in App.jsx) - lets the Centre line up an outdoor question's own score-save timestamp
+        // against roughly where in the recording it was answered. Absent on recordings captured
+        // before this field existed.
+        recordingStartedAt: row.payload?.recordingStartedAt ?? null,
         downloadUrl: await createSignedDownloadUrl(row.storage_path),
       }))
     );
