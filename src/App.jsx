@@ -1512,6 +1512,10 @@ function VetBaraPrototype() {
             }
             const note = row.note ?? row.payload?.note ?? row.payload?.comment ?? "";
             if (note) bucket.notes[itemId] = note;
+            // Per-item sketch, synced immediately alongside score/note (see updateOutdoorNoteDrawing)
+            // rather than only arriving in the bulk submit payload below.
+            const drawing = row.payload?.noteDrawing;
+            if (drawing) bucket.noteDrawings[itemId] = drawing;
             if (!bucket.mode) bucket.mode = row.payload?.mode || row.mode || "";
           });
           assessmentRows.forEach((row) => {
@@ -3277,13 +3281,20 @@ function VetBaraPrototype() {
     const updatedAt = new Date().toISOString();
     setOutdoor((prev) => ({ ...prev, [selectedCandidate.id]: { ...(prev[selectedCandidate.id] ?? {}), [itemId]: points } }));
     queue("Outdoor assessment", `${selectedCandidate.name} / ${itemId}`);
-    sendSyncEvent({ clientEventId: localEventId(`outdoor-score-saved-${selectedCandidate.id}-${loggedExaminer.id}-${itemId}`), type: "outdoor_score.saved", entityType: "outdoor_score", entityId: `${selectedCandidate.id}:${itemId}`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: activeOutdoorSection, itemId, score: points, updatedAt }, createdAt: updatedAt });
+    // Each per-item save upserts the SAME outdoor_scores row (on_conflict candidate/examiner/
+    // item), which REPLACES its whole payload — so a save that only sends the field it changed
+    // would silently wipe out whichever of the other two (score/note/sketch) was saved earlier.
+    // Every save resends the other two from current state to stay non-destructive.
+    const note = outdoorNotes[selectedCandidate.id]?.[itemId] ?? null;
+    const noteDrawing = outdoorNoteDrawings[selectedCandidate.id]?.[itemId] ?? null;
+    sendSyncEvent({ clientEventId: localEventId(`outdoor-score-saved-${selectedCandidate.id}-${loggedExaminer.id}-${itemId}`), type: "outdoor_score.saved", entityType: "outdoor_score", entityId: `${selectedCandidate.id}:${itemId}`, candidateId: selectedCandidate.id, payload: { candidateId: selectedCandidate.id, examinerId: loggedExaminer.id, mode: selectedMode, role: selectedMode, sectionKey: activeOutdoorSection, itemId, score: points, note, comment: note, noteDrawing, updatedAt }, createdAt: updatedAt });
   }
 
   function updateOutdoorNote(itemId, note) {
     if (!loggedExaminer || selectedMode === "unassigned") return;
     const updatedAt = new Date().toISOString();
     const currentScore = outdoor[selectedCandidate.id]?.[itemId] ?? null;
+    const currentDrawing = outdoorNoteDrawings[selectedCandidate.id]?.[itemId] ?? null;
 
     setOutdoorNotes((prev) => ({
       ...prev,
@@ -3310,6 +3321,7 @@ function VetBaraPrototype() {
         score: currentScore,
         note,
         comment: note,
+        noteDrawing: currentDrawing,
         updatedAt,
       },
       createdAt: updatedAt,
@@ -3317,10 +3329,11 @@ function VetBaraPrototype() {
   }
 
   // Examiner's handwritten sketch for an outdoor item (e.g. a quick tree diagram), stored
-  // alongside the typed note. Kept local/per-candidate like outdoorNotes; travels with the
-  // rest of the outdoor record in the outdoor_assessment.submitted sync event on submit,
-  // rather than its own per-keystroke sync event (a single sketch save is a discrete action,
-  // not a continuous stream like typing).
+  // alongside the typed note. Used to only travel in the final outdoor_assessment.submitted
+  // payload — but outdoorNoteDrawings is plain in-memory state, so a sketch drawn hours before
+  // final submit (a real span on an outdoor exam) was gone without a trace if the tablet
+  // reloaded or lost power before then, with nothing in the Centre's review to show for it. Now
+  // synced the same way a score or note already was: immediately, per item.
   async function updateOutdoorNoteDrawing(itemId, dataUrl) {
     if (!loggedExaminer || selectedMode === "unassigned") return;
     // Compress on the way in, so both localStorage and the submit payload stay small. Clearing a
@@ -3334,6 +3347,30 @@ function VetBaraPrototype() {
       },
     }));
     queue("Outdoor note sketch", `${selectedCandidate.name} / ${itemId}`);
+    const updatedAt = new Date().toISOString();
+    const currentScore = outdoor[selectedCandidate.id]?.[itemId] ?? null;
+    const currentNote = outdoorNotes[selectedCandidate.id]?.[itemId] ?? null;
+    sendSyncEvent({
+      clientEventId: localEventId(`outdoor-score-sketch-saved-${selectedCandidate.id}-${loggedExaminer.id}-${itemId}-${updatedAt}`),
+      type: "outdoor_score.saved",
+      entityType: "outdoor_score",
+      entityId: `${selectedCandidate.id}:${itemId}`,
+      candidateId: selectedCandidate.id,
+      payload: {
+        candidateId: selectedCandidate.id,
+        examinerId: loggedExaminer.id,
+        mode: selectedMode,
+        role: selectedMode,
+        sectionKey: activeOutdoorSection,
+        itemId,
+        score: currentScore,
+        note: currentNote,
+        comment: currentNote,
+        noteDrawing: stored,
+        updatedAt,
+      },
+      createdAt: updatedAt,
+    });
   }
 
   // Even compressed, a full set of sketches can exceed the request cap, and a 413 loses the whole
