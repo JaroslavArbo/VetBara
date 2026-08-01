@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 
-// Lists exam media (examiner voice recordings + report photos) for Centre staff,
-// with short-lived signed download URLs so recordings can be pulled off the
-// private bucket for further processing. Centre role only.
+// Lists exam media (examiner voice recordings + report photos) with short-lived signed download
+// URLs. Centre staff get the whole certification's roster; a Candidate session may only list its
+// own media (used to rehydrate report photos/handwritten notes on reopen - see
+// hydrateReportPhotosFromMedia in App.jsx).
 
 const BUCKET = "exam-media";
 const DOWNLOAD_TTL_SECONDS = 60 * 60; // 1 hour
@@ -76,32 +77,40 @@ export default async function handler(request, response) {
 
     const session = await resolveSession(sessionToken);
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
-    if (session.role !== "Centre") return sendJson(response, 403, { error: "Only Centre can list exam media" });
+    if (session.role !== "Centre" && session.role !== "Candidate") return sendJson(response, 403, { error: "Only Centre or Candidate can list exam media" });
 
-    // Scope the library to THIS certification. It used to select every row in the table, so a
-    // Centre saw the photos and recordings of every other exam ever run ("old exam's photos keep
-    // showing up in the new exam"). A row belongs here when it was captured for one of this exam
-    // event's candidates, or tagged with this certification's exam id (field/site photos).
-    const centreId = String(session.subject_id || "");
-    let rosterCandidateIds = [];
-    try {
-      const eventRows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(centreId)}&status=eq.current&select=id&order=updated_at.desc&limit=1`);
-      const examEventId = eventRows[0]?.id;
-      if (examEventId) {
-        const candidateRows = await supabase(`candidates?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id`);
-        rosterCandidateIds = candidateRows.map((row) => row.id).filter(Boolean);
-      }
-    } catch (error) {
-      // Fail closed: without a roster we still scope by exam id rather than listing everything.
-      console.warn("Media list could not resolve the exam roster", error?.message || error);
-    }
     const columns = "id,client_media_id,media_type,candidate_id,examiner_id,exam_id,section_key,tree,storage_path,file_name,mime_type,size_bytes,duration_ms,caption,cleaned,created_at,payload";
-    // PostgREST needs the commas/parentheses of an `or=(...)` group literal, so values are
-    // double-quoted (which also makes ids containing separators safe) instead of URL-encoded.
-    const quote = (value) => `"${String(value).replace(/"/g, '\\"')}"`;
-    const orFilters = [`exam_id.eq.${quote(centreId)}`];
-    if (rosterCandidateIds.length) orFilters.push(`candidate_id.in.(${rosterCandidateIds.map(quote).join(",")})`);
-    const rows = await supabase(`exam_media?or=(${orFilters.join(",")})&select=${columns}&order=created_at.desc`);
+    let rows;
+
+    if (session.role === "Candidate") {
+      // A Candidate may only ever see their own media (e.g. to rehydrate report photos on a
+      // device/session that never captured them) - never the roster-wide listing Centre gets.
+      rows = await supabase(`exam_media?candidate_id=eq.${encodeURIComponent(String(session.subject_id || ""))}&select=${columns}&order=created_at.desc`);
+    } else {
+      // Scope the library to THIS certification. It used to select every row in the table, so a
+      // Centre saw the photos and recordings of every other exam ever run ("old exam's photos keep
+      // showing up in the new exam"). A row belongs here when it was captured for one of this exam
+      // event's candidates, or tagged with this certification's exam id (field/site photos).
+      const centreId = String(session.subject_id || "");
+      let rosterCandidateIds = [];
+      try {
+        const eventRows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(centreId)}&status=eq.current&select=id&order=updated_at.desc&limit=1`);
+        const examEventId = eventRows[0]?.id;
+        if (examEventId) {
+          const candidateRows = await supabase(`candidates?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id`);
+          rosterCandidateIds = candidateRows.map((row) => row.id).filter(Boolean);
+        }
+      } catch (error) {
+        // Fail closed: without a roster we still scope by exam id rather than listing everything.
+        console.warn("Media list could not resolve the exam roster", error?.message || error);
+      }
+      // PostgREST needs the commas/parentheses of an `or=(...)` group literal, so values are
+      // double-quoted (which also makes ids containing separators safe) instead of URL-encoded.
+      const quote = (value) => `"${String(value).replace(/"/g, '\\"')}"`;
+      const orFilters = [`exam_id.eq.${quote(centreId)}`];
+      if (rosterCandidateIds.length) orFilters.push(`candidate_id.in.(${rosterCandidateIds.map(quote).join(",")})`);
+      rows = await supabase(`exam_media?or=(${orFilters.join(",")})&select=${columns}&order=created_at.desc`);
+    }
 
     const media = await Promise.all(
       rows.map(async (row) => ({

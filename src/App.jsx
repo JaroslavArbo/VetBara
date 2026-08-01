@@ -938,6 +938,18 @@ function dataUrlToBlob(dataUrl) {
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });
 }
+// Photos rehydrated from a signed storage URL are converted to a base64 data: URI (rather than
+// kept as the remote URL) so every existing consumer of photo.dataUrl - annotation canvas,
+// crop, PDF/ZIP export - keeps working unmodified. A raw cross-origin URL would also taint the
+// HandwritingPad canvas (canvas.toDataURL throws SecurityError on a tainted canvas).
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
 function isBackendPersistenceUnavailable(error) {
   const message = String(error?.message ?? error ?? "");
   return error?.status === 503 || /503/.test(message) || /Backend persistence is not configured/i.test(message);
@@ -2950,6 +2962,71 @@ function VetBaraPrototype() {
     performOpenCandidateSection(key, current);
   }
 
+  // Report photos (including handwritten notes and annotations, which are baked into a photo via
+  // saveHandwritingAsPhoto/saveAnnotatedPhoto) live only in this tab's in-memory reportDrafts plus
+  // this device's IndexedDB - reopening on a different device, or after local storage was cleared,
+  // otherwise shows an empty report even though the images are safely in Supabase Storage. Only
+  // fills in a tree whose LOCAL photo list is still empty, so it never clobbers photos already
+  // present from this same session.
+  async function hydrateReportPhotosFromMedia(candidateId) {
+    if (!activeSessionToken) return;
+    let result;
+    try {
+      result = await listExamMedia(activeSessionToken);
+    } catch (error) {
+      console.warn("Report media hydration failed", error);
+      return;
+    }
+    if (!result?.stored || !Array.isArray(result.media)) return;
+    const ownPhotos = result.media.filter((item) => item.mediaType === "photo" && item.sectionKey === "report" && item.candidateId === candidateId && item.downloadUrl);
+    if (!ownPhotos.length) return;
+
+    const currentDraft = reportDrafts[candidateId] ?? createReportDraft();
+    const treesNeedingHydration = REPORT_TREES.filter((tree) => !(currentDraft[tree]?.photos ?? []).length && ownPhotos.some((item) => item.tree === tree));
+    if (!treesNeedingHydration.length) return;
+
+    const hydratedByTree = {};
+    for (const tree of treesNeedingHydration) {
+      const photos = [];
+      for (const item of ownPhotos.filter((entry) => entry.tree === tree)) {
+        try {
+          const response = await fetch(item.downloadUrl);
+          const blob = await response.blob();
+          const dataUrl = await blobToDataUrl(blob);
+          photos.push({
+            id: item.clientMediaId || `M-${item.id}`,
+            name: item.fileName || tree,
+            type: item.mimeType || blob.type,
+            size: item.sizeBytes ?? blob.size,
+            dataUrl,
+            description: "",
+            useInReport: true,
+            caption: item.caption || item.fileName || tree,
+            capturedAt: item.createdAt,
+            createdAt: item.createdAt,
+          });
+        } catch (error) {
+          console.warn("Report photo download failed during hydration", error);
+        }
+      }
+      if (photos.length) hydratedByTree[tree] = photos;
+    }
+    if (!Object.keys(hydratedByTree).length) return;
+
+    setReportDrafts((prev) => {
+      const draft = prev[candidateId] ?? createReportDraft();
+      const nextDraft = { ...draft };
+      let changed = false;
+      Object.entries(hydratedByTree).forEach(([tree, photos]) => {
+        if ((nextDraft[tree]?.photos ?? []).length) return;
+        nextDraft[tree] = { ...nextDraft[tree], photos };
+        changed = true;
+      });
+      if (!changed) return prev;
+      return { ...prev, [candidateId]: nextDraft };
+    });
+  }
+
   function performOpenCandidateSection(key, previousStatus) {
     const openedAt = nowStamp();
     const openedAtIso = new Date().toISOString();
@@ -2958,6 +3035,9 @@ function VetBaraPrototype() {
     setActiveCandidateSection(key);
     addAudit(previousStatus === "closed" ? "Candidate section reopened" : "Candidate section opened", loggedCandidate.name, `${key} / ${openedAt}`);
     sendSyncEvent({ clientEventId: localEventId(`candidate-section-opened-${loggedCandidate.id}-${key}`), type: previousStatus === "closed" ? "candidate_section.reopened" : "candidate_section.opened", entityType: "candidate_section", entityId: `${loggedCandidate.id}:${key}`, candidateId: loggedCandidate.id, payload: { sectionKey: key, openedAt: openedAtIso, openedAtLabel: openedAt }, createdAt: openedAtIso });
+    if (key === "report" && previousStatus === "closed") {
+      hydrateReportPhotosFromMedia(loggedCandidate.id);
+    }
   }
 
   function confirmReopenRequest(password) {
