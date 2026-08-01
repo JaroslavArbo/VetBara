@@ -185,7 +185,7 @@ export const draftRuntimeDictionaries = {
     "outdoor.notesGuidance": "Notizen / Bewertungsanleitung",
     "outdoor.pointsLabel": "Punkte",
     "outdoor.examinerNotes": "Examiner notes / justification",
-    "outdoor.submit": "Absenden und schließen Outdoor form",
+    "outdoor.submit": "Absenden und Formular schließen",
     "outdoor.mode.primary": "primary - full form erforderlich",
     "outdoor.mode.secondary": "secondary - optional input",
     "outdoor.mode.unassigned": "nicht zugewiesen",
@@ -376,7 +376,15 @@ export const draftRuntimeDictionaries = {
     "app.offlineFirst": "offline-first",
     "sectionStatus.locked": "gesperrt",
     "sectionStatus.open": "öffnen",
-    "sectionStatus.closed": "geschlossen"
+    "sectionStatus.closed": "geschlossen",
+    "centre.scan.assignPlaceholder": "Kandidaten zuordnen…",
+    "centre.scan.assignAllTo": "Alle {count} diesem Kandidaten zuordnen",
+    "examiner.localMedia.sessionExpired": "Ihre Sitzung ist abgelaufen. Öffnen Sie den QR-Link dieses Geräts erneut, um eine neue zu erhalten, und versuchen Sie es dann noch einmal.",
+    "outdoor.review.aiNote.toggle": "KI-Notizen (Entwurf)",
+    "outdoor.review.aiNote.disclaimer": "Nur ein Entwurf — vor Verwendung mit der Aufnahme abgleichen.",
+    "outdoor.review.aiNote.suggested": "Vorschlag",
+    "outdoor.review.aiNote.approxPosition": "Ungefähr bei",
+    "outdoor.review.aiNote.noRecording": "Für diesen Kandidaten wurde keine passende Aufnahme gefunden."
   },
   "it": {
     "app.title": "VetBara",

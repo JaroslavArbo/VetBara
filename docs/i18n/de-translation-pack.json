@@ -1473,10 +1473,10 @@
   },
   {
     "key": "outdoor.submit",
-    "en": "Submit and close outdoor form",
-    "cs": "Odeslat a uzavřít outdoor formulář",
-    "target": "Absenden und schließen Outdoor form",
-    "notes": "Draft target intentionally blank for reviewer translation.",
+    "en": "Submit and close form",
+    "cs": "Odeslat a uzavřít formulář",
+    "target": "Absenden und Formular schließen",
+    "notes": "Machine-translated draft — pending reviewer approval.",
     "status": "needs_review"
   },
   {
@@ -3005,6 +3005,70 @@
     "cs": "uzavřeno",
     "target": "geschlossen",
     "notes": "Draft target intentionally blank for reviewer translation.",
+    "status": "needs_review"
+  },
+  {
+    "key": "centre.scan.assignPlaceholder",
+    "en": "Assign to candidate…",
+    "cs": "Přiřadit kandidátovi…",
+    "target": "Kandidaten zuordnen…",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "centre.scan.assignAllTo",
+    "en": "Assign all {count} to this candidate",
+    "cs": "Přiřadit všech {count} tomuto kandidátovi",
+    "target": "Alle {count} diesem Kandidaten zuordnen",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "examiner.localMedia.sessionExpired",
+    "en": "Your session has expired. Reopen this device's QR link to get a new one, then try again.",
+    "cs": "Vaše session vypršela. Znovu otevřete QR odkaz pro toto zařízení a zkuste to pak znovu.",
+    "target": "Ihre Sitzung ist abgelaufen. Öffnen Sie den QR-Link dieses Geräts erneut, um eine neue zu erhalten, und versuchen Sie es dann noch einmal.",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "outdoor.review.aiNote.toggle",
+    "en": "AI notes (draft)",
+    "cs": "Poznámky AI (návrh)",
+    "target": "KI-Notizen (Entwurf)",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "outdoor.review.aiNote.disclaimer",
+    "en": "Draft only — check against the recording before relying on it.",
+    "cs": "Pouze návrh — před použitím ověřte oproti nahrávce.",
+    "target": "Nur ein Entwurf — vor Verwendung mit der Aufnahme abgleichen.",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "outdoor.review.aiNote.suggested",
+    "en": "Suggested",
+    "cs": "Návrh bodů",
+    "target": "Vorschlag",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "outdoor.review.aiNote.approxPosition",
+    "en": "Roughly around",
+    "cs": "Přibližně kolem",
+    "target": "Ungefähr bei",
+    "notes": "Machine-translated draft — pending reviewer approval.",
+    "status": "needs_review"
+  },
+  {
+    "key": "outdoor.review.aiNote.noRecording",
+    "en": "No matching recording found for this candidate.",
+    "cs": "K tomuto kandidátovi nebyla nalezena odpovídající nahrávka.",
+    "target": "Für diesen Kandidaten wurde keine passende Aufnahme gefunden.",
+    "notes": "Machine-translated draft — pending reviewer approval.",
     "status": "needs_review"
   }
 ]
