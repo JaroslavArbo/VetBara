@@ -5923,6 +5923,16 @@ const FIELD_REQUIRED_ASSIGNMENTS = FIELD_LEVELS.flatMap((level) => FIELD_TREE_CO
 // both the toggle list and `extraFieldTrees` are derived from this one array.
 const FIELD_EXTRA_TREE_TOGGLE_KEYS = ["Practicing-A2", "Practicing-B2"];
 
+// Management data (taxon/dimensions/interventions) is only meaningful for the trees the exam
+// actually grades that data on: Practicing A (including its doubled A1/A2 instance) and
+// Consulting A and B. Every other tree/code hides the section entirely.
+function fieldTreeShowsManagementData(level, code) {
+  const normalizedLevel = normalizeFieldLevel(level);
+  const normalizedCode = String(code || "").toUpperCase();
+  if (normalizedLevel === "Practicing") return normalizedCode === "A" || normalizedCode === "A2";
+  return normalizedCode === "A" || normalizedCode === "B";
+}
+
 // --- Map tile memory cache -------------------------------------------------------------------
 // Tiles used to be fetched again every time a pan pushed them out of the rendered window or a zoom
 // change rebuilt the whole set, which is what made the field map stutter and flash blank. Holding a
@@ -7058,7 +7068,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
     const data = tree.practicingTreeAData || createPracticingTreeAData();
     const interventionsHtml = (data.interventions || []).filter((item) => String(item.technology || item.description || "").trim()).map((item) => `<div class="print-intervention"><strong>${escapeHtml(item.technology || "-")}</strong>${item.description ? `<div>${linesToHtml(item.description)}</div>` : ""}</div>`).join("") || `<div class="print-empty">-</div>`;
     const photosHtml = (tree.photos || []).length
-      ? `<div class="print-photo-grid">${tree.photos.map((photo) => `<figure><img src="${photo.url}" alt="" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
+      ? `<div class="print-photo-grid">${tree.photos.map((photo) => `<figure><img src="${photo.url}" alt="" onload="this.parentElement.classList.toggle('portrait', this.naturalHeight > this.naturalWidth)" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
       : `<div class="print-empty">${escapeHtml(t("fieldPrep.printNoPhotos"))}</div>`;
     return `<section class="print-tree-page">
       <h2>${escapeHtml(fieldTreeLabels(tree).join(" / ") || `A${index + 1}`)} · ${escapeHtml(tree.name || "")}</h2>
@@ -7133,7 +7143,8 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
       .print-empty{color:#94a3b8;font-style:italic}
       .print-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}
       .print-photo-grid figure{margin:0}
-      .print-photo-grid img{width:100%;height:38mm;object-fit:cover;border-radius:4px;border:1px solid #dbe3dd}
+      .print-photo-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #dbe3dd}
+      .print-photo-grid figure.portrait img{aspect-ratio:3/4}
       .print-photo-grid figcaption{font-size:8pt;color:#64748b;margin-top:1mm}
       @media print{.actions{display:none}}
     </style></head><body>
@@ -7270,19 +7281,21 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                   <Button onClick={() => removeAssignment(selectedTree.id, assignment.id)} variant="outline" className="rounded-xl">{t("fieldPrep.remove")}</Button>
                 </div>)}
               </div>
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
-                <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                <div className="mt-2 grid gap-2 md:grid-cols-3">
-                  <label className="text-sm font-medium">{t("fieldPrep.heightM")}<input type="number" value={selectedTree.practicingTreeAData?.heightM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { heightM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                  <label className="text-sm font-medium">{t("fieldPrep.stemDiameterCm")}<input type="number" value={selectedTree.practicingTreeAData?.stemDiameterCm ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { stemDiameterCm: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
-                  <label className="text-sm font-medium">{t("fieldPrep.crownSpreadM")}<input type="number" value={selectedTree.practicingTreeAData?.crownSpreadM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { crownSpreadM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              {(selectedTree.assignments || []).some((assignment) => fieldTreeShowsManagementData(assignment.level, assignment.code)) && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                  <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
+                  <label className="mt-2 block text-sm font-medium">Taxon<input value={selectedTree.practicingTreeAData?.taxon || ""} onChange={(event) => updatePracticingAData(selectedTree.id, { taxon: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                    <label className="text-sm font-medium">{t("fieldPrep.heightM")}<input type="number" value={selectedTree.practicingTreeAData?.heightM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { heightM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                    <label className="text-sm font-medium">{t("fieldPrep.stemDiameterCm")}<input type="number" value={selectedTree.practicingTreeAData?.stemDiameterCm ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { stemDiameterCm: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                    <label className="text-sm font-medium">{t("fieldPrep.crownSpreadM")}<input type="number" value={selectedTree.practicingTreeAData?.crownSpreadM ?? ""} onChange={(event) => updatePracticingAData(selectedTree.id, { crownSpreadM: event.target.value === "" ? "" : Number(event.target.value) })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between"><h5 className="font-semibold">{t("fieldPrep.interventionTechnology")}</h5><Button onClick={() => addIntervention(selectedTree.id)} variant="outline" className="rounded-xl">{t("fieldPrep.addTechnology")}</Button></div>
+                  <div className="mt-2 space-y-2">
+                    {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /><div className="mt-2 flex justify-end"><Button onClick={() => removeIntervention(selectedTree.id, intervention.id)} variant="outline" className="rounded-xl text-rose-700"><X className="mr-1 h-4 w-4" />{t("fieldPrep.remove")}</Button></div></div>)}
+                  </div>
                 </div>
-                <div className="mt-3 flex items-center justify-between"><h5 className="font-semibold">{t("fieldPrep.interventionTechnology")}</h5><Button onClick={() => addIntervention(selectedTree.id)} variant="outline" className="rounded-xl">{t("fieldPrep.addTechnology")}</Button></div>
-                <div className="mt-2 space-y-2">
-                  {(selectedTree.practicingTreeAData?.interventions || []).map((intervention) => <div key={intervention.id} className="rounded-xl border bg-white p-2"><input value={intervention.technology || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { technology: event.target.value })} placeholder={t("fieldPrep.technology")} className="w-full rounded-xl border bg-white p-2 text-sm" /><textarea value={intervention.description || ""} onChange={(event) => updateIntervention(selectedTree.id, intervention.id, { description: event.target.value })} placeholder={t("fieldPrep.description")} rows={2} className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" /><div className="mt-2 flex justify-end"><Button onClick={() => removeIntervention(selectedTree.id, intervention.id)} variant="outline" className="rounded-xl text-rose-700"><X className="mr-1 h-4 w-4" />{t("fieldPrep.remove")}</Button></div></div>)}
-                </div>
-              </div>
+              )}
             </div>
           ) : <div className="rounded-2xl border bg-white p-4 text-sm text-slate-600">{t("fieldPrep.selectTreeOrCentre")}</div>}
         </div>
@@ -8497,7 +8510,7 @@ function FieldTabletPage() {
 
   const selectedTreeDisplayName = selectedLocal.treeName || selectedTree?.name || "";
   const selectedManagementData = selectedTree ? { ...(selectedTree.managementData || selectedTree.practicingTreeAData || {}), ...(selectedLocal.managementData || {}) } : {};
-  const showManagementData = Boolean(selectedTree);
+  const showManagementData = Boolean(selectedTree) && fieldTreeShowsManagementData(selectedTree.level, selectedTree.code);
 
   return (
     <main className="field-tablet-shell">
