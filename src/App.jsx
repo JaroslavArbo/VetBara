@@ -13412,6 +13412,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [reportStep, setReportStep] = useState("field");
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   // Persisted: the 60-minute report window must survive a reload, otherwise a refresh would silently
   // restart the clock. Keyed per candidate so two candidates on one device never share a deadline.
   const reportStartKey = `vetbara-report-writing-started-${candidate.id}`;
@@ -13588,8 +13589,10 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
   // A fallback for when the digital submission can't go through: exports everything already
   // typed/photographed for both trees to a printable PDF, without closing or submitting the report.
-  function printReportDraftPdf() {
-    const bodyHtml = REPORT_TREES.map((treeName) => {
+  // Shared by the print/PDF fallback and the in-window Overview preview, so the candidate's final
+  // review always shows exactly what the PDF would - one place builds the report's printable HTML.
+  function buildReportBodyHtml() {
+    return REPORT_TREES.map((treeName) => {
       const treeData = draft[treeName] ?? createReportDraft()[treeName];
       const reportPhotos = (treeData.photos ?? []).filter((photo) => photo.useInReport ?? true);
       const photosHtml = reportPhotos.length
@@ -13607,6 +13610,9 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         ${sectionsHtml}
       </section>`;
     }).join("");
+  }
+
+  function printReportDraftPdf() {
     const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(t("report.pdfDraftTitle"))} - ${escapeHtml(candidate.id)}</title><style>
       @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
       header{border-bottom:2px solid #102018;padding-bottom:5mm;margin-bottom:6mm}
@@ -13617,7 +13623,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     </style></head><body>
       <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
       <header><h1>${escapeHtml(t("report.pdfDraftTitle"))}</h1><p>${escapeHtml(candidate.name || candidate.id)} · ${escapeHtml(candidate.id)} · ${escapeHtml(candidate.level || "")}</p><p>${escapeHtml(new Date().toLocaleString())}</p></header>
-      <main>${bodyHtml}</main>
+      <main>${buildReportBodyHtml()}</main>
     </body></html>`;
     openPrintDocument(html, () => setPhotoStatus(t("report.pdfBlocked")));
   }
@@ -13792,6 +13798,9 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               </div>
               <div className="flex flex-wrap items-start gap-3">
                 <div className="flex flex-col items-stretch gap-1.5">
+                  <Button onClick={() => setOverviewOpen(true)} variant="outline" className="rounded-2xl">
+                    <Search className="mr-2 h-4 w-4" /> {t("report.overview")}
+                  </Button>
                   <Button onClick={handleSubmitReport} className="rounded-2xl">
                     <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
                   </Button>
@@ -13960,6 +13969,23 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               <Button type="button" onClick={() => setSubmitConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
               <Button type="button" onClick={confirmSubmitReport} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" />{t("report.submitAndClose")}</Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Same content the print/PDF fallback builds (buildReportBodyHtml), shown in-window so the
+          candidate can do a final read-through - including photos - without leaving the app or
+          triggering a print dialog. */}
+      {overviewOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b p-4">
+              <h3 className="text-lg font-semibold">{t("report.overview")}</h3>
+              <Button type="button" onClick={() => setOverviewOpen(false)} variant="outline" className="rounded-2xl">
+                <X className="mr-1 h-4 w-4" />{t("common.close")}
+              </Button>
+            </div>
+            <div className="overflow-auto p-5" dangerouslySetInnerHTML={{ __html: buildReportBodyHtml() }} />
           </div>
         </div>
       )}
