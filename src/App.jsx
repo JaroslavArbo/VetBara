@@ -11150,8 +11150,24 @@ function printHarmonogramPdf(groups, days, t) {
   openPrintDocument(html, () => window.alert(t("harmonogram.printBlocked")));
 }
 
-function HarmonogramTimeline({ groups, onMoveBlock, t }) {
-  const pxPerMinute = 3;
+const HARMONOGRAM_BASE_PX_PER_MINUTE = 3;
+const HARMONOGRAM_BASE_ROW_HEIGHT = 40;
+const HARMONOGRAM_ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+
+function harmonogramZoomStep(current, direction) {
+  const index = HARMONOGRAM_ZOOM_STEPS.reduce((closest, value, i) => (Math.abs(value - current) < Math.abs(HARMONOGRAM_ZOOM_STEPS[closest] - current) ? i : closest), 0);
+  const nextIndex = Math.max(0, Math.min(HARMONOGRAM_ZOOM_STEPS.length - 1, index + direction));
+  return HARMONOGRAM_ZOOM_STEPS[nextIndex];
+}
+
+// Independent horizontal (time scale) and vertical (row height) zoom, since a coordinator might
+// want a wide overview of the whole day or a tall, easy-to-tap view for fine-grained dragging on
+// a tablet - not always the same tradeoff.
+function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
+  const [zoomX, setZoomX] = useState(1);
+  const [zoomY, setZoomY] = useState(1);
+  const pxPerMinute = HARMONOGRAM_BASE_PX_PER_MINUTE * zoomX;
+  const rowHeight = HARMONOGRAM_BASE_ROW_HEIGHT * zoomY;
   const allStarts = groups.flatMap((g) => g.blocks.map((b) => b.start));
   const allEnds = groups.flatMap((g) => g.blocks.map((b) => b.start + b.duration));
   const minStart = Math.floor(Math.min(...allStarts, 0) / 60) * 60;
@@ -11179,37 +11195,56 @@ function HarmonogramTimeline({ groups, onMoveBlock, t }) {
   for (let m = minStart; m <= maxEnd; m += 60) hourMarks.push(m);
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-xl border bg-slate-50 p-3" onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
-      <div className="relative" style={{ width: `${timelineWidth}px`, minWidth: "100%" }}>
-        <div className="relative h-6 border-b">
-          {hourMarks.map((m) => (
-            <div key={m} className="absolute top-0 border-l pl-1 text-[10px] font-semibold text-slate-500" style={{ left: `${(m - minStart) * pxPerMinute}px` }}>{harmonogramTimeLabel(m)}</div>
-          ))}
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <div className="inline-flex items-center gap-1 rounded-full border bg-white p-1">
+          <span className="pl-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("harmonogram.zoomHorizontal")}</span>
+          <button type="button" onClick={() => setZoomX((z) => harmonogramZoomStep(z, -1))} className="rounded-full p-1 hover:bg-slate-100"><ZoomOut className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setZoomX((z) => harmonogramZoomStep(z, 1))} className="rounded-full p-1 hover:bg-slate-100"><ZoomIn className="h-4 w-4" /></button>
         </div>
-        <div className="mt-2 space-y-3">
-          {groups.map((group) => (
-            <div key={group.id}>
-              <div className="mb-1 text-xs font-semibold text-slate-600">{harmonogramGroupLabel(group, t)}</div>
-              <div className="relative h-10 rounded-lg bg-white" style={{ width: `${timelineWidth}px` }}>
-                {group.blocks.filter((b) => b.duration > 0).map((block) => (
-                  <div
-                    key={block.id}
-                    onPointerDown={(event) => startDrag(group.id, block, event)}
-                    className="absolute top-0 flex h-10 cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center text-[10px] font-semibold text-slate-900 active:cursor-grabbing"
-                    style={{
-                      left: `${(block.start - minStart) * pxPerMinute}px`,
-                      width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
-                      background: harmonogramActivityColor(block.activity),
-                      touchAction: "none",
-                    }}
-                    title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
-                  >
-                    {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
-                  </div>
-                ))}
+        <div className="inline-flex items-center gap-1 rounded-full border bg-white p-1">
+          <span className="pl-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("harmonogram.zoomVertical")}</span>
+          <button type="button" onClick={() => setZoomY((z) => harmonogramZoomStep(z, -1))} className="rounded-full p-1 hover:bg-slate-100"><ZoomOut className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setZoomY((z) => harmonogramZoomStep(z, 1))} className="rounded-full p-1 hover:bg-slate-100"><ZoomIn className="h-4 w-4" /></button>
+        </div>
+        {(zoomX !== 1 || zoomY !== 1) && (
+          <button type="button" onClick={() => { setZoomX(1); setZoomY(1); }} className="text-xs font-semibold text-slate-500 underline">{t("harmonogram.zoomReset")}</button>
+        )}
+      </div>
+      <div className="overflow-auto rounded-xl border bg-slate-50 p-3" onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag} style={maxHeight ? { maxHeight } : undefined}>
+        <div className="relative" style={{ width: `${timelineWidth}px`, minWidth: "100%" }}>
+          <div className="relative border-b" style={{ height: `${Math.max(24, rowHeight * 0.6)}px` }}>
+            {hourMarks.map((m) => (
+              <div key={m} className="absolute top-0 border-l pl-1 font-semibold text-slate-500" style={{ left: `${(m - minStart) * pxPerMinute}px`, fontSize: `${Math.max(10, rowHeight * 0.25)}px` }}>{harmonogramTimeLabel(m)}</div>
+            ))}
+          </div>
+          <div className="mt-2 space-y-3">
+            {groups.map((group) => (
+              <div key={group.id}>
+                <div className="mb-1 font-semibold text-slate-600" style={{ fontSize: `${Math.max(11, rowHeight * 0.3)}px` }}>{harmonogramGroupLabel(group, t)}</div>
+                <div className="relative rounded-lg bg-white" style={{ width: `${timelineWidth}px`, height: `${rowHeight}px` }}>
+                  {group.blocks.filter((b) => b.duration > 0).map((block) => (
+                    <div
+                      key={block.id}
+                      onPointerDown={(event) => startDrag(group.id, block, event)}
+                      className="absolute top-0 flex cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center font-semibold text-slate-900 active:cursor-grabbing"
+                      style={{
+                        left: `${(block.start - minStart) * pxPerMinute}px`,
+                        width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
+                        height: `${rowHeight}px`,
+                        fontSize: `${Math.max(10, rowHeight * 0.24)}px`,
+                        background: harmonogramActivityColor(block.activity),
+                        touchAction: "none",
+                      }}
+                      title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
+                    >
+                      {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -11220,6 +11255,7 @@ function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
   const [settings, setSettings] = useState(HARMONOGRAM_DEFAULT_SETTINGS);
   const [groups, setGroups] = useState(null);
   const [activeDay, setActiveDay] = useState(0);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
   // Same scope-not-ready-yet race as CentreWifiAccessBox: re-read the saved settings once
   // centreExamId (set during QR session resolution) is actually available.
@@ -11259,19 +11295,8 @@ function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
   const visibleGroups = (groups || []).filter((g) => g.day === activeDay);
   const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
 
-  return (
-    <div className="rounded-2xl border bg-white p-4">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold">{t("harmonogram.title")}</h3>
-          <p className="mt-1 text-sm text-slate-600">{t("harmonogram.helper")}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
-          <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
-        </div>
-      </div>
-
+  function settingsGrid() {
+    return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm font-medium">{t("harmonogram.startTime")}
           <input type="time" value={settings.dayStartTime} onChange={(event) => setSettings((s) => ({ ...s, dayStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
@@ -11286,23 +11311,80 @@ function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
           <input type="number" min="0" step="5" value={settings.lunchMinutes} onChange={(event) => setSettings((s) => ({ ...s, lunchMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
       </div>
+    );
+  }
+
+  function dayTabs() {
+    if (days <= 1) return null;
+    return (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {Array.from({ length: days }, (_, day) => (
+          <button key={day} type="button" onClick={() => setActiveDay(day)} className={`rounded-2xl border-2 px-3 py-1.5 text-xs font-semibold ${activeDay === day ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+            {t("harmonogram.dayLabel")} {day + 1}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("harmonogram.title")}</h3>
+          <p className="mt-1 text-sm text-slate-600">{t("harmonogram.helper")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
+          <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
+          <Button onClick={() => setFullscreenOpen(true)} disabled={!groups?.length} className="rounded-2xl">
+            <Maximize className="mr-1 h-4 w-4" />{t("harmonogram.openFullscreen")}
+          </Button>
+        </div>
+      </div>
+
+      {settingsGrid()}
 
       <p className="mt-2 text-xs text-slate-500">{tfHarmonogram(t, "harmonogram.lanesHelper", { lanes: parallelLanes })}</p>
 
-      {days > 1 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {Array.from({ length: days }, (_, day) => (
-            <button key={day} type="button" onClick={() => setActiveDay(day)} className={`rounded-2xl border-2 px-3 py-1.5 text-xs font-semibold ${activeDay === day ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
-              {t("harmonogram.dayLabel")} {day + 1}
-            </button>
-          ))}
-        </div>
-      )}
+      {dayTabs()}
 
       {visibleGroups.length > 0 ? (
-        <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} />
+        <div className="mt-4">
+          <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} maxHeight="40vh" />
+        </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
+      )}
+
+      {/* Same editor, full-screen: the inline card is deliberately height-capped so it doesn't
+          dominate the rest of section C, but dragging blocks precisely benefits from more room. */}
+      {fullscreenOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-3">
+            <div>
+              <h3 className="text-lg font-semibold">{t("harmonogram.title")}</h3>
+              <p className="mt-1 text-sm text-slate-600">{t("harmonogram.helper")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
+              <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
+              <Button onClick={() => setFullscreenOpen(false)} className="rounded-2xl">{t("common.close")}</Button>
+            </div>
+          </div>
+
+          <div className="mt-3">{settingsGrid()}</div>
+          <p className="mt-2 text-xs text-slate-500">{tfHarmonogram(t, "harmonogram.lanesHelper", { lanes: parallelLanes })}</p>
+          {dayTabs()}
+
+          <div className="mt-3 min-h-0 flex-1 overflow-auto">
+            {visibleGroups.length > 0 ? (
+              <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} maxHeight="65vh" />
+            ) : (
+              <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
