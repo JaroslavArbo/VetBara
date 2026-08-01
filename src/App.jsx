@@ -8917,6 +8917,14 @@ function ScanCaptureMobilePage() {
     runQueue();
   }
 
+  function retryAllErrors() {
+    const erroredIds = new Set(queueRef.current.filter((item) => item.status === "error").map((item) => item.id));
+    if (!erroredIds.size) return;
+    setQueue((prev) => prev.map((item) => (erroredIds.has(item.id) ? { ...item, status: "queued" } : item)));
+    queueRef.current = queueRef.current.map((item) => (erroredIds.has(item.id) ? { ...item, status: "queued" } : item));
+    runQueue();
+  }
+
   const doneCount = queue.filter((item) => item.status === "done").length;
   const pendingCount = queue.filter((item) => item.status === "queued" || item.status === "uploading").length;
   const errorCount = queue.filter((item) => item.status === "error").length;
@@ -8950,6 +8958,11 @@ function ScanCaptureMobilePage() {
           <span>{tf("scanCapture.uploadedCount", { count: doneCount })}</span>
           {pendingCount > 0 && <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-amber-950">{tf("scanCapture.pendingCount", { count: pendingCount })}</span>}
           {errorCount > 0 && <span className="rounded-full bg-rose-500 px-2 py-0.5 text-xs font-bold text-white">{tf("scanCapture.errorCount", { count: errorCount })}</span>}
+          {errorCount > 0 && (
+            <button type="button" onClick={retryAllErrors} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-rose-700">
+              {t("scanCapture.retryAll")}
+            </button>
+          )}
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2">
           {queue.map((item) => (
