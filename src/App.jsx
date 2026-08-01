@@ -6528,6 +6528,22 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
   // printed map, so what is framed on screen is what lands in the PDF.
   const [centreMapZoom, setCentreMapZoom] = useState(18);
   const changeCentreMapZoom = (delta) => setCentreMapZoom((current) => Math.max(13, Math.min(19, current + delta)));
+  // World-pixel pan offset at centreMapZoom, on top of the reference-coordinate center - a purely
+  // visual "look elsewhere on the map" that never touches prep.referenceLatitude/Longitude or any
+  // marker's recorded position. Reset whenever the reference point or zoom changes, so re-centering
+  // (via "Najít"/Find) or zooming always returns to a centered view rather than compounding an old pan.
+  const [centreViewOffset, setCentreViewOffset] = useState({ x: 0, y: 0 });
+  useEffect(() => { setCentreViewOffset({ x: 0, y: 0 }); }, [prep.referenceLatitude, prep.referenceLongitude, centreMapZoom]);
+  // Keeps the Reference coordinates field showing the Centre marker's own current position (not a
+  // stale value from whatever was searched/typed earlier), so "Najít" naturally re-centers the view
+  // on the Centre - see applyCoordinateSearch, which recognizes this as a pure re-center rather than
+  // a request to physically relocate the whole site.
+  useEffect(() => {
+    const point = prep.examCenter?.point;
+    const lat = Number(point?.lat ?? point?.latitude);
+    const lng = Number(point?.lng ?? point?.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) setCoordinateInput(formatFieldCoordinates({ lat, lng }));
+  }, [prep.examCenter?.point?.lat, prep.examCenter?.point?.lng, prep.examCenter?.point?.latitude, prep.examCenter?.point?.longitude]);
   // ČÚZK only has Czech coverage; if the reference point moves outside CZ, switch to Esri World
   // Imagery (orthophoto across Europe/globe) automatically — unless the operator already picked a
   // layer by hand, which always wins.
@@ -6670,6 +6686,23 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
       return;
     }
     setError("");
+
+    // The field is kept synced to the Centre marker's own position (see the sync effect above),
+    // so "Najít" on an untouched field is just "re-center the view on the Centre", not a request
+    // to physically relocate the site - skip the relocate-everything confirm for that case.
+    const centerPoint = prep.examCenter?.point || {};
+    const centerLat = Number(centerPoint.lat ?? centerPoint.latitude);
+    const centerLng = Number(centerPoint.lng ?? centerPoint.longitude);
+    const isCentrePoint = Number.isFinite(centerLat) && Number.isFinite(centerLng) && Math.abs(centerLat - parsed.lat) < 1e-9 && Math.abs(centerLng - parsed.lng) < 1e-9;
+    if (isCentrePoint) {
+      // Reset the pan directly rather than relying on the reference-changed effect: if the
+      // reference already equals the Centre's point (nothing panned via search before, only by
+      // dragging), the coordinate value here doesn't actually change, so that effect's own
+      // dependencies wouldn't fire - "Najít" must still undo a drag-pan even then.
+      setCentreViewOffset({ x: 0, y: 0 });
+      updatePrep({ referenceLatitude: parsed.lat, referenceLongitude: parsed.lng });
+      return;
+    }
 
     const previousLat = Number(prep.referenceLatitude);
     const previousLng = Number(prep.referenceLongitude);
@@ -6825,21 +6858,34 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
     downloadFieldJson(`field-tablet-package-${String(level).toLowerCase()}.json`, createFieldCandidatePackage(prep, level));
   }
 
+  // The reference lat/lng's own world position, plus the pan offset from dragging the map
+  // background - this is the point every tile/marker position and every pointer-to-latLng
+  // conversion below treats as screen-center, so panning stays consistent everywhere at once.
+  function centreEffectiveCenterWorld() {
+    const referenceWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    return { x: referenceWorld.x + centreViewOffset.x, y: referenceWorld.y + centreViewOffset.y };
+  }
+
   function pointFromCentreMapEvent(event) {
     const rect = centreMapRef.current?.getBoundingClientRect();
     if (!rect) return null;
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    const centerWorld = centreEffectiveCenterWorld();
     const worldX = centerWorld.x + (event.clientX - (rect.left + rect.width / 2));
     const worldY = centerWorld.y + (event.clientY - (rect.top + rect.height / 2));
     const { lat, lng } = centreWorldToLatLng(worldX, worldY, centreMapZoom);
     return { lat, lng };
   }
 
+  // kind "pan" drags the map viewport itself (background) rather than a marker - started from the
+  // map container's own onPointerDown, which only ever fires for the background: every marker
+  // button's onPointerDown already stopPropagation()s, so a marker drag never also starts a pan.
   function startCentreDrag(kind, id, event) {
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    centreDragRef.current = { kind, id, moved: false };
+    centreDragRef.current = kind === "pan"
+      ? { kind, id, moved: false, startClientX: event.clientX, startClientY: event.clientY, startOffset: centreViewOffset }
+      : { kind, id, moved: false };
     if (kind === "tree") setSelectedTreeId(id);
     if (kind === "center") setSelectedTreeId("__center__");
   }
@@ -6847,6 +6893,14 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
   function moveCentreDrag(event) {
     const drag = centreDragRef.current;
     if (!drag) return;
+    if (drag.kind === "pan") {
+      drag.moved = true;
+      setCentreViewOffset({
+        x: drag.startOffset.x - (event.clientX - drag.startClientX),
+        y: drag.startOffset.y - (event.clientY - drag.startClientY),
+      });
+      return;
+    }
     const point = pointFromCentreMapEvent(event);
     if (!point) return;
     drag.moved = true;
@@ -6865,7 +6919,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
     const lat = Number(point?.lat ?? point?.latitude);
     const lng = Number(point?.lng ?? point?.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { left: "50%", top: "50%" };
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    const centerWorld = centreEffectiveCenterWorld();
     const pointWorld = centreLatLngToWorld(lat, lng, centreMapZoom);
     return {
       left: `calc(50% + ${pointWorld.x - centerWorld.x}px)`,
@@ -6901,7 +6955,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
   }
 
   function centreMapTiles() {
-    const centerWorld = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+    const centerWorld = centreEffectiveCenterWorld();
     const centerTileX = Math.floor(centerWorld.x / 256);
     const centerTileY = Math.floor(centerWorld.y / 256);
     const offsetX = centerWorld.x - centerTileX * 256;
@@ -7145,7 +7199,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                 <div className="text-xs text-slate-500">{t("fieldPrep.reference")}: {Number(prep.referenceLatitude).toFixed(6)}, {Number(prep.referenceLongitude).toFixed(6)}</div>
               </div>
             </div>
-            <div ref={centreMapRef} onPointerMove={moveCentreDrag} onPointerUp={endCentreDrag} onPointerCancel={endCentreDrag} className="relative h-[520px] touch-none overflow-hidden rounded-2xl border bg-slate-100">
+            <div ref={centreMapRef} onPointerDown={(event) => startCentreDrag("pan", null, event)} onPointerMove={moveCentreDrag} onPointerUp={endCentreDrag} onPointerCancel={endCentreDrag} className="relative h-[520px] touch-none cursor-grab overflow-hidden rounded-2xl border bg-slate-100 active:cursor-grabbing">
               <div className="field-tile-layer" aria-hidden="true">
                 {centreMapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
               </div>
