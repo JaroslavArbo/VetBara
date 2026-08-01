@@ -12772,6 +12772,103 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
   );
 }
 
+// Simple corner-handle crop tool for a field photo. Percentage-based (fractions of the rendered
+// image box), so the same rect maps cleanly onto the source image's natural pixel size regardless
+// of how big the preview is on screen. Closing with the rect still at its untouched default (no
+// drag happened) just dismisses - only an actual drag counts as "the operator wants a crop" and
+// triggers onSaveCrop.
+function PhotoCropOverlay({ photo, onClose, onSaveCrop, t }) {
+  const imgRef = useRef(null);
+  const containerRef = useRef(null);
+  const defaultRect = { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
+  const [rect, setRect] = useState(defaultRect);
+  const dragRef = useRef(null);
+
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+  function startDrag(corner, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+    dragRef.current = { corner, pointerId: event.pointerId };
+  }
+
+  function onMove(event) {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId || !containerRef.current) return;
+    const box = containerRef.current.getBoundingClientRect();
+    const px = clamp01((event.clientX - box.left) / box.width);
+    const py = clamp01((event.clientY - box.top) / box.height);
+    setRect((prev) => {
+      let { x, y, w, h } = prev;
+      const x2 = x + w;
+      const y2 = y + h;
+      const minSize = 0.05;
+      if (drag.corner === "nw") { x = Math.min(px, x2 - minSize); y = Math.min(py, y2 - minSize); w = x2 - x; h = y2 - y; }
+      else if (drag.corner === "ne") { const nx2 = Math.max(px, x + minSize); y = Math.min(py, y2 - minSize); w = nx2 - x; h = y2 - y; }
+      else if (drag.corner === "sw") { x = Math.min(px, x2 - minSize); const ny2 = Math.max(py, y + minSize); w = x2 - x; h = ny2 - y; }
+      else if (drag.corner === "se") { const nx2 = Math.max(px, x + minSize); const ny2 = Math.max(py, y + minSize); w = nx2 - x; h = ny2 - y; }
+      return { x: clamp01(x), y: clamp01(y), w, h };
+    });
+  }
+
+  function endDrag(event) {
+    if (dragRef.current && event.pointerId === dragRef.current.pointerId) dragRef.current = null;
+  }
+
+  function handleClose() {
+    const isUntouched = Math.abs(rect.x - defaultRect.x) < 0.001 && Math.abs(rect.y - defaultRect.y) < 0.001 && Math.abs(rect.w - defaultRect.w) < 0.001 && Math.abs(rect.h - defaultRect.h) < 0.001;
+    const img = imgRef.current;
+    if (isUntouched || !img || !img.naturalWidth) { onClose(); return; }
+    const canvas = document.createElement("canvas");
+    const sx = rect.x * img.naturalWidth;
+    const sy = rect.y * img.naturalHeight;
+    const sw = rect.w * img.naturalWidth;
+    const sh = rect.h * img.naturalHeight;
+    canvas.width = sw;
+    canvas.height = sh;
+    canvas.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    onSaveCrop(canvas.toDataURL("image/jpeg", 0.9));
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col bg-slate-950 p-4 text-white">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-semibold">{photo.description || photo.name || photo.id}</h3>
+          <p className="text-sm text-slate-300">{t("report.cropHint")}</p>
+        </div>
+        <Button onClick={handleClose} variant="outline" className="rounded-2xl bg-white text-slate-950">
+          {t("common.close")}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-2xl bg-white p-2">
+        <div ref={containerRef} className="relative mx-auto" onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
+          <img ref={imgRef} src={photo.dataUrl} alt="" className="block h-auto w-full rounded-xl" draggable={false} />
+          <div
+            className="absolute border-2 border-emerald-400 bg-emerald-400/10"
+            style={{ left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.w * 100}%`, height: `${rect.h * 100}%` }}
+          >
+            {["nw", "ne", "sw", "se"].map((corner) => (
+              <div
+                key={corner}
+                onPointerDown={(event) => startDrag(corner, event)}
+                className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-emerald-500"
+                style={{
+                  left: corner.includes("w") ? 0 : "100%",
+                  top: corner.includes("n") ? 0 : "100%",
+                  touchAction: "none",
+                  cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, t }) {
   const draft = reportDrafts[candidate.id] ?? createReportDraft();
   const tree = draft[activeReportTree];
@@ -12805,6 +12902,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [handwritingOpen, setHandwritingOpen] = useState(false);
   const [fullscreenSectionKey, setFullscreenSectionKey] = useState(null);
   const [annotatingPhoto, setAnnotatingPhoto] = useState(null);
+  const [cropViewer, setCropViewer] = useState(null);
 
   const label = (key, fallback) => {
     const translated = t(key);
@@ -12936,6 +13034,22 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     setAnnotatingPhoto(null);
   }
 
+  // Same "new photo, original untouched" pattern as annotation - the crop overlay itself decides
+  // whether a save is even warranted (see PhotoCropOverlay's handleClose).
+  function saveCroppedPhoto(dataUrl) {
+    addReportPhoto(activeReportTree, {
+      name: `crop-${cropViewer?.name || "photo"}-${Date.now()}.jpg`,
+      type: "image/jpeg",
+      size: 0,
+      dataUrl,
+      description: cropViewer?.description ? `${cropViewer.description} (${t("report.cropped")})` : t("report.croppedPhotoDescription"),
+      useInReport: true,
+      createdAt: new Date().toISOString(),
+    });
+    setPhotoStatus(t("report.cropSaved"));
+    setCropViewer(null);
+  }
+
   // A fallback for when the digital submission can't go through: exports everything already
   // typed/photographed for both trees to a printable PDF, without closing or submitting the report.
   function printReportDraftPdf() {
@@ -13005,7 +13119,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
           return (
             <div key={photo.id} className="rounded-xl border bg-white p-3">
-              <button type="button" onClick={() => setPhotoViewer(photo)} className="flex w-full items-center gap-3 text-left">
+              <button type="button" onClick={() => setCropViewer(photo)} className="flex w-full items-center gap-3 text-left">
                 <div className="h-20 w-20 overflow-hidden rounded-lg bg-slate-200">
                   {photo.dataUrl ? (
                     <img src={photo.dataUrl} alt={photo.name || photo.id} className="h-full w-full object-cover" />
@@ -13327,6 +13441,15 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             <img src={photoViewer.dataUrl} alt={photoViewer.description || photoViewer.name || photoViewer.id} className="mx-auto h-auto max-w-none rounded-xl" style={{ width: "100%" }} />
           </div>
         </div>
+      )}
+
+      {cropViewer && (
+        <PhotoCropOverlay
+          photo={cropViewer}
+          onClose={() => setCropViewer(null)}
+          onSaveCrop={saveCroppedPhoto}
+          t={t}
+        />
       )}
     </>
   );
