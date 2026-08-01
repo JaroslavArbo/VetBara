@@ -205,6 +205,27 @@ function normaliseTestPackage(body, existingPackage) {
   };
 }
 
+function numberOrDefault(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// Exam-schedule ("harmonogram") settings: day start time, day count, break/lunch length. This is
+// the only part of the Centre's schedule proposal that needs cross-device persistence - the
+// generated blocks themselves are re-derived deterministically from candidates+examiners+settings
+// on whichever device reads them, so there is nothing else to store.
+function normaliseHarmonogramSettings(body, existingSettings) {
+  const source = body.harmonogramSettings;
+  if (!source || typeof source !== "object") return undefined;
+  const previous = objectPayload(existingSettings);
+  return {
+    dayStartTime: typeof source.dayStartTime === "string" && source.dayStartTime ? source.dayStartTime : (previous.dayStartTime || "08:30"),
+    days: Math.max(1, Math.round(numberOrDefault(source.days, previous.days ?? 1))),
+    coffeeBreakMinutes: Math.max(0, Math.round(numberOrDefault(source.coffeeBreakMinutes, previous.coffeeBreakMinutes ?? 30))),
+    lunchMinutes: Math.max(0, Math.round(numberOrDefault(source.lunchMinutes, previous.lunchMinutes ?? 60))),
+  };
+}
+
 function toAssignmentRow(assignment, centreId, examEventId) {
   return {
     exam_event_id: examEventId,
@@ -306,6 +327,7 @@ async function loadSetup(request, centreId, examEvent) {
       assignments: [],
       qrAccess: { candidates: [], examiners: [] },
       testPackage: null,
+      harmonogramSettings: null,
     };
   }
 
@@ -335,6 +357,7 @@ async function loadSetup(request, centreId, examEvent) {
     })),
     qrAccess: await buildQrAccess(request, candidates, mappedExaminers, examEventId),
     testPackage: payload.testPackage ?? null,
+    harmonogramSettings: payload.harmonogramSettings ?? null,
   };
 }
 
@@ -343,6 +366,7 @@ async function saveSetup(request, centreId, body) {
   const examEventId = examEvent.id;
   const existingPayload = objectPayload(examEvent.payload);
   const testPackage = normaliseTestPackage(body, existingPayload.testPackage);
+  const harmonogramSettings = normaliseHarmonogramSettings(body, existingPayload.harmonogramSettings);
   const candidates = Array.isArray(body.candidates) ? body.candidates.map((candidate) => normaliseCandidate(candidate, centreId, examEventId)) : [];
   const examiners = Array.isArray(body.examiners) ? body.examiners.map((examiner) => normaliseExaminer(examiner, centreId, examEventId)) : [];
   const assignments = Array.isArray(body.assignments) ? body.assignments : [];
@@ -372,11 +396,14 @@ async function saveSetup(request, centreId, body) {
     examiners.length ? supabase("examiners?on_conflict=exam_event_id,id", upsertOptions(examiners)) : [],
   ];
 
-  if (testPackage !== undefined) {
+  if (testPackage !== undefined || harmonogramSettings !== undefined) {
+    const nextPayload = { ...existingPayload };
+    if (testPackage !== undefined) nextPayload.testPackage = testPackage;
+    if (harmonogramSettings !== undefined) nextPayload.harmonogramSettings = harmonogramSettings;
     setupWrites.push(supabase(`exam_events?id=eq.${encode(examEventId)}`, {
       method: "PATCH",
       body: JSON.stringify({
-        payload: { ...existingPayload, testPackage },
+        payload: nextPayload,
         updated_at: new Date().toISOString(),
       }),
     }));

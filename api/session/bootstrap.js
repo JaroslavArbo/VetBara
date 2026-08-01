@@ -222,6 +222,7 @@ async function loadCentreSetupForBootstrap(session) {
     if (!event) return null;
     const examEventId = event.id;
     const testPackage = objectPayload(event.payload).testPackage ?? null;
+    const harmonogramSettings = objectPayload(event.payload).harmonogramSettings ?? null;
     const [candidateRows, examinerRows, assignmentRows] = await Promise.all([
       supabase(`candidates?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id,name,level,payload&order=id.asc`),
       supabase(`examiners?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id,name,payload&order=id.asc`),
@@ -238,7 +239,7 @@ async function loadCentreSetupForBootstrap(session) {
     const assignments = assignmentRows.map((row) => ({ candidateId: row.candidate_id, examinerId: row.examiner_id, role: row.role }));
     // The client scopes its per-exam browser caches by this id, so results from one certification
     // never surface in another opened in the same browser.
-    return { examEventId, testPackage, candidates, examiners, assignments };
+    return { examEventId, testPackage, harmonogramSettings, candidates, examiners, assignments };
   } catch (error) {
     console.warn("Bootstrap could not load Centre setup", error?.message || error);
     return null;

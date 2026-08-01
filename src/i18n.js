@@ -358,6 +358,9 @@ Object.assign(translations.en, {
   "candidate.identity.endExam": "End exam",
   "candidate.identity.endExamConfirm": "End this candidate's session on this device? You'll need to scan a QR code to sign in again.",
 
+  "candidate.mySchedule.title": "My exam schedule",
+  "candidate.mySchedule.helper": "Planned times for your own exam parts, as set by the Centre.",
+
   "candidate.landing.title": "Candidate landing page",
   "candidate.landing.helper": "Review which sections are ready before opening work for this exam attempt.",
   "candidate.readiness.title": "Candidate readiness",
@@ -494,6 +497,9 @@ Object.assign(translations.cs, {
   "candidate.identity.confirmed": "Identita potvrzena",
   "candidate.identity.endExam": "Ukončit zkoušku",
   "candidate.identity.endExamConfirm": "Ukončit session tohoto kandidáta na tomto zařízení? Pro opětovné přihlášení bude potřeba naskenovat QR kód.",
+
+  "candidate.mySchedule.title": "Můj harmonogram zkoušky",
+  "candidate.mySchedule.helper": "Plánované časy vašich částí zkoušky, jak je nastavilo Centrum.",
 
   "candidate.landing.title": "Úvodní stránka kandidáta",
   "candidate.landing.helper": "Zkontrolujte, které části jsou připravené, než otevřete práci pro tento pokus.",

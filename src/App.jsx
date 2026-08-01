@@ -21,11 +21,11 @@ import JSZip from "jszip";
 import { buildExamWorkbook } from "./lib/examWorkbooks";
 import jsPDF from "jspdf";
 
-async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage }) {
+async function saveCentreSetupWithTestPackage(sessionToken, { candidates, examiners, assignments, testPackage, harmonogramSettings }) {
   const response = await fetch("/api/centre/setup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionToken, action: "save", candidates, examiners, assignments, testPackage }),
+    body: JSON.stringify({ sessionToken, action: "save", candidates, examiners, assignments, testPackage, harmonogramSettings }),
   });
   const contentType = response.headers.get("content-type") || "";
   const body = contentType.includes("application/json") ? await response.json() : await response.text();
@@ -1347,6 +1347,16 @@ function VetBaraPrototype() {
   const [centreQrAccess, setCentreQrAccess] = useState({ candidates: [], examiners: [] });
   const [centreValidationIssues, setCentreValidationIssues] = useState([]);
   const [centreSetupDirty, setCentreSetupDirty] = useState(false);
+  // Exam-schedule ("harmonogram") settings, lifted here (rather than owned by CentreScheduleBuilder)
+  // so they can travel through the same save/load-Centre-setup round trip as the rest of the roster
+  // and be read back on a Candidate's own device to render its individual schedule widget.
+  const [harmonogramSettings, setHarmonogramSettings] = useState(HARMONOGRAM_DEFAULT_SETTINGS);
+  useEffect(() => {
+    setHarmonogramSettings(readHarmonogramSettings());
+  }, [centreExamId]);
+  useEffect(() => {
+    writeHarmonogramSettings(harmonogramSettings);
+  }, [harmonogramSettings]);
   // Examiner outdoor voice recording. status: idle | recording | processing | saved | error
   const voiceRecorderRef = useRef(null);
   const mediaRetryBusyRef = useRef(false);
@@ -2005,6 +2015,12 @@ function VetBaraPrototype() {
     setActiveExamScope(access.centreSetup?.examEventId || (access.role === "Centre" ? access.subjectId : ""));
     if (access.role === "Centre" && access.subjectId) setCentreExamId(String(access.subjectId));
 
+    // Same as the roster below: a Candidate/Examiner device has never seen the Centre's own
+    // harmonogram settings, only what the Centre already saved server-side.
+    if (isObject(access.centreSetup?.harmonogramSettings)) {
+      setHarmonogramSettings({ ...HARMONOGRAM_DEFAULT_SETTINGS, ...access.centreSetup.harmonogramSettings });
+    }
+
     // Apply the real Centre roster (names, e-mails, assignments) persisted server-side, so an
     // Examiner/Candidate on their own device shows the actual people instead of the demo roster.
     const centreRoster = access.centreSetup;
@@ -2591,6 +2607,10 @@ function VetBaraPrototype() {
 
     setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
 
+    if (isObject(result.harmonogramSettings)) {
+      setHarmonogramSettings({ ...HARMONOGRAM_DEFAULT_SETTINGS, ...result.harmonogramSettings });
+    }
+
     applyTestPackagePayload(result.testPackage);
   }
 
@@ -2738,6 +2758,7 @@ function VetBaraPrototype() {
         })),
         assignments: assignmentList,
         testPackage,
+        harmonogramSettings,
       });
       setCentreQrAccess(result.qrAccess ?? { candidates: [], examiners: [] });
       setCentreSetupDirty(false);
@@ -3615,8 +3636,8 @@ function VetBaraPrototype() {
     {accessError && <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-950 shadow-sm"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><div>{accessError}</div><div className="mt-1 font-normal">{t("access.error.help")}</div></div></div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
-      {role === "Candidate" && <CandidateView candidates={candidates} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} harmonogramSettings={harmonogramSettings} setHarmonogramSettings={setHarmonogramSettings} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} activeSessionToken={activeSessionToken} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
@@ -11262,21 +11283,18 @@ function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
   );
 }
 
-function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
-  const [settings, setSettings] = useState(HARMONOGRAM_DEFAULT_SETTINGS);
+// Settings are lifted to VetBaraPrototype (rather than owned here) so they can be saved to the
+// backend alongside the rest of Centre Setup and read back by a Candidate's own device to render
+// its individual schedule widget - a plain local useState never leaves this browser tab.
+function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, setCentreSetupDirty, t }) {
   const [groups, setGroups] = useState(null);
   const [activeDay, setActiveDay] = useState(0);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
-  // Same scope-not-ready-yet race as CentreWifiAccessBox: re-read the saved settings once
-  // centreExamId (set during QR session resolution) is actually available.
-  useEffect(() => {
-    setSettings(readHarmonogramSettings());
-  }, [centreExamId]);
-
-  useEffect(() => {
-    writeHarmonogramSettings(settings);
-  }, [settings]);
+  function updateSettings(updater) {
+    setCentreSetupDirty(true);
+    setSettings(updater);
+  }
 
   function regenerate() {
     setGroups(buildDefaultHarmonogramGroups(candidates, examiners, settings));
@@ -11310,16 +11328,16 @@ function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm font-medium">{t("harmonogram.startTime")}
-          <input type="time" value={settings.dayStartTime} onChange={(event) => setSettings((s) => ({ ...s, dayStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+          <input type="time" value={settings.dayStartTime} onChange={(event) => updateSettings((s) => ({ ...s, dayStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
         <label className="text-sm font-medium">{t("harmonogram.days")}
-          <input type="number" min="1" value={settings.days} onChange={(event) => setSettings((s) => ({ ...s, days: Math.max(1, Number(event.target.value) || 1) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+          <input type="number" min="1" value={settings.days} onChange={(event) => updateSettings((s) => ({ ...s, days: Math.max(1, Number(event.target.value) || 1) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
         <label className="text-sm font-medium">{t("harmonogram.coffeeBreakMinutes")}
-          <input type="number" min="0" step="5" value={settings.coffeeBreakMinutes} onChange={(event) => setSettings((s) => ({ ...s, coffeeBreakMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+          <input type="number" min="0" step="5" value={settings.coffeeBreakMinutes} onChange={(event) => updateSettings((s) => ({ ...s, coffeeBreakMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
         <label className="text-sm font-medium">{t("harmonogram.lunchMinutes")}
-          <input type="number" min="0" step="5" value={settings.lunchMinutes} onChange={(event) => setSettings((s) => ({ ...s, lunchMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+          <input type="number" min="0" step="5" value={settings.lunchMinutes} onChange={(event) => updateSettings((s) => ({ ...s, lunchMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
       </div>
     );
@@ -11405,7 +11423,7 @@ function tfHarmonogram(t, key, values) {
   return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, harmonogramSettings, setHarmonogramSettings, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
@@ -11920,7 +11938,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
               {!rosterConfirmed && centreSetupError && <div className="mt-2 rounded-xl border border-rose-300 bg-rose-50 p-2 text-sm font-medium text-rose-800">{centreSetupError}</div>}
             </div>
 
-            <CentreScheduleBuilder candidates={candidates} examiners={examiners} centreExamId={centreExamId} t={t} />
+            <CentreScheduleBuilder candidates={candidates} examiners={examiners} settings={harmonogramSettings} setSettings={setHarmonogramSettings} setCentreSetupDirty={setCentreSetupDirty} t={t} />
           </div>
         </AdminDashboardSection>
 
@@ -12217,7 +12235,7 @@ async function fetchCandidateFieldPackage(candidate) {
   throw lastError || new Error("Field package is not available.");
 }
 
-function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, t }) {
+function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   // "" | "sending" | "done" — the button is white until a transfer succeeds, then green, and goes
   // back to white on the next change so it always reflects the *current* state, never a stale one.
@@ -12404,7 +12422,7 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
     return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} setActiveSection={setActiveSection} t={t} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},
@@ -12628,7 +12646,36 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
 }
 
 
-function CandidateLanding({ candidate, confirmed, confirmCandidate, logoutCandidate, setScannerMode, setScannerReentry, sections, status, times, tone, openSection, t }) {
+// Small color-coded read-out of the candidate's own slice of the Centre's exam-schedule
+// ("harmonogram") proposal - same deterministic pairing/sequencing function the Centre's own
+// Schedule tab uses (CentreScheduleBuilder), so it always matches what the Centre would see for
+// this candidate without needing its own synced copy of drag-adjusted block positions.
+function CandidateScheduleWidget({ candidate, candidates, examiners, settings, t }) {
+  const groups = useMemo(
+    () => (settings && candidates?.length ? buildDefaultHarmonogramGroups(candidates, examiners || [], settings) : []),
+    [candidates, examiners, settings],
+  );
+  const myGroup = groups.find((group) => group.members.some((member) => member.id === candidate.id));
+  if (!myGroup) return null;
+
+  return (
+    <div className="mt-3 rounded-2xl border bg-white p-3">
+      <h4 className="text-sm font-semibold">{t("candidate.mySchedule.title")}</h4>
+      <p className="mt-1 text-xs text-slate-500">{t("candidate.mySchedule.helper")}</p>
+      <div className="mt-2 space-y-1.5">
+        {myGroup.blocks.map((block) => (
+          <div key={block.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-xs" style={{ background: harmonogramActivityColor(block.activity) }}>
+            <span className="font-semibold">{harmonogramTimeLabel(block.start)}</span>
+            <span className="flex-1 px-2">{t(`harmonogram.activity.${block.activity}`)}</span>
+            <span className="text-slate-700">{block.duration ? `${block.duration} min` : ""}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CandidateLanding({ candidate, candidates, examiners, harmonogramSettings, confirmed, confirmCandidate, logoutCandidate, setScannerMode, setScannerReentry, sections, status, times, tone, openSection, t }) {
   const hasWrittenTest = sections.some((section) => section.key === "test");
   const hasReportSection = sections.some((section) => section.key === "report");
   const readinessItems = [
@@ -12655,7 +12702,7 @@ function CandidateLanding({ candidate, confirmed, confirmCandidate, logoutCandid
     setScannerMode?.("Candidate");
   }
 
-  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{[[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level], [t("candidate.identity.email"), candidate.email]].filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button><Button onClick={endCandidateSession} variant="outline" className="mt-2 w-full rounded-2xl"><LogOut className="mr-2 h-4 w-4" />{t("candidate.identity.endExam")}</Button></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{sectionTitle(t, section)}</h4><p className="mt-1 text-sm text-slate-600">{sectionDescription(t, section)}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? sectionTitle(t, section) : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
+  return <div className="grid gap-4 lg:grid-cols-3"><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-1" : ""}`}><div className="mb-3 rounded-xl bg-slate-950 p-4 text-white"><div className="text-xs uppercase tracking-wide text-slate-300">{t("candidate.identity.idLabel")}</div><div className="text-3xl font-bold tracking-tight">{candidate.id}</div></div><h3 className="font-semibold">{t("candidate.identity.detailsTitle")}</h3>{[[t("candidate.identity.name"), candidate.name], [t("candidate.identity.examLevel"), candidate.level], [t("candidate.identity.email"), candidate.email]].filter(([, v]) => String(v ?? "").trim()).map(([k, v]) => <div key={k} className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><div className="text-xs text-slate-500">{k}</div><div className="font-medium">{v}</div></div>)}{!confirmed && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{t("candidate.identity.warning")}</p>}<Button onClick={confirmCandidate} disabled={confirmed} className="mt-4 w-full rounded-2xl"><BadgeCheck className="mr-2 h-4 w-4" />{confirmed ? t("candidate.identity.confirmed") : t("candidate.identity.confirm")}</Button><Button onClick={endCandidateSession} variant="outline" className="mt-2 w-full rounded-2xl"><LogOut className="mr-2 h-4 w-4" />{t("candidate.identity.endExam")}</Button><CandidateScheduleWidget candidate={candidate} candidates={candidates} examiners={examiners} settings={harmonogramSettings} t={t} /></div><div className={`rounded-2xl border bg-white p-4 ${confirmed ? "lg:col-span-2" : "lg:col-span-2"}`}><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><h3 className="font-semibold">{t("candidate.landing.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("candidate.landing.helper")}</p></div></div><div className="mt-4 grid gap-3 md:grid-cols-2">{sections.map((section) => <div key={section.key} className="rounded-2xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold">{sectionTitle(t, section)}</h4><p className="mt-1 text-sm text-slate-600">{sectionDescription(t, section)}</p></div><StatusPill tone={tone(status[section.key])}>{status[section.key]}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{sectionHelper(status[section.key])}</p><div className="mt-3 text-xs text-slate-500"><div>{t("common.opened")}: {times[section.key]?.openedAt || "-"}</div><div>{t("common.closed")}: {times[section.key]?.closedAt || "-"}</div></div><Button onClick={() => openSection(section.key)} disabled={!confirmed} className="mt-4 rounded-2xl">{section.key.startsWith("field-") ? sectionTitle(t, section) : (status[section.key] === "closed" ? t("candidate.section.requestReopen") : t("candidate.sections.open"))}</Button></div>)}</div></div></div>;
 }
 
 
