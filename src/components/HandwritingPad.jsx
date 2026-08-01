@@ -96,7 +96,7 @@ function wrapTemplateLines(text, maxChars) {
 // area without leaving stray ink from a resting hand. Strokes are kept as vector point data (not
 // baked into the canvas immediately) so color/thickness/eraser/undo all just add or remove entries
 // from `strokes` — the visible ink is only ever a re-render.
-export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, templateText = "", t, Button, CloseIcon, EraserIcon, UndoIcon }) {
+export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, lockMaximized = false, templateText = "", t, Button, CloseIcon, EraserIcon, UndoIcon }) {
   const svgRef = useRef(null);
   const scrollRef = useRef(null);
   // Ink saved in an earlier session arrives as a flat PNG (`existingImage`), so it has no stroke
@@ -121,7 +121,9 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const [color, setColor] = useState(COLORS[0].value);
   const [size, setSize] = useState(SIZES[1].value);
   const [eraserMode, setEraserMode] = useState(false);
-  const [maximized, setMaximized] = useState(false);
+  // Outdoor sketches (lockMaximized) always open at full size and stay there - no toggle to shrink
+  // back down, per the examiner's request that "Zvětšit" (Maximize) is simply how the pad looks now.
+  const [maximized, setMaximized] = useState(lockMaximized);
 
   // `tallCanvas` doubles the vertical writing area (a genuinely taller viewBox, not just a
   // letterboxed box), giving ~2× the room the examiner asked for; the extra height overflows the
@@ -129,12 +131,18 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // Maximizing does NOT scale the drawing up (the examiner asked to keep pen/text size constant) —
   // it keeps the same width and only LENGTHENS the canvas (3× height), so full-screen just gives
   // more room to write, not a bigger, wider drawing.
-  const canvasHeight = CANVAS_HEIGHT * (maximized ? 3 : tallCanvas ? 2 : 1);
+  const baseCanvasHeight = CANVAS_HEIGHT * (maximized ? 3 : tallCanvas ? 2 : 1);
 
   // Task 1: the item's helper texts (without the question text) are copied into the sketch as a
   // light-grey template the examiner annotates over. It is part of the drawing (not the stripped
   // background <image>), so it bakes into the saved PNG.
   const templateLines = templateText ? wrapTemplateLines(templateText, TEMPLATE_MAX_CHARS) : [];
+  // A long helper text (e.g. Practicing Q11/Q12, which each run to a dozen-plus wrapped lines) can
+  // need more vertical room than the base canvas gives - the SVG viewBox clips anything drawn past
+  // its own height, so text past the bottom edge was invisible, not just scrolled out of view. The
+  // canvas grows to fit it exactly, then adds one full base height of actual writing room below it.
+  const templateBlockHeight = templateLines.length ? TEMPLATE_MARGIN_TOP + templateLines.length * TEMPLATE_LINE_HEIGHT + TEMPLATE_LINE_HEIGHT : 0;
+  const canvasHeight = Math.max(baseCanvasHeight, templateBlockHeight + CANVAS_HEIGHT);
 
   function isDrawingPointer(event) {
     // Pen and mouse draw; touch (finger) does not. Some Bluetooth/EMR styluses on Android report
@@ -353,17 +361,21 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
             <h3 className="text-lg font-semibold">{title}</h3>
             {helperText && <p className="mt-1 text-sm text-slate-600">{helperText}</p>}
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" onClick={() => setMaximized((v) => !v)} variant="outline" className="rounded-2xl">
-              {maximized ? tr(t, "handwriting.restore", "Restore") : tr(t, "handwriting.maximize", "Maximize")}
-            </Button>
-            <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
-              <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
-            </Button>
-          </div>
+          {!lockMaximized && (
+            <div className="flex items-center gap-2">
+              <Button type="button" onClick={() => setMaximized((v) => !v)} variant="outline" className="rounded-2xl">
+                {maximized ? tr(t, "handwriting.restore", "Restore") : tr(t, "handwriting.maximize", "Maximize")}
+              </Button>
+              <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
+                <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Sticky: with a tall/maximized canvas the toolbar used to scroll away with the drawing
+            area, so the examiner had to scroll back up just to switch color or reach the eraser. */}
+        <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 bg-white py-1">
           <div className="inline-flex items-center gap-1.5 rounded-full border p-1.5" role="group" aria-label={tr(t, "handwriting.colorGroup", "Color")}>
             {COLORS.map((c) => (
               <button
@@ -442,6 +454,11 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
         {/* Sticky: with a tall canvas the footer used to sit far below the fold, so on a tablet the
             dialog looked like it only offered "Close" and the examiner could not find Save. */}
         <div className="sticky bottom-0 mt-3 flex justify-end gap-2 border-t border-slate-200 bg-white/95 py-2">
+          {lockMaximized && (
+            <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
+              <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
+            </Button>
+          )}
           {/* `dirty` keeps Save reachable after a full wipe, so clearing an old sketch can actually
               be persisted rather than leaving the operator stuck with a disabled button. */}
           <Button type="button" onClick={handleSave} className="rounded-2xl" disabled={!dirty && !strokes.length && !hasBackground && templateLines.length === 0}>
