@@ -136,12 +136,12 @@ function Relocate({ className }) { return <IconBase className={className}><path 
 function ChevronDown({ className }) { return <IconBase className={className}><path d="M6 9l6 6 6-6" /></IconBase>; }
 function Check({ className }) { return <IconBase className={className}><path d="M20 6L9 17l-5-5" /></IconBase>; }
 function X({ className }) { return <IconBase className={className}><path d="M18 6L6 18" /><path d="M6 6l12 12" /></IconBase>; }
+function Maximize({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 function Wifi({ className }) { return <IconBase className={className}><path d="M5 12.5a11 11 0 0 1 14 0" /><path d="M8.5 16a6 6 0 0 1 7 0" /><path d="M12 19.5h.01" /></IconBase>; }
 function Search({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconBase>; }
 function ZoomIn({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M11 8v6" /><path d="M8 11h6" /></IconBase>; }
 function ZoomOut({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M8 11h6" /></IconBase>; }
 function Layers({ className }) { return <IconBase className={className}><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5" /><path d="M3 17l9 5 9-5" /></IconBase>; }
-function Maximize({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 function Minimize({ className }) { return <IconBase className={className}><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></IconBase>; }
 function RefreshCw({ className }) { return <IconBase className={className}><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" /><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" /><path d="M3 16v4h4" /><path d="M21 8V4h-4" /></IconBase>; }
 function Eraser({ className }) { return <IconBase className={className}><path d="M7 21H4a1 1 0 0 1-.7-1.7l10-10a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L15 21" /><path d="M22 21H7" /><path d="m5 12 5 5" /></IconBase>; }
@@ -12803,6 +12803,8 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [fieldNotesDraft, setFieldNotesDraft] = useState(tree.fieldNotes ?? "");
   const [photoDescriptionDrafts, setPhotoDescriptionDrafts] = useState({});
   const [handwritingOpen, setHandwritingOpen] = useState(false);
+  const [fullscreenSectionKey, setFullscreenSectionKey] = useState(null);
+  const [annotatingPhoto, setAnnotatingPhoto] = useState(null);
 
   const label = (key, fallback) => {
     const translated = t(key);
@@ -12916,6 +12918,58 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
 
     setPhotoStatus(t("report.handwritingSaved"));
     setHandwritingOpen(false);
+  }
+
+  // Saves the annotated version as a NEW photo (the original stays untouched, same as the
+  // handwriting sketch above), so a mis-drawn annotation never destroys the original field photo.
+  function saveAnnotatedPhoto(dataUrl) {
+    addReportPhoto(activeReportTree, {
+      name: `annotated-${annotatingPhoto?.name || "photo"}-${Date.now()}.png`,
+      type: "image/png",
+      size: 0,
+      dataUrl,
+      description: annotatingPhoto?.description ? `${annotatingPhoto.description} (${t("report.annotated")})` : t("report.annotatedPhotoDescription"),
+      useInReport: true,
+      createdAt: new Date().toISOString(),
+    });
+    setPhotoStatus(t("report.annotationSaved"));
+    setAnnotatingPhoto(null);
+  }
+
+  // A fallback for when the digital submission can't go through: exports everything already
+  // typed/photographed for both trees to a printable PDF, without closing or submitting the report.
+  function printReportDraftPdf() {
+    const bodyHtml = REPORT_TREES.map((treeName) => {
+      const treeData = draft[treeName] ?? createReportDraft()[treeName];
+      const reportPhotos = (treeData.photos ?? []).filter((photo) => photo.useInReport ?? true);
+      const photosHtml = reportPhotos.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:3mm;margin:2mm 0">${reportPhotos.map((photo) => photo.dataUrl ? `<figure style="margin:0"><img src="${photo.dataUrl}" alt="" style="width:38mm;height:28mm;object-fit:cover;border-radius:6px;border:1px solid #dbe3dd" />${photo.description ? `<figcaption style="font-size:7.5pt;color:#64748b;margin-top:1mm;max-width:38mm">${escapeHtml(photo.description)}</figcaption>` : ""}</figure>` : "").join("")}</div>`
+        : "";
+      const sectionsHtml = REPORT_SECTIONS.map((section) => {
+        const value = String(treeData.finalSections?.[section.key] ?? "").trim();
+        return `<div style="margin-top:2mm"><div style="font-weight:700;font-size:9pt;color:#516158">${escapeHtml(sectionTitle(t, section))}</div><div style="border-radius:8px;padding:3mm;margin-top:1mm;background:#f6faf7;font-size:10pt;white-space:pre-wrap">${value ? linesToHtml(value) : "-"}</div></div>`;
+      }).join("");
+      return `<section style="break-inside:avoid;margin-bottom:6mm;padding-bottom:4mm;border-bottom:1px solid #dbe3dd">
+        <div style="font-weight:700;font-size:12pt;margin-bottom:2mm">${escapeHtml(treeName)}</div>
+        <div style="font-weight:700;font-size:9pt;color:#516158">${escapeHtml(t("report.fieldNotes"))}</div>
+        <div style="border-radius:8px;padding:3mm;margin-top:1mm;background:#f6faf7;font-size:10pt;white-space:pre-wrap">${String(treeData.fieldNotes ?? "").trim() ? linesToHtml(treeData.fieldNotes) : "-"}</div>
+        ${photosHtml}
+        ${sectionsHtml}
+      </section>`;
+    }).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(t("report.pdfDraftTitle"))} - ${escapeHtml(candidate.id)}</title><style>
+      @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
+      header{border-bottom:2px solid #102018;padding-bottom:5mm;margin-bottom:6mm}
+      header h1{margin:0;font-size:16pt}
+      header p{margin:2mm 0 0;font-size:9.5pt;color:#516158}
+      @media print{.actions{display:none}}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+    </style></head><body>
+      <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
+      <header><h1>${escapeHtml(t("report.pdfDraftTitle"))}</h1><p>${escapeHtml(candidate.name || candidate.id)} · ${escapeHtml(candidate.id)} · ${escapeHtml(candidate.level || "")}</p><p>${escapeHtml(new Date().toLocaleString())}</p></header>
+      <main>${bodyHtml}</main>
+    </body></html>`;
+    openPrintDocument(html, () => setPhotoStatus(t("report.pdfBlocked")));
   }
 
   function TreeTabs() {
@@ -13087,9 +13141,14 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                 <p className="mt-1 text-sm text-slate-600">{candidate.name} · {activeReportTree}</p>
               </div>
               <div className="flex flex-wrap items-start gap-3">
-                <Button onClick={handleSubmitReport} className="rounded-2xl">
-                  <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
-                </Button>
+                <div className="flex flex-col items-stretch gap-1.5">
+                  <Button onClick={handleSubmitReport} className="rounded-2xl">
+                    <Lock className="mr-2 h-4 w-4" /> {t("report.submitAndClose")}
+                  </Button>
+                  <Button onClick={printReportDraftPdf} variant="outline" className="rounded-2xl text-xs text-slate-500">
+                    {t("report.savePdfFallback")}
+                  </Button>
+                </div>
                 <SectionTimerPanel openedAt={reportWritingStartedAt} durationMinutes={120} warnMinutes={30} t={t} />
               </div>
             </div>
@@ -13143,6 +13202,15 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
                         />
                         {t("report.photoUseInReport")}
                       </label>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button type="button" onClick={() => setPhotoViewer(photo)} variant="outline" className="rounded-xl px-2 py-1 text-xs font-normal">
+                          {t("report.photoZoom")}
+                        </Button>
+                        <Button type="button" onClick={() => setAnnotatingPhoto(photo)} variant="outline" className="rounded-xl px-2 py-1 text-xs font-normal">
+                          <Pencil className="mr-1 h-3 w-3" />{t("report.annotate")}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -13153,7 +13221,12 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
               <div className="grid gap-3 md:grid-cols-2">
                 {REPORT_SECTIONS.map((sec) => (
                   <label key={sec.key} className="text-sm font-medium">
-                    {sectionTitle(t, sec)}
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{sectionTitle(t, sec)}</span>
+                      <Button type="button" onClick={() => setFullscreenSectionKey(sec.key)} variant="outline" className="rounded-xl px-2 py-1 text-xs font-normal">
+                        <Maximize className="mr-1 h-3 w-3" />{t("report.expandSection")}
+                      </Button>
+                    </div>
                     <textarea
                       value={tree.finalSections[sec.key] ?? ""}
                       onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)}
@@ -13166,6 +13239,43 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             </div>
           </div>
         </div>
+
+        {/* Distraction-free full-screen editing for one section at a time, so a long answer isn't
+            written into a cramped grid cell. */}
+        {fullscreenSectionKey && (() => {
+          const sec = REPORT_SECTIONS.find((s) => s.key === fullscreenSectionKey);
+          if (!sec) return null;
+          return (
+            <div className="fixed inset-0 z-[65] flex flex-col bg-white p-4">
+              <div className="flex items-center justify-between gap-3 border-b pb-3">
+                <h3 className="text-lg font-semibold">{activeReportTree}: {sectionTitle(t, sec)}</h3>
+                <Button onClick={() => setFullscreenSectionKey(null)} className="rounded-2xl">{t("common.close")}</Button>
+              </div>
+              <textarea
+                autoFocus
+                value={tree.finalSections[sec.key] ?? ""}
+                onChange={(e) => updateReport(activeReportTree, sec.key, e.target.value)}
+                placeholder={`${activeReportTree}: ${sectionTitle(t, sec)}`}
+                className="mt-4 min-h-0 w-full flex-1 rounded-xl border bg-white p-4 text-base"
+              />
+            </div>
+          );
+        })()}
+
+        {annotatingPhoto && (
+          <HandwritingPad
+            onClose={() => setAnnotatingPhoto(null)}
+            onSave={saveAnnotatedPhoto}
+            existingImage={annotatingPhoto.dataUrl}
+            title={t("report.annotatePhoto.title")}
+            helperText={t("report.annotatePhoto.helper")}
+            t={t}
+            Button={Button}
+            CloseIcon={X}
+            EraserIcon={Eraser}
+            UndoIcon={Undo}
+          />
+        )}
       </div>
     );
   }
