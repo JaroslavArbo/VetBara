@@ -9358,6 +9358,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
   // close to the right moment instead of always starting from 0:00.
   const [outdoorAudioUrl, setOutdoorAudioUrl] = useState(null);
   const [outdoorRecordingStartedAt, setOutdoorRecordingStartedAt] = useState(null);
+  const [activeReportTree, setActiveReportTree] = useState(REPORT_TREES[0]);
   useEffect(() => {
     setOutdoorAudioUrl(null);
     setOutdoorRecordingStartedAt(null);
@@ -9377,8 +9378,9 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
-      {/* Outdoor shows two examiner columns side by side, so it gets the wider frame. */}
-      <div className={`mx-auto flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white ${section.kind === "outdoor" ? "max-w-6xl" : "max-w-4xl"}`}>
+      {/* Outdoor shows two examiner columns side by side and Report shows a 3-column layout per
+          section, so both get the wider, near-fullscreen frame. */}
+      <div className={`mx-auto flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white ${section.kind === "outdoor" || section.kind === "report" ? "max-w-[95vw]" : "max-w-4xl"}`}>
         <div className="flex items-center justify-between gap-3 border-b p-4">
           <div className="min-w-0">
             <h2 className="break-words text-lg font-bold">{candidate.name} · {section.label}</h2>
@@ -9477,6 +9479,14 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
           {section.kind === "report" && (() => {
             const marks = snapshot.marks || {};
             const treeDrafts = Object.fromEntries(snapshot.trees);
+            const treeMaxTotal = REPORT_MARKING_SECTIONS.reduce((sum, s) => sum + s.perTreeMax, 0);
+            const treeTotalFor = (treeName) => {
+              const treeMarks = marks[treeName] || {};
+              return REPORT_MARKING_SECTIONS.reduce((sum, s) => sum + (Number(treeMarks[s.key]?.score) || 0), 0);
+            };
+            const activeTree = treeDrafts[activeReportTree] || {};
+            const activeTreeMarks = marks[activeReportTree] || {};
+            const allPhotos = REPORT_TREES.flatMap((treeName) => (treeDrafts[treeName]?.photos || []).map((photo) => ({ ...photo, treeName })));
             return (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">
@@ -9485,74 +9495,93 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                     ? <StatusPill tone="good">{t("centre.review.editing")}</StatusPill>
                     : <span className="text-xs text-slate-500">{t("centre.review.readOnlyIdentify")}</span>}
                 </div>
-                {REPORT_TREES.map((treeName) => {
-                  const tree = treeDrafts[treeName] || {};
-                  const treeMarks = marks[treeName] || {};
-                  const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + (Number(treeMarks[section.key]?.score) || 0), 0);
-                  const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
-                  return (
-                    <div key={treeName} className="rounded-2xl border bg-slate-50 p-3">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+
+                {/* Tree A / Tree B switcher: two cards instead of showing both trees stacked, the
+                    active one highlighted so it's obvious which tree the sections below belong to. */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {REPORT_TREES.map((treeName) => {
+                    const active = treeName === activeReportTree;
+                    return (
+                      <button
+                        key={treeName}
+                        type="button"
+                        onClick={() => setActiveReportTree(treeName)}
+                        className={`rounded-2xl border-2 p-3 text-left transition ${active ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                      >
                         <div className="font-semibold">{treeName}</div>
-                        <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(treeTotal)} / {treeMax} b.</span>
-                      </div>
-                      <div className="whitespace-pre-wrap rounded-xl bg-white p-2 text-sm">{tree.fieldNotes || <em>{t("centre.review.noAnswer")}</em>}</div>
-                      {tree.photos?.length > 0 && (
-                        <div className="mt-2 grid grid-cols-3 gap-2">
-                          {tree.photos.map((photo) => <img key={photo.id} src={photo.url || photo.dataUrl} alt={photo.caption || "photo"} className="h-20 w-full rounded-lg object-cover" />)}
+                        <div className={`mt-1 text-lg font-bold ${active ? "text-emerald-800" : "text-slate-700"}`}>{formatHalfPointScore(treeTotalFor(treeName))} / {treeMaxTotal} b.</div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="space-y-4">
+                  {REPORT_MARKING_SECTIONS.map((section, index) => {
+                    const sectionText = String(activeTree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim() || (index === 0 ? String(activeTree.fieldNotes ?? "").trim() : "");
+                    const mark = activeTreeMarks[section.key] || {};
+                    return (
+                      // min-h so each section takes up roughly the full modal height - candidate
+                      // text, grading guidance and the score/comment all need room at once.
+                      <div key={section.key} className="min-h-[70vh] rounded-2xl border bg-slate-50 p-4">
+                        <div className="text-sm font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                        <div className="mt-3 grid flex-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)]">
+                          <div className="min-w-0 rounded-xl border bg-white p-3">
+                            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{t("centre.review.candidateAnswer")}</div>
+                            <div className="whitespace-pre-wrap text-sm text-slate-800">{sectionText || <em>{t("centre.review.noAnswer")}</em>}</div>
+                          </div>
+                          <div className="min-w-0 rounded-xl border bg-white p-3">
+                            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{t("centre.review.scoringHelp")}</div>
+                            <ul className="list-disc space-y-1 pl-4 text-xs leading-snug text-slate-600">
+                              {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
+                            </ul>
+                          </div>
+                          <div className="flex flex-col items-center gap-1 rounded-xl border bg-white p-3">
+                            {identifiedExaminer ? (
+                              <input
+                                type="number"
+                                step="0.5"
+                                min="0"
+                                max={section.perTreeMax}
+                                value={mark.score ?? ""}
+                                onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, section.key, { score: event.target.value })}
+                                className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${mark.score ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
+                              />
+                            ) : (
+                              <span className="text-sm font-semibold">{mark.score ? formatHalfPointScore(Number(mark.score)) : "-"}</span>
+                            )}
+                            <div className="text-[11px] text-slate-500">/ {section.perTreeMax} b.</div>
+                          </div>
                         </div>
-                      )}
-                      <div className="mt-3 space-y-2">
-                        {REPORT_MARKING_SECTIONS.map((section, index) => {
-                          const sectionText = String(tree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim() || (index === 0 ? String(tree.fieldNotes ?? "").trim() : "");
-                          const mark = treeMarks[section.key] || {};
-                          return (
-                            <div key={section.key} className="min-w-0 rounded-xl border bg-white p-2">
-                              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
-                              {sectionText && (
-                                <div className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{sectionText}</div>
-                              )}
-                              <div className="mt-2 flex items-start gap-3">
-                                {identifiedExaminer && (
-                                  <ul className="min-w-0 flex-1 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-slate-600">
-                                    {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
-                                  </ul>
-                                )}
-                                <div className="shrink-0 text-center">
-                                  {identifiedExaminer ? (
-                                    <input
-                                      type="number"
-                                      step="0.5"
-                                      min="0"
-                                      max={section.perTreeMax}
-                                      value={mark.score ?? ""}
-                                      onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, treeName, section.key, { score: event.target.value })}
-                                      className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${mark.score ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
-                                    />
-                                  ) : (
-                                    <span className="text-sm font-semibold">{mark.score ? formatHalfPointScore(Number(mark.score)) : "-"}</span>
-                                  )}
-                                  <div className="mt-1 text-[11px] text-slate-500">/ {section.perTreeMax} b.</div>
-                                </div>
-                              </div>
-                              {identifiedExaminer ? (
-                                <textarea
-                                  value={mark.comment ?? ""}
-                                  onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, treeName, section.key, { comment: event.target.value })}
-                                  rows={2}
-                                  placeholder={t("examiner.reportReview.commentPlaceholder")}
-                                  className="mt-2 w-full rounded-lg border p-2 text-xs"
-                                />
-                              ) : (
-                                mark.comment && <div className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{mark.comment}</div>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {identifiedExaminer ? (
+                          <textarea
+                            value={mark.comment ?? ""}
+                            onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, section.key, { comment: event.target.value })}
+                            rows={3}
+                            placeholder={t("examiner.reportReview.commentPlaceholder")}
+                            className="mt-3 w-full rounded-lg border p-2 text-sm"
+                          />
+                        ) : (
+                          mark.comment && <div className="mt-3 whitespace-pre-wrap rounded-lg bg-white p-2 text-sm text-slate-700">{mark.comment}</div>
+                        )}
                       </div>
+                    );
+                  })}
+                </div>
+
+                {allPhotos.length > 0 && (
+                  <div className="rounded-2xl border bg-slate-50 p-3">
+                    <div className="font-semibold">{t("centre.review.reportPhotos")}</div>
+                    <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {allPhotos.map((photo) => (
+                        <figure key={photo.id} className="rounded-xl border bg-white p-2">
+                          <img src={photo.url || photo.dataUrl} alt={photo.caption || photo.treeName} className="h-28 w-full rounded-lg object-cover" />
+                          <figcaption className="mt-1 text-xs text-slate-600">{photo.caption || photo.treeName}</figcaption>
+                        </figure>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                )}
+
                 <div className="rounded-2xl border bg-slate-50 p-3">
                   <div className="font-semibold">{t("examiner.reportReview.clarityTitle")}</div>
                   <div className="mt-2 grid gap-2 sm:grid-cols-3">
