@@ -10989,6 +10989,329 @@ function CentreWifiAccessBox({ t, centreExamId }) {
   );
 }
 
+// --- Exam scheduling ("harmonogram") ---------------------------------------------------------
+// A day's exam programme is built from fixed-length blocks (welcome 30 min, each main activity
+// 120 min, breaks/lunch configurable) per candidate pair ("group"), matching the Centre's own
+// printed exam-programme sheets (Time / Duration / Activity tables, plus a combined "general
+// overview" table). This only proposes a reasonable STARTING arrangement - groups that would
+// compete for the same pair of examiners are staggered into "waves"; the coordinator drags
+// blocks sideways from there to match the room/examiner reality on the day. Dragging only ever
+// changes a block's start time, never its duration.
+const HARMONOGRAM_SETTINGS_KEY = "vetbara.centre.harmonogramSettings";
+const HARMONOGRAM_WELCOME_DURATION = 30;
+const HARMONOGRAM_MAIN_DURATION = 120;
+const HARMONOGRAM_DEFAULT_SETTINGS = { dayStartTime: "08:30", days: 1, coffeeBreakMinutes: 30, lunchMinutes: 60 };
+
+function readHarmonogramSettings() {
+  if (typeof window === "undefined") return HARMONOGRAM_DEFAULT_SETTINGS;
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(scopedCacheKey(HARMONOGRAM_SETTINGS_KEY)) || "{}");
+    return { ...HARMONOGRAM_DEFAULT_SETTINGS, ...raw };
+  } catch {
+    return HARMONOGRAM_DEFAULT_SETTINGS;
+  }
+}
+
+function writeHarmonogramSettings(settings) {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(scopedCacheKey(HARMONOGRAM_SETTINGS_KEY), JSON.stringify(settings)); } catch { /* ignore */ }
+}
+
+function harmonogramActivityColor(key) {
+  return {
+    welcome: "#c6e0b4",
+    outdoor: "#f4b183",
+    written: "#bdd7ee",
+    report: "#ffe699",
+    break: "#d9d9d9",
+    lunch: "#ffd966",
+    finish: "#c6e0b4",
+  }[key] || "#e5e7eb";
+}
+
+function harmonogramTimeLabel(totalMinutes) {
+  const clamped = Math.max(0, Math.round(totalMinutes));
+  const h = Math.floor(clamped / 60) % 24;
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function harmonogramParseTime(value) {
+  const [h, m] = String(value || "08:30").split(":").map(Number);
+  return (Number.isFinite(h) ? h : 8) * 60 + (Number.isFinite(m) ? m : 30);
+}
+
+// Only the two orderings that make sense are offered for Consulting: report-writing always comes
+// after the outdoor session that collects the field data it's based on.
+function harmonogramSequenceOptions(level) {
+  return level === "Practicing"
+    ? [["outdoor", "written"], ["written", "outdoor"]]
+    : [["written", "outdoor", "report"], ["outdoor", "report", "written"]];
+}
+
+function harmonogramBuildGroupBlocks(group, settings) {
+  const dayStart = harmonogramParseTime(settings.dayStartTime);
+  const waveOffset = group.wave * (HARMONOGRAM_WELCOME_DURATION + HARMONOGRAM_MAIN_DURATION + settings.coffeeBreakMinutes);
+  let cursor = dayStart + waveOffset;
+  const blocks = [];
+  blocks.push({ id: `${group.id}-welcome`, activity: "welcome", start: cursor, duration: HARMONOGRAM_WELCOME_DURATION });
+  cursor += HARMONOGRAM_WELCOME_DURATION;
+  const sequence = harmonogramSequenceOptions(group.level)[group.groupIndex % harmonogramSequenceOptions(group.level).length];
+  sequence.forEach((activity, index) => {
+    blocks.push({ id: `${group.id}-${activity}`, activity, start: cursor, duration: HARMONOGRAM_MAIN_DURATION });
+    cursor += HARMONOGRAM_MAIN_DURATION;
+    if (index < sequence.length - 1) {
+      const isLunch = group.level === "Consulting" && index === sequence.length - 2;
+      const breakDuration = isLunch ? settings.lunchMinutes : settings.coffeeBreakMinutes;
+      blocks.push({ id: `${group.id}-break-${index}`, activity: isLunch ? "lunch" : "break", start: cursor, duration: breakDuration });
+      cursor += breakDuration;
+    }
+  });
+  blocks.push({ id: `${group.id}-finish`, activity: "finish", start: cursor, duration: 0 });
+  return blocks;
+}
+
+// Pairs candidates two-at-a-time per level (matching the reference exam-programme sheets), then
+// spreads groups across as many parallel "lanes" as the examiner count supports (one lane needs
+// one examiner pair) and, beyond that, across days round-robin.
+function buildDefaultHarmonogramGroups(candidates, examiners, settings) {
+  const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
+  const levels = ["Practicing", "Consulting"];
+  const rawGroups = [];
+  levels.forEach((level) => {
+    const levelCandidates = candidates.filter((c) => c.level === level);
+    for (let i = 0; i < levelCandidates.length; i += 2) {
+      rawGroups.push({ level, members: levelCandidates.slice(i, i + 2) });
+    }
+  });
+  const days = Math.max(1, Number(settings.days) || 1);
+  return rawGroups.map((group, index) => {
+    const groupIndex = rawGroups.slice(0, index).filter((g) => g.level === group.level).length;
+    const built = {
+      ...group,
+      id: `group-${index}`,
+      groupIndex,
+      wave: Math.floor(index / parallelLanes),
+      day: index % days,
+    };
+    return { ...built, blocks: harmonogramBuildGroupBlocks(built, settings) };
+  });
+}
+
+function harmonogramGroupLabel(group, t) {
+  const names = group.members.map((m) => m.name || m.id).join(", ");
+  return `${group.level === "Practicing" ? t("harmonogram.levelPracticing") : t("harmonogram.levelConsulting")} · ${names}`;
+}
+
+function printHarmonogramPdf(groups, days, t) {
+  if (!groups.length) return;
+  const dayPages = Array.from({ length: days }, (_, day) => {
+    const dayGroups = groups.filter((g) => g.day === day);
+    if (!dayGroups.length) return "";
+    const groupTables = dayGroups.map((group) => {
+      const rows = group.blocks.map((block) => `<tr style="background:${harmonogramActivityColor(block.activity)}"><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(block.start)}</td><td style="border:1px solid #ccc;padding:2mm">${block.duration ? `${block.duration} min` : ""}</td><td style="border:1px solid #ccc;padding:2mm">${escapeHtml(t(`harmonogram.activity.${block.activity}`))}</td></tr>`).join("");
+      return `<section style="break-inside:avoid;margin-bottom:6mm">
+        <div style="font-weight:700;text-decoration:underline">${escapeHtml(group.level)}</div>
+        <div style="margin-bottom:2mm">${escapeHtml(group.members.map((m) => m.name || m.id).join(", "))}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:9.5pt"><thead><tr style="text-align:left"><th style="border:1px solid #ccc;padding:2mm">${escapeHtml(t("harmonogram.time"))}</th><th style="border:1px solid #ccc;padding:2mm">${escapeHtml(t("harmonogram.duration"))}</th><th style="border:1px solid #ccc;padding:2mm">${escapeHtml(t("harmonogram.activityCol"))}</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      </section>`;
+    }).join("");
+
+    const allStarts = Array.from(new Set(dayGroups.flatMap((g) => g.blocks.map((b) => b.start)))).sort((a, b) => a - b);
+    const overviewRows = allStarts.map((start, i) => {
+      const nextStart = allStarts[i + 1];
+      const duration = nextStart ? nextStart - start : 0;
+      const cells = dayGroups.map((g) => {
+        const block = g.blocks.find((b) => b.start <= start && start < b.start + Math.max(b.duration, 1));
+        return `<td style="border:1px solid #ccc;padding:2mm;${block ? `background:${harmonogramActivityColor(block.activity)}` : ""}">${block ? escapeHtml(t(`harmonogram.activity.${block.activity}`)) : ""}</td>`;
+      }).join("");
+      return `<tr><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(start)}</td><td style="border:1px solid #ccc;padding:2mm">${duration ? `${duration} min` : ""}</td>${cells}</tr>`;
+    }).join("");
+    const overviewHeader = dayGroups.map((g) => `<th style="border:1px solid #ccc;padding:2mm">${escapeHtml(g.level)} (${escapeHtml(g.members.map((m) => m.id).join(", "))})</th>`).join("");
+
+    return `<section style="break-after:page">
+      <h1 style="font-size:14pt;margin:0 0 6mm">${escapeHtml(t("harmonogram.pdfTitle"))}${days > 1 ? ` · ${escapeHtml(t("harmonogram.dayLabel"))} ${day + 1}` : ""}</h1>
+      ${groupTables}
+      <h2 style="font-size:12pt">${escapeHtml(t("harmonogram.generalOverview"))}</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:9pt"><thead><tr style="text-align:left"><th style="border:1px solid #ccc;padding:2mm">${escapeHtml(t("harmonogram.time"))}</th><th style="border:1px solid #ccc;padding:2mm">${escapeHtml(t("harmonogram.duration"))}</th>${overviewHeader}</tr></thead>
+      <tbody>${overviewRows}</tbody></table>
+    </section>`;
+  }).join("");
+
+  const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(t("harmonogram.pdfTitle"))}</title><style>
+    @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10pt}
+    @media print{.actions{display:none}}
+    .actions{position:fixed;top:8px;right:10px;z-index:20}.actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:white}
+  </style></head><body>
+    <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
+    ${dayPages}
+  </body></html>`;
+  openPrintDocument(html, () => window.alert(t("harmonogram.printBlocked")));
+}
+
+function HarmonogramTimeline({ groups, onMoveBlock, t }) {
+  const pxPerMinute = 3;
+  const allStarts = groups.flatMap((g) => g.blocks.map((b) => b.start));
+  const allEnds = groups.flatMap((g) => g.blocks.map((b) => b.start + b.duration));
+  const minStart = Math.floor(Math.min(...allStarts, 0) / 60) * 60;
+  const maxEnd = Math.max(...allEnds, minStart + 60) + 30;
+  const timelineWidth = (maxEnd - minStart) * pxPerMinute;
+  const dragRef = useRef(null);
+
+  function startDrag(groupId, block, event) {
+    event.preventDefault();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+    dragRef.current = { groupId, blockId: block.id, startClientX: event.clientX, startValue: block.start, pointerId: event.pointerId };
+  }
+  function onMove(event) {
+    const drag = dragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const deltaMinutes = (event.clientX - drag.startClientX) / pxPerMinute;
+    const snapped = Math.max(0, Math.round((drag.startValue + deltaMinutes) / 5) * 5);
+    onMoveBlock(drag.groupId, drag.blockId, snapped);
+  }
+  function endDrag(event) {
+    if (dragRef.current && event.pointerId === dragRef.current.pointerId) dragRef.current = null;
+  }
+
+  const hourMarks = [];
+  for (let m = minStart; m <= maxEnd; m += 60) hourMarks.push(m);
+
+  return (
+    <div className="mt-4 overflow-x-auto rounded-xl border bg-slate-50 p-3" onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      <div className="relative" style={{ width: `${timelineWidth}px`, minWidth: "100%" }}>
+        <div className="relative h-6 border-b">
+          {hourMarks.map((m) => (
+            <div key={m} className="absolute top-0 border-l pl-1 text-[10px] font-semibold text-slate-500" style={{ left: `${(m - minStart) * pxPerMinute}px` }}>{harmonogramTimeLabel(m)}</div>
+          ))}
+        </div>
+        <div className="mt-2 space-y-3">
+          {groups.map((group) => (
+            <div key={group.id}>
+              <div className="mb-1 text-xs font-semibold text-slate-600">{harmonogramGroupLabel(group, t)}</div>
+              <div className="relative h-10 rounded-lg bg-white" style={{ width: `${timelineWidth}px` }}>
+                {group.blocks.filter((b) => b.duration > 0).map((block) => (
+                  <div
+                    key={block.id}
+                    onPointerDown={(event) => startDrag(group.id, block, event)}
+                    className="absolute top-0 flex h-10 cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center text-[10px] font-semibold text-slate-900 active:cursor-grabbing"
+                    style={{
+                      left: `${(block.start - minStart) * pxPerMinute}px`,
+                      width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
+                      background: harmonogramActivityColor(block.activity),
+                      touchAction: "none",
+                    }}
+                    title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
+                  >
+                    {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CentreScheduleBuilder({ candidates, examiners, centreExamId, t }) {
+  const [settings, setSettings] = useState(HARMONOGRAM_DEFAULT_SETTINGS);
+  const [groups, setGroups] = useState(null);
+  const [activeDay, setActiveDay] = useState(0);
+
+  // Same scope-not-ready-yet race as CentreWifiAccessBox: re-read the saved settings once
+  // centreExamId (set during QR session resolution) is actually available.
+  useEffect(() => {
+    setSettings(readHarmonogramSettings());
+  }, [centreExamId]);
+
+  useEffect(() => {
+    writeHarmonogramSettings(settings);
+  }, [settings]);
+
+  function regenerate() {
+    setGroups(buildDefaultHarmonogramGroups(candidates, examiners, settings));
+    setActiveDay(0);
+  }
+
+  // Regenerates whenever the roster actually changes shape - level flips matter here just as much
+  // as add/remove, since a candidate moving Practicing<->Consulting changes which group (and which
+  // block sequence) it belongs to. Depending on candidates.length alone missed that: editing an
+  // existing candidate's level kept the same count, so the proposal silently went stale.
+  const candidateSignature = candidates.map((c) => `${c.id}:${c.level}`).join("|");
+  const examinerSignature = examiners.map((e) => e.id).join("|");
+  const settingsSignature = `${settings.dayStartTime}|${settings.days}|${settings.coffeeBreakMinutes}|${settings.lunchMinutes}`;
+  useEffect(() => {
+    regenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateSignature, examinerSignature, settingsSignature]);
+
+  function updateBlockStart(groupId, blockId, newStart) {
+    setGroups((prev) => (prev || []).map((group) => (group.id !== groupId ? group : {
+      ...group,
+      blocks: group.blocks.map((block) => (block.id === blockId ? { ...block, start: newStart } : block)),
+    })));
+  }
+
+  const days = Math.max(1, Number(settings.days) || 1);
+  const visibleGroups = (groups || []).filter((g) => g.day === activeDay);
+  const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("harmonogram.title")}</h3>
+          <p className="mt-1 text-sm text-slate-600">{t("harmonogram.helper")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
+          <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-sm font-medium">{t("harmonogram.startTime")}
+          <input type="time" value={settings.dayStartTime} onChange={(event) => setSettings((s) => ({ ...s, dayStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+        </label>
+        <label className="text-sm font-medium">{t("harmonogram.days")}
+          <input type="number" min="1" value={settings.days} onChange={(event) => setSettings((s) => ({ ...s, days: Math.max(1, Number(event.target.value) || 1) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+        </label>
+        <label className="text-sm font-medium">{t("harmonogram.coffeeBreakMinutes")}
+          <input type="number" min="0" step="5" value={settings.coffeeBreakMinutes} onChange={(event) => setSettings((s) => ({ ...s, coffeeBreakMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+        </label>
+        <label className="text-sm font-medium">{t("harmonogram.lunchMinutes")}
+          <input type="number" min="0" step="5" value={settings.lunchMinutes} onChange={(event) => setSettings((s) => ({ ...s, lunchMinutes: Math.max(0, Number(event.target.value) || 0) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+        </label>
+      </div>
+
+      <p className="mt-2 text-xs text-slate-500">{tfHarmonogram(t, "harmonogram.lanesHelper", { lanes: parallelLanes })}</p>
+
+      {days > 1 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Array.from({ length: days }, (_, day) => (
+            <button key={day} type="button" onClick={() => setActiveDay(day)} className={`rounded-2xl border-2 px-3 py-1.5 text-xs font-semibold ${activeDay === day ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+              {t("harmonogram.dayLabel")} {day + 1}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleGroups.length > 0 ? (
+        <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} />
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
+      )}
+    </div>
+  );
+}
+
+function tfHarmonogram(t, key, values) {
+  return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+}
+
 function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
@@ -11503,6 +11826,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                   button did nothing and the sections "just stayed locked". */}
               {!rosterConfirmed && centreSetupError && <div className="mt-2 rounded-xl border border-rose-300 bg-rose-50 p-2 text-sm font-medium text-rose-800">{centreSetupError}</div>}
             </div>
+
+            <CentreScheduleBuilder candidates={candidates} examiners={examiners} centreExamId={centreExamId} t={t} />
           </div>
         </AdminDashboardSection>
 
