@@ -357,6 +357,27 @@ const REPORT_TREES = ["Tree A", "Tree B"];
 // via sectionTitle(t, entry) / sectionDescription(t, entry) at render time.
 const REPORT_SECTIONS = ["s1", "s2", "s3", "s4", "s5", "s6"].map((key) => ({ key, titleKey: `reportSections.${key}` }));
 
+// Candidate-facing summary of what the written management plan is marked on (as opposed to
+// REPORT_MARKING_SECTIONS below, which is the examiner's internal per-band scoring guidance).
+// Kept visible throughout field data collection so a Consulting candidate always knows what
+// their photos/notes need to support, and seeded into "Field notes" (see CONSULTING_FIELD_NOTES_TEMPLATE)
+// since that field never enters the report itself and is safe to pre-fill as a reminder.
+const CONSULTING_REPORT_CRITERIA = [
+  { key: "health", marks: 20, title: "Health and vitality of the tree", description: "Please ensure you explain what factors you have taken into consideration when assessing the health and vitality of the tree." },
+  { key: "structure", marks: 20, title: "Structural condition (biomechanics) of the tree", description: "Please ensure you explain what factors you have taken into consideration when assessing the structural condition of the tree." },
+  { key: "values", marks: 12, title: "Wildlife, historical, cultural or social values of the tree", description: "You only need to write about two of these four options, but please pick the two most relevant and explain how these values apply to your tree." },
+  { key: "threats", marks: 12, title: "Threats to the tree", description: "Please describe the most significant threats to the tree, including their potential impact, and also including what will happen if you do nothing." },
+  { key: "plan", marks: 24, title: "Management plan", description: "Please provide a management plan for this tree with a timetable, work specifications and monitoring. This should include sufficient detail to allow the work to be planned, from start to finish, and ensuring that a contractor or site manager knows exactly how to undertake the work. Feel free to use photos to illustrate your specifications." },
+  { key: "justification", marks: 20, title: "Management justification summary", description: "Considering everything you have assessed and described above, please provide a short summary justifying why you think your management plan is the most appropriate for the tree. This summary should include both positive and negative impacts for the tree. Upon reading this summary, the tree owner should feel convinced and compelled to follow your advice." },
+];
+
+function buildConsultingFieldNotesTemplate() {
+  const intro = "The items below are the headings under which the management plan will be marked along with the potential marks available. Any management specifications should be adequately described so that the person undertaking the work clearly understands what should be done. Photos may be used to illustrate your plan.";
+  const body = CONSULTING_REPORT_CRITERIA.map((section, index) => `${index + 1}. ${section.title} (${section.marks} marks)\n${section.description}`).join("\n\n");
+  return `${intro}\n\n${body}`;
+}
+const CONSULTING_FIELD_NOTES_TEMPLATE = buildConsultingFieldNotesTemplate();
+
 // VETcert Consulting "Veteran tree management plan - model answer", version April 2020: the marking
 // scheme the examiner works to. 7 per-tree sections scored for Tree A and Tree B (59 marks each),
 // plus 9 marks for overall clarity of the whole plan = 127. `guidance` is the marking band text from
@@ -1234,6 +1255,17 @@ function VetBaraPrototype() {
 
   if (scanCaptureMode) return <ScanCaptureMobilePage />;
 
+  const consultingFieldMode = (() => {
+    try {
+      const query = new URLSearchParams(window.location.search);
+      return query.get("mode") === "consulting-field" || query.get("role") === "ConsultingField";
+    } catch {
+      return false;
+    }
+  })();
+
+  if (consultingFieldMode) return <ConsultingFieldMobilePage />;
+
   const [uiLanguage, setUiLanguage] = useState("cs");
   const selectedUiLanguage = UI_LANGUAGES.find((lang) => lang.code === uiLanguage);
   const draftPreviewActive = Boolean(selectedUiLanguage?.draft);
@@ -1726,8 +1758,12 @@ function VetBaraPrototype() {
               }, { ...(prev[candidate.id] ?? {}) }),
             }));
           }
-        } catch {
-          // Best-effort; the next tick retries. Dev server / no backend just no-ops here.
+        } catch (error) {
+          // Best-effort; the next tick retries. Dev server / no backend just no-ops here. Logged
+          // (not swallowed silently) so a candidate whose evaluation read model keeps failing -
+          // e.g. their report text never appearing in the Section E review form - is visible in
+          // the console instead of just quietly never populating reportDrafts for that one person.
+          console.warn("Centre results hydrate failed for candidate", candidate.id, error);
         }
       }
     }
@@ -9119,6 +9155,430 @@ function ScanCaptureMobilePage() {
   );
 }
 
+// Dedicated mobile-only access for Consulting candidates (mode=consulting-field), scanned with
+// their own phone rather than the shared exam tablet, so they can capture photos/audio for their
+// report while actually standing at the tree. Self-contained (own QR/session resolution, like
+// FieldTabletPage/ScanCaptureMobilePage above) rather than routed through CandidateView, since it
+// needs none of the Test/Outdoor/Orientation plumbing — only the report_draft/report_photo sync
+// events and media storage, called directly here with the same payload shapes ReportSection's
+// updateReport/addReportPhoto use, so both entry points write into the exact same report draft.
+function ConsultingFieldMobilePage() {
+  const [uiLanguage] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "cs");
+  const t = makeTranslator(uiLanguage);
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const query = new URLSearchParams(window.location.search);
+  const qrToken = query.get("token") || "";
+  const candidateIdParam = query.get("id") || "";
+  const candidateNameParam = query.get("name") || "";
+
+  const [auth, setAuth] = useState({
+    status: qrToken ? "loading" : "error",
+    sessionToken: "", candidateId: candidateIdParam, candidateName: candidateNameParam,
+    error: qrToken ? "" : t("consultingField.missingToken"),
+  });
+  const [activeTree, setActiveTree] = useState(REPORT_TREES[0]);
+  const [draft, setDraft] = useState(createReportDraft());
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const sectionOpenedRef = useRef(false);
+  const [fieldNotesDraft, setFieldNotesDraft] = useState(CONSULTING_FIELD_NOTES_TEMPLATE);
+  const [criteriaOpen, setCriteriaOpen] = useState(true);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoStatus, setPhotoStatus] = useState("");
+  const [recordingStatus, setRecordingStatus] = useState("idle");
+  const [recordingElapsedMs, setRecordingElapsedMs] = useState(0);
+  const [recordingError, setRecordingError] = useState("");
+  const recorderRef = useRef(null);
+  const recordingStartedAtRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const [submitStep, setSubmitStep] = useState(0);
+  const [submitBusy, setSubmitBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const voiceRecordingSupported = isRecordingSupported();
+
+  function sendEvent(type, entityType, entityId, payload) {
+    if (auth.status !== "ready") return Promise.resolve();
+    const createdAt = new Date().toISOString();
+    return syncBatch(auth.sessionToken, [{
+      clientEventId: `${type}-${entityId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type, entityType, entityId, candidateId: auth.candidateId, payload, createdAt,
+    }]).catch((error) => console.error("Consulting field sync failed", type, error));
+  }
+
+  useEffect(() => {
+    if (!qrToken) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resolved = await resolveQrToken(qrToken);
+        if (cancelled) return;
+        if (resolved.role && resolved.role !== "Candidate") {
+          setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
+          return;
+        }
+        const sessionToken = resolved.sessionToken;
+        const boot = await bootstrapSession(sessionToken).catch(() => null);
+        if (cancelled) return;
+        const candidateId = resolved.subjectId || candidateIdParam;
+        const candidateName = boot?.candidate?.name || candidateNameParam || candidateId;
+        setAuth({ status: "ready", sessionToken, candidateId, candidateName, error: "" });
+      } catch (error) {
+        if (cancelled) return;
+        setAuth((prev) => ({ ...prev, status: "error", error: error?.message || t("consultingField.authFailed") }));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrToken]);
+
+  useEffect(() => {
+    if (auth.status !== "ready") return undefined;
+    let cancelled = false;
+    fetchCandidateEvaluation(auth.sessionToken, auth.candidateId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result?.reportDraft && typeof result.reportDraft === "object") {
+          setDraft({ ...createReportDraft(), ...result.reportDraft });
+        }
+        const alreadyOpen = (Array.isArray(result?.sections) ? result.sections : [])
+          .some((section) => (section.section_key ?? section.sectionKey) === "report");
+        if (!alreadyOpen && !sectionOpenedRef.current) {
+          sectionOpenedRef.current = true;
+          sendEvent("candidate_section.opened", "candidate_section", `${auth.candidateId}:report`, { sectionKey: "report", openedAt: new Date().toISOString(), openedAtLabel: nowStamp() });
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => { if (!cancelled) setDraftLoaded(true); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.status, auth.sessionToken, auth.candidateId]);
+
+  // Seed the field-notes textarea from the loaded draft (or the criteria template when empty) only
+  // when the active tree changes or the draft first finishes loading — not on every draft update,
+  // otherwise typing a photo caption elsewhere would blow away notes being typed here.
+  useEffect(() => {
+    if (!draftLoaded) return;
+    const existing = draftRef.current[activeTree]?.fieldNotes;
+    setFieldNotesDraft(existing || CONSULTING_FIELD_NOTES_TEMPLATE);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTree, draftLoaded]);
+
+  function saveFieldNotes(value = fieldNotesDraft) {
+    const tree = activeTree;
+    setDraft((prev) => ({ ...prev, [tree]: { ...(prev[tree] ?? createReportDraft()[tree]), fieldNotes: value } }));
+    sendEvent("report_draft.saved", "report_draft", `${auth.candidateId}:report:${tree}:fieldNotes`, {
+      candidateId: auth.candidateId, sectionKey: "report", treeId: tree, fieldKey: "fieldNotes", fieldType: "fieldNotes", value, updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function handlePhotoFile(file) {
+    if (!file || auth.status !== "ready") return;
+    setPhotoBusy(true);
+    setPhotoStatus("");
+    const tree = activeTree;
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      const existingPhotos = draftRef.current[tree]?.photos ?? [];
+      const capturedAt = new Date().toISOString();
+      const autoName = tf("report.photo.autoName", { index: existingPhotos.length + 1 });
+      const photo = { id: `P-${existingPhotos.length + 1}-${Date.now().toString(36)}`, name: autoName, type: "image/jpeg", size: approxDataUrlBytes(dataUrl), dataUrl, description: "", useInReport: true, caption: autoName, capturedAt, createdAt: capturedAt };
+
+      setDraft((prev) => {
+        const current = prev[tree] ?? createReportDraft()[tree];
+        return { ...prev, [tree]: { ...current, photos: [...(current.photos ?? []), photo] } };
+      });
+
+      await sendEvent("report_photo.added", "report_photo", `${auth.candidateId}:report:${tree}:${photo.id}`, {
+        candidateId: auth.candidateId, sectionKey: "report", treeId: tree, photoId: photo.id, name: photo.name, type: photo.type,
+        size: photo.size, hasDataUrl: true, description: "", useInReport: true, caption: photo.caption, capturedAt,
+      });
+
+      try {
+        const blob = dataUrlToBlob(dataUrl);
+        const clientMediaId = `photo-${auth.candidateId}-${tree}-${photo.id}`;
+        const meta = { clientMediaId, type: "photo", mediaType: "photo", candidateId: auth.candidateId, examinerId: null, sectionKey: "report", tree, fileName: photo.name, mimeType: blob.type, sizeBytes: blob.size, durationMs: null, cleaned: false, caption: photo.caption, description: "" };
+        await saveLocalMedia({ ...meta, blob, createdAt: capturedAt });
+        try {
+          const uploaded = await uploadExamMedia(auth.sessionToken, meta, blob);
+          await updateLocalMedia(clientMediaId, { uploadState: uploaded.stored ? "uploaded" : "local", remoteId: uploaded.id ?? null });
+        } catch {
+          await updateLocalMedia(clientMediaId, { uploadState: "local" });
+        }
+      } catch (error) {
+        console.warn("Consulting field photo storage failed", error);
+      }
+      setPhotoStatus(t("report.photoAdded"));
+    } catch (error) {
+      console.error("Consulting field photo capture failed", error);
+      setPhotoStatus(t("report.photoError"));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (recordingStatus !== "recording" || !recordingStartedAtRef.current) return undefined;
+    const timer = window.setInterval(() => setRecordingElapsedMs(Date.now() - recordingStartedAtRef.current), 1000);
+    return () => window.clearInterval(timer);
+  }, [recordingStatus]);
+
+  useEffect(() => () => { recorderRef.current?.cleanupStream(); }, []);
+
+  async function startRecording() {
+    setRecordingError("");
+    if (!voiceRecordingSupported) { setRecordingError(t("voice.error.unsupported")); return; }
+    if (recorderRef.current) return;
+    try {
+      const recorder = new OutdoorVoiceRecorder();
+      await recorder.start();
+      recorderRef.current = recorder;
+      recordingStartedAtRef.current = Date.now();
+      setRecordingElapsedMs(0);
+      setRecordingStatus("recording");
+    } catch (error) {
+      recorderRef.current = null;
+      setRecordingError(error?.name === "NotAllowedError" ? t("voice.error.permission") : t("voice.error.start"));
+    }
+  }
+  function pauseRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder || recordingStatus !== "recording") return;
+    if (recorder.pause()) setRecordingStatus("paused");
+  }
+  function resumeRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder || recordingStatus !== "paused") return;
+    if (recorder.resume()) setRecordingStatus("recording");
+  }
+  async function stopRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    recorderRef.current = null;
+    setRecordingStatus("processing");
+    const tree = activeTree;
+    try {
+      const result = await recorder.stop();
+      if (!result?.blob || result.blob.size === 0) { setRecordingStatus("idle"); return; }
+      const capturedAt = new Date().toISOString();
+      const clientMediaId = `report-audio-${auth.candidateId}-${tree}-${Date.now()}`;
+      const ext = result.mimeType.includes("mp4") ? "m4a" : result.mimeType.includes("ogg") ? "ogg" : "webm";
+      const fileName = `report_${auth.candidateId}_${tree}_${capturedAt.replace(/[:.]/g, "-")}.${ext}`;
+      const meta = {
+        clientMediaId, type: "audio", mediaType: "audio", candidateId: auth.candidateId, examinerId: null, sectionKey: "report", tree,
+        fileName, mimeType: result.mimeType, sizeBytes: result.blob.size, durationMs: result.durationMs, cleaned: true,
+        caption: `${auth.candidateName} — report ${tree}`,
+        payload: { recordingStartedAt: recordingStartedAtRef.current ? new Date(recordingStartedAtRef.current).toISOString() : null },
+      };
+      await saveLocalMedia({ ...meta, blob: result.blob });
+      let uploadState = "local";
+      try {
+        const uploaded = await uploadExamMedia(auth.sessionToken, meta, result.blob);
+        uploadState = uploaded.stored ? "uploaded" : "local";
+        await updateLocalMedia(clientMediaId, { uploadState, remoteId: uploaded.id ?? null });
+      } catch {
+        await updateLocalMedia(clientMediaId, { uploadState: "local" });
+      }
+      await sendEvent("report_audio.added", "report_audio", `${auth.candidateId}:report:${tree}:${clientMediaId}`, {
+        candidateId: auth.candidateId, sectionKey: "report", treeId: tree, clientMediaId, fileName, durationMs: result.durationMs, capturedAt, uploadState,
+      });
+      setDraft((prev) => {
+        const current = prev[tree] ?? createReportDraft()[tree];
+        return { ...prev, [tree]: { ...current, recordings: [...(current.recordings ?? []), { id: clientMediaId, fileName, durationMs: result.durationMs, capturedAt, uploadState }] } };
+      });
+      recordingStartedAtRef.current = null;
+      setRecordingStatus("idle");
+    } catch (error) {
+      console.error("Consulting field recording save failed", error);
+      setRecordingStatus("error");
+      setRecordingError(t("voice.error.save"));
+    }
+  }
+
+  async function finalizeSubmit() {
+    setSubmitBusy(true);
+    saveFieldNotes();
+    await sendEvent("candidate_section.closed", "candidate_section", `${auth.candidateId}:report`, {
+      sectionKey: "report", closedAt: new Date().toISOString(), closedAtLabel: nowStamp(),
+    });
+    setSubmitBusy(false);
+    setSubmitStep(0);
+    setSubmitted(true);
+  }
+
+  if (auth.status === "error") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="max-w-sm rounded-2xl border border-rose-500 bg-rose-950 p-5 text-center">
+          <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-rose-300" />
+          <p className="text-sm text-rose-100">{auth.error || t("consultingField.authFailed")}</p>
+        </div>
+      </main>
+    );
+  }
+  if (auth.status !== "ready") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <p className="text-sm text-slate-300">{t("consultingField.loading")}</p>
+      </main>
+    );
+  }
+  if (submitted) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="max-w-sm rounded-2xl border border-emerald-500 bg-emerald-950 p-5 text-center">
+          <Check className="mx-auto mb-2 h-8 w-8 text-emerald-300" />
+          <p className="text-sm text-emerald-100">{t("consultingField.submitted")}</p>
+        </div>
+      </main>
+    );
+  }
+
+  const treePhotos = draft[activeTree]?.photos ?? [];
+  const treeRecordings = draft[activeTree]?.recordings ?? [];
+  const recording = recordingStatus === "recording";
+  const paused = recordingStatus === "paused";
+  const processing = recordingStatus === "processing";
+
+  return (
+    <main className="min-h-screen bg-slate-950 pb-28 text-white">
+      <div className="mx-auto max-w-md p-4">
+        <div className="mb-3">
+          <div className="text-xs uppercase tracking-wide text-slate-400">{t("consultingField.title")}</div>
+          <div className="text-lg font-bold">{auth.candidateName}</div>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          {REPORT_TREES.map((tree) => (
+            <button
+              key={tree}
+              type="button"
+              onClick={() => setActiveTree(tree)}
+              className={`rounded-2xl border-2 px-3 py-3 text-sm font-bold ${tree === activeTree ? "border-emerald-400 bg-emerald-500/10 text-emerald-200" : "border-slate-700 bg-slate-900 text-slate-300"}`}
+            >
+              {tree} <span className="ml-1 text-xs font-normal text-slate-400">({(draft[tree]?.photos ?? []).length} 📷 · {(draft[tree]?.recordings ?? []).length} 🎙)</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-900">
+          <button type="button" onClick={() => setCriteriaOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 p-3 text-left text-sm font-semibold text-slate-200">
+            {t("consultingField.criteriaTitle")}
+            <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${criteriaOpen ? "rotate-180" : ""}`} />
+          </button>
+          {criteriaOpen && (
+            <div className="space-y-3 border-t border-slate-800 p-3 text-xs leading-relaxed text-slate-300">
+              {CONSULTING_REPORT_CRITERIA.map((section, index) => (
+                <div key={section.key}>
+                  <div className="font-semibold text-slate-100">{index + 1}. {section.title} <span className="font-normal text-slate-400">({section.marks} marks)</span></div>
+                  <div className="mt-0.5 text-slate-400">{section.description}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          <label className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-emerald-400 p-4 text-center">
+            <Camera className="h-7 w-7" />
+            <span className="text-sm font-semibold">{photoBusy ? t("consultingField.savingPhoto") : t("report.takePhoto")}</span>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*,.heic,.heif"
+              capture="environment"
+              className="hidden"
+              disabled={photoBusy}
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handlePhotoFile(file); }}
+            />
+          </label>
+
+          <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-sky-400 p-4 text-center">
+            <span className={`flex h-8 w-8 items-center justify-center rounded-full ${paused ? "bg-amber-500" : recording ? "bg-red-600 animate-pulse" : "bg-sky-600"}`}>
+              {paused ? <PauseIcon className="h-4 w-4" /> : recording ? <StopIcon className="h-4 w-4" /> : <MicIcon className="h-4 w-4" />}
+            </span>
+            {!recording && !paused && (
+              <button type="button" onClick={startRecording} disabled={processing || !voiceRecordingSupported} className="text-sm font-semibold">
+                {processing ? t("voice.status.processing") : t("consultingField.recordAudio")}
+              </button>
+            )}
+            {(recording || paused) && (
+              <>
+                <span className="font-mono text-xs text-slate-300">{formatRecordingClock(recordingElapsedMs)}</span>
+                <div className="flex gap-2">
+                  {recording && <button type="button" onClick={pauseRecording} className="rounded-full bg-amber-500 px-2 py-1 text-[11px] font-bold text-amber-950">{t("consultingField.pause")}</button>}
+                  {paused && <button type="button" onClick={resumeRecording} className="rounded-full bg-emerald-500 px-2 py-1 text-[11px] font-bold text-emerald-950">{t("consultingField.resume")}</button>}
+                  <button type="button" onClick={stopRecording} className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900">{t("consultingField.stop")}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {photoStatus && <div className="mb-3 text-xs text-slate-400">{photoStatus}</div>}
+        {recordingError && <div className="mb-3 rounded-xl border border-rose-500 bg-rose-950 p-2 text-xs text-rose-200">{recordingError}</div>}
+
+        {treePhotos.length > 0 && (
+          <div className="mb-4 grid grid-cols-4 gap-2">
+            {treePhotos.map((photo) => (
+              <img key={photo.id} src={photo.dataUrl} alt={photo.caption} className="h-16 w-full rounded-lg border border-slate-700 object-cover" />
+            ))}
+          </div>
+        )}
+        {treeRecordings.length > 0 && (
+          <div className="mb-4 space-y-1 text-xs text-slate-400">
+            {treeRecordings.map((recEntry) => (
+              <div key={recEntry.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1">
+                <MicIcon className="h-3.5 w-3.5 shrink-0" />
+                <span>{formatRecordingClock(recEntry.durationMs || 0)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-24">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{t("report.fieldNotesPrivate")}</label>
+          <textarea
+            value={fieldNotesDraft}
+            onChange={(event) => setFieldNotesDraft(event.target.value)}
+            onBlur={() => saveFieldNotes()}
+            rows={8}
+            className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
+          />
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 border-t border-slate-800 bg-slate-950/95 p-3 backdrop-blur">
+        <div className="mx-auto max-w-md">
+          <button type="button" onClick={() => setSubmitStep(1)} className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-slate-950">
+            {t("consultingField.closeAndSubmit")}
+          </button>
+        </div>
+      </div>
+
+      {submitStep > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-slate-900">
+            <p className="text-sm font-semibold">
+              {submitStep === 1 ? t("consultingField.confirmTreeA") : t("consultingField.confirmTreeB")}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => setSubmitStep(0)} className="flex-1 rounded-xl border px-3 py-2 text-sm font-semibold">{t("common.back")}</button>
+              <button
+                type="button"
+                disabled={submitBusy}
+                onClick={() => (submitStep === 1 ? setSubmitStep(2) : finalizeSubmit())}
+                className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
+              >
+                {submitBusy ? t("consultingField.submitting") : t("consultingField.confirmYes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
 function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBank, setOutdoorItemsByLevel, setActiveAdminPackageMeta, setTestImportSummary, setCentreSetupDirty, language, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [activePackagePreview, setActivePackagePreview] = useState(null);
@@ -12442,11 +12902,14 @@ function createOfflineCandidatePackage({ candidate, variantCode, testBankSnapsho
 
 
 function candidateFieldPackageStorageKey(candidate) {
-  return `vetbara.candidateFieldPackage.${candidate?.id || "candidate"}.${candidateLevel(candidate)}`;
+  // Scoped by exam (see scopedCacheKey's own comment): candidate ids like "C-001" repeat across
+  // exams on the same shared tablet, so without the exam suffix a candidate could load the field
+  // map package cached from a PREVIOUS exam and see that exam's trees/location as "the" map.
+  return scopedCacheKey(`vetbara.candidateFieldPackage.${candidate?.id || "candidate"}.${candidateLevel(candidate)}`);
 }
 
 function candidateTreeAPreparationStorageKey(candidate) {
-  return `vetbara.candidateTreeAPreparation.${candidate?.id || "candidate"}.${candidateLevel(candidate)}`;
+  return scopedCacheKey(`vetbara.candidateTreeAPreparation.${candidate?.id || "candidate"}.${candidateLevel(candidate)}`);
 }
 
 function normalizeCandidateTreePreparationDraft(value) {
@@ -13629,7 +14092,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [photoViewer, setPhotoViewer] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const [fieldNotesDraft, setFieldNotesDraft] = useState(tree.fieldNotes ?? "");
+  const [fieldNotesDraft, setFieldNotesDraft] = useState(tree.fieldNotes || (candidateLevel(candidate) === "Consulting" ? CONSULTING_FIELD_NOTES_TEMPLATE : ""));
   const [photoDescriptionDrafts, setPhotoDescriptionDrafts] = useState({});
   const [handwritingOpen, setHandwritingOpen] = useState(false);
   const [fullscreenSectionKey, setFullscreenSectionKey] = useState(null);
@@ -13644,7 +14107,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const localKey = `vetbara-report-field-backup-${candidate.id}-${activeReportTree}`;
 
   useEffect(() => {
-    setFieldNotesDraft(tree.fieldNotes ?? "");
+    setFieldNotesDraft(tree.fieldNotes || (candidateLevel(candidate) === "Consulting" ? CONSULTING_FIELD_NOTES_TEMPLATE : ""));
     setPhotoDescriptionDrafts(Object.fromEntries((tree.photos ?? []).map((photo) => [photo.id, photo.description ?? ""])));
   }, [candidate.id, activeReportTree]);
 

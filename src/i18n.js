@@ -2825,6 +2825,46 @@ Object.assign(translations.cs, {
   "fieldTablet.savedToLocalQueue": "Změny byly uloženy do lokální sync queue."
 });
 
+Object.assign(translations.en, {
+  "consultingField.title": "Field data collection",
+  "consultingField.missingToken": "This link is missing its access token. Ask the certification centre for the mobile field-data QR code.",
+  "consultingField.wrongRole": "This QR code does not belong to a candidate access link.",
+  "consultingField.authFailed": "This link could not be verified. Ask the certification centre for a fresh QR code.",
+  "consultingField.loading": "Signing in...",
+  "consultingField.criteriaTitle": "Required report sections",
+  "consultingField.savingPhoto": "Saving photo...",
+  "consultingField.recordAudio": "Record audio",
+  "consultingField.pause": "Pause",
+  "consultingField.resume": "Resume",
+  "consultingField.stop": "Stop",
+  "consultingField.closeAndSubmit": "Close and submit",
+  "consultingField.confirmTreeA": "Have you captured everything you need for Tree A - all photos and notes?",
+  "consultingField.confirmTreeB": "And for Tree B too - photos, recordings and notes all captured for both trees?",
+  "consultingField.confirmYes": "Yes, continue",
+  "consultingField.submitting": "Submitting...",
+  "consultingField.submitted": "Field data collection closed. You can put your phone away - continue writing the report from your exam tablet.",
+});
+
+Object.assign(translations.cs, {
+  "consultingField.title": "Sběr terénních dat",
+  "consultingField.missingToken": "Tomuto odkazu chybí přístupový token. Vyžádejte si od centra certifikace mobilní QR kód pro terénní sběr dat.",
+  "consultingField.wrongRole": "Tento QR kód nepatří k přístupovému odkazu kandidáta.",
+  "consultingField.authFailed": "Tento odkaz se nepodařilo ověřit. Vyžádejte si od centra certifikace nový QR kód.",
+  "consultingField.loading": "Přihlašuji...",
+  "consultingField.criteriaTitle": "Povinné sekce reportu",
+  "consultingField.savingPhoto": "Ukládám fotografii...",
+  "consultingField.recordAudio": "Nahrát zvuk",
+  "consultingField.pause": "Pauza",
+  "consultingField.resume": "Pokračovat",
+  "consultingField.stop": "Stop",
+  "consultingField.closeAndSubmit": "Uzavřít a odeslat",
+  "consultingField.confirmTreeA": "Máte pořízeno vše potřebné pro strom A - všechny fotografie a poznámky?",
+  "consultingField.confirmTreeB": "A pro strom B také - fotografie, nahrávky i poznámky pro oba stromy?",
+  "consultingField.confirmYes": "Ano, pokračovat",
+  "consultingField.submitting": "Odesílám...",
+  "consultingField.submitted": "Terénní sběr dat byl uzavřen. Telefon už nepotřebujete - v psaní reportu pokračujte na zkouškovém tabletu.",
+});
+
 for (const [language, dictionary] of Object.entries(draftRuntimeDictionaries)) {
   translations[language] = dictionary;
 }
