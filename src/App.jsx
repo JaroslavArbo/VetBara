@@ -450,6 +450,53 @@ const REPORT_MARKING_SECTIONS = [
   },
 ];
 
+// Section 6 (the "plan" entry above) splits into two mutually exclusive item tables, matching
+// the model answer: one for a candidate who proposes cutting/soil/shade management, one for a
+// candidate who recommends doing nothing. Each table lists more marks than the 12-mark cap on
+// purpose (a range of options for the examiner) - the section score is the sum of whichever
+// table's items are filled in, capped at REPORT_PLAN_CAP.
+const REPORT_PLAN_CAP = 12;
+
+const REPORT_PLAN_MANAGEMENT_ITEMS = [
+  { key: "overview", title: "Brief overview of management (vision/end point).", max: 1 },
+  { key: "who", title: "Who will undertake the management work.", max: 1 },
+  { key: "sensitiveFeatures", title: "Identification of sensitive features to be retained / not damaged during works.", max: 1 },
+  { key: "climate", title: "Consideration of climate, historic management, recent weather conditions and likely future conditions.", max: 1 },
+  { key: "timing", title: "Timing (season) / priority of work.", max: 1 },
+  { key: "timetable", title: "A suitable timetable given where work should be phased, or management actions repeated (e.g. pollarding). If shade clearance is proposed - how quickly should the shade be removed? For soil amelioration - how much of the soil area will be treated in one operation? 2 marks only given if the timetable has a longer timescale and several phases.", max: 2 },
+  { key: "workSpec", title: "Clear work specification including: details of where to mark final cuts / how much foliage is to be removed / trees to be removed / area of soil to be treated.", max: 1 },
+  { key: "appropriateChoice", title: "Appropriate choice of management. Does the management address the threats (1 mark)? Will the management extend the life of the tree or retain its value (1 mark)?", max: 2 },
+  { key: "machinery", title: "Type of machinery to bring to site and access routes.", max: 1 },
+  { key: "finishingCut", title: "Detail of finishing cut (e.g. retention of stubs, natural fracture / rip cuts, target pruning) and/or techniques used (e.g. when clearing for shade, ringbarking, veteranisation).", max: 1 },
+  { key: "arisings", title: "Treatment of arisings.", max: 1 },
+  { key: "monitoring", title: "Requirement for monitoring (including what is to be monitored and when). 1 mark for mentioning monitoring, 2 marks only awarded if they include what or when, 3 marks for what and when.", max: 3 },
+  { key: "limitations", title: "Limitations (e.g. further survey work required).", max: 1 },
+];
+
+const REPORT_PLAN_DO_NOTHING_ITEMS = [
+  { key: "doNothingAppropriate", title: "'Do nothing' considered appropriate. 2 marks if the candidate recommends 'do nothing' but gives no justification (the examiner must agree it is an appropriate recommendation). 4 marks if only a basic justification is given (examiner must agree). 6 marks if a full, detailed justification is given (examiner must agree).", max: 6 },
+  { key: "overview", title: "Brief overview of management (vision/end point).", max: 1 },
+  { key: "climate", title: "Consideration of climate, historic management, recent weather conditions and likely future conditions.", max: 1 },
+  { key: "limitations", title: "Limitations (e.g. further survey work required).", max: 1 },
+  { key: "monitoring", title: "Requirement for monitoring (including what is to be monitored and when).", max: 3 },
+];
+
+function reportPlanItemsForMode(mode) {
+  return mode === "doNothing" ? REPORT_PLAN_DO_NOTHING_ITEMS : REPORT_PLAN_MANAGEMENT_ITEMS;
+}
+
+// Derives the "plan" section's score from its item breakdown - falls back to the old flat
+// `.score` for marks saved before this itemization existed, so nothing already scored resets to 0.
+function reportPlanScore(mark) {
+  if (!mark) return 0;
+  if (mark.items && typeof mark.items === "object") {
+    const items = reportPlanItemsForMode(mark.mode);
+    const sum = items.reduce((total, item) => total + (Number(mark.items[item.key]) || 0), 0);
+    return Math.min(REPORT_PLAN_CAP, sum);
+  }
+  return Number(mark.score) || 0;
+}
+
 // Whole-plan marks, not per tree: 3 each, 9 in total.
 const REPORT_CLARITY_ITEMS = [
   { key: "spelling", title: "Spelling and grammar", max: 3 },
@@ -5440,7 +5487,10 @@ function writeReportMarks(candidateId, marks) {
 
 function reportMarksTotal(marks) {
   const perTree = REPORT_TREES.reduce((sum, treeName) => sum
-    + REPORT_MARKING_SECTIONS.reduce((inner, section) => inner + (Number(marks?.[treeName]?.[section.key]?.score) || 0), 0), 0);
+    + REPORT_MARKING_SECTIONS.reduce((inner, section) => {
+      const mark = marks?.[treeName]?.[section.key];
+      return inner + (section.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+    }, 0), 0);
   const clarity = REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + (Number(marks?.clarity?.[item.key]) || 0), 0);
   return perTree + clarity;
 }
@@ -9482,7 +9532,10 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
             const treeMaxTotal = REPORT_MARKING_SECTIONS.reduce((sum, s) => sum + s.perTreeMax, 0);
             const treeTotalFor = (treeName) => {
               const treeMarks = marks[treeName] || {};
-              return REPORT_MARKING_SECTIONS.reduce((sum, s) => sum + (Number(treeMarks[s.key]?.score) || 0), 0);
+              return REPORT_MARKING_SECTIONS.reduce((sum, s) => {
+                const mark = treeMarks[s.key];
+                return sum + (s.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+              }, 0);
             };
             const activeTree = treeDrafts[activeReportTree] || {};
             const activeTreeMarks = marks[activeReportTree] || {};
@@ -9519,6 +9572,72 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                   {REPORT_MARKING_SECTIONS.map((section, index) => {
                     const sectionText = String(activeTree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim() || (index === 0 ? String(activeTree.fieldNotes ?? "").trim() : "");
                     const mark = activeTreeMarks[section.key] || {};
+
+                    // Section 6 (management plan) splits into an itemized sub-rubric instead of one
+                    // combined score - the examiner picks whether the candidate proposed cutting/
+                    // soil/shade management or "do nothing", then scores that table's line items.
+                    if (section.key === "plan") {
+                      const mode = mark.mode === "doNothing" ? "doNothing" : "management";
+                      const items = reportPlanItemsForMode(mode);
+                      const planScore = reportPlanScore(mark);
+                      return (
+                        <div key={section.key} className="min-h-[70vh] rounded-2xl border bg-slate-50 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                            <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(planScore)} / {REPORT_PLAN_CAP} b.</div>
+                          </div>
+                          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                            <div className="min-w-0 rounded-xl border bg-white p-3">
+                              <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{t("centre.review.candidateAnswer")}</div>
+                              <div className="whitespace-pre-wrap text-sm text-slate-800">{sectionText || <em>{t("centre.review.noAnswer")}</em>}</div>
+                            </div>
+                            <div className="min-w-0 rounded-xl border bg-white p-3">
+                              {identifiedExaminer && (
+                                <div className="mb-3 inline-flex rounded-2xl border bg-slate-50 p-0.5 text-xs font-semibold">
+                                  <button type="button" onClick={() => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { mode: "management" })} className={`rounded-2xl px-3 py-1.5 ${mode === "management" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeManagement")}</button>
+                                  <button type="button" onClick={() => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { mode: "doNothing" })} className={`rounded-2xl px-3 py-1.5 ${mode === "doNothing" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeDoNothing")}</button>
+                                </div>
+                              )}
+                              <div className="space-y-2">
+                                {items.map((item) => (
+                                  <div key={item.key} className="flex items-start justify-between gap-3 rounded-lg border bg-slate-50 p-2">
+                                    <div className="min-w-0 text-xs text-slate-700">{item.title}</div>
+                                    <div className="shrink-0 text-center">
+                                      {identifiedExaminer ? (
+                                        <input
+                                          type="number"
+                                          step="0.5"
+                                          min="0"
+                                          max={item.max}
+                                          value={mark.items?.[item.key] ?? ""}
+                                          onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { items: { ...(mark.items || {}), [item.key]: event.target.value } })}
+                                          className="w-16 rounded-lg border-2 border-slate-300 p-1 text-right text-xs font-bold"
+                                        />
+                                      ) : (
+                                        <span className="text-xs font-semibold">{mark.items?.[item.key] ? formatHalfPointScore(Number(mark.items[item.key])) : "-"}</span>
+                                      )}
+                                      <div className="text-[10px] text-slate-500">/ {item.max}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          {identifiedExaminer ? (
+                            <textarea
+                              value={mark.comment ?? ""}
+                              onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { comment: event.target.value })}
+                              rows={3}
+                              placeholder={t("examiner.reportReview.commentPlaceholder")}
+                              className="mt-3 w-full rounded-lg border p-2 text-sm"
+                            />
+                          ) : (
+                            mark.comment && <div className="mt-3 whitespace-pre-wrap rounded-lg bg-white p-2 text-sm text-slate-700">{mark.comment}</div>
+                          )}
+                        </div>
+                      );
+                    }
+
                     return (
                       // min-h so each section takes up roughly the full modal height - candidate
                       // text, grading guidance and the score/comment all need room at once.
@@ -15171,7 +15290,10 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
       <div className="space-y-6">
         {treeSummaries.map(({ treeName, tree, reportPhotos, completedSections }) => {
           const treeMarks = marks[treeName] || {};
-          const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + (Number(treeMarks[section.key]?.score) || 0), 0);
+          const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => {
+            const mark = treeMarks[section.key];
+            return sum + (section.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+          }, 0);
           const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
           return (
             <div key={treeName} className="rounded-2xl border bg-slate-50 p-4">
@@ -15203,6 +15325,61 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
                   const candidateText = String(tree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim()
                     || (index === 0 ? String(tree.fieldNotes ?? "").trim() : "");
                   const mark = treeMarks[section.key] || {};
+
+                  // Section 6 (management plan) splits into an itemized sub-rubric instead of one
+                  // combined score - the examiner picks whether the candidate proposed cutting/
+                  // soil/shade management or "do nothing", then scores that table's line items.
+                  if (section.key === "plan") {
+                    const mode = mark.mode === "doNothing" ? "doNothing" : "management";
+                    const items = reportPlanItemsForMode(mode);
+                    const planScore = reportPlanScore(mark);
+                    return (
+                      <div key={section.key} className="rounded-2xl border bg-white p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                          <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(planScore)} / {REPORT_PLAN_CAP}</div>
+                        </div>
+                        <div className="mt-2 grid gap-3 lg:grid-cols-2">
+                          <div className="max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm">
+                            {candidateText || <em className="text-slate-400">{t("examiner.reportReview.missing")}</em>}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="mb-2 inline-flex rounded-2xl border bg-slate-50 p-0.5 text-xs font-semibold">
+                              <button type="button" onClick={() => updateMark(treeName, "plan", { mode: "management" })} className={`rounded-2xl px-3 py-1.5 ${mode === "management" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeManagement")}</button>
+                              <button type="button" onClick={() => updateMark(treeName, "plan", { mode: "doNothing" })} className={`rounded-2xl px-3 py-1.5 ${mode === "doNothing" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeDoNothing")}</button>
+                            </div>
+                            <div className="space-y-2">
+                              {items.map((item) => (
+                                <div key={item.key} className="flex items-start justify-between gap-3 rounded-lg border bg-slate-50 p-2">
+                                  <div className="min-w-0 text-xs text-slate-700">{item.title}</div>
+                                  <label className="shrink-0 text-center text-[10px] text-slate-500">
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      min="0"
+                                      max={item.max}
+                                      value={mark.items?.[item.key] ?? ""}
+                                      onChange={(event) => updateMark(treeName, "plan", { items: { ...(mark.items || {}), [item.key]: event.target.value } })}
+                                      className="block w-16 rounded-lg border p-1 text-right text-xs font-bold text-slate-950"
+                                    />
+                                    / {item.max}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <textarea
+                          value={mark.comment ?? ""}
+                          onChange={(event) => updateMark(treeName, "plan", { comment: event.target.value })}
+                          rows={3}
+                          placeholder={t("examiner.reportReview.commentPlaceholder")}
+                          className="mt-2 w-full rounded-xl border p-2 text-sm"
+                        />
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={section.key} className="grid gap-3 rounded-2xl border bg-white p-3 lg:grid-cols-2">
                       <div className="min-w-0">

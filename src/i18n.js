@@ -453,6 +453,8 @@ Object.assign(translations.en, {
   "report.savePdfFallback": "Save as .pdf",
   "report.pdfDraftTitle": "Consulting report - draft",
   "report.pdfBlocked": "The PDF window was blocked by the browser.",
+  "report.plan.modeManagement": "Management proposed",
+  "report.plan.modeDoNothing": "\"Do nothing\" recommended",
   "report.photosForReport": "Photos for the report",
   "report.photosAddedCount": "{count} photos added",
   "report.submitConfirmation": "Report submission check\n\nIs the report filled in for both trees (A+B)?\n\nAre the annotated photos ready to use in the report?\n\nOnce confirmed, the report will be submitted and closed."
@@ -588,6 +590,8 @@ Object.assign(translations.cs, {
   "report.savePdfFallback": "Uložit do .pdf",
   "report.pdfDraftTitle": "Consulting report - draft",
   "report.pdfBlocked": "Okno pro PDF bylo blokováno prohlížečem.",
+  "report.plan.modeManagement": "Navržen zásah / péče",
+  "report.plan.modeDoNothing": "Doporučeno ponechat bez zásahu",
   "report.photosForReport": "Fotografie pro report",
   "report.photosAddedCount": "Přidáno fotografií: {count}",
   "report.submitConfirmation": "Kontrola před odesláním reportu\n\nJe vyplněný report pro oba dva stromy (A+B)?\n\nJsou anotované fotografie k použití v reportu?\n\nPo potvrzení bude report odeslán a uzavřen."
