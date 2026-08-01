@@ -3111,15 +3111,19 @@ function VetBaraPrototype() {
     const capturedAt = filePhoto.createdAt ?? new Date().toISOString();
     const draft = reportDrafts[loggedCandidate.id] ?? createReportDraft();
     const photos = draft[tree]?.photos ?? [];
+    // Auto-named ("Picture 1", "Picture 2", ...) rather than the source file's own name - a
+    // camera/gallery filename like "IMG_20260801_143022.jpg" was neither meaningful to the
+    // candidate nor consistent between capture methods (camera vs. handwriting vs. annotation).
+    const autoName = tf("report.photo.autoName", { index: photos.length + 1 });
     const photo = {
       id: `P-${photos.length + 1}`,
-      name: filePhoto.name,
+      name: autoName,
       type: filePhoto.type,
       size: filePhoto.size,
       dataUrl: filePhoto.dataUrl,
       description: filePhoto.description ?? "",
       useInReport: filePhoto.useInReport ?? true,
-      caption: filePhoto.name || `${tree} candidate photo ${photos.length + 1}`,
+      caption: autoName,
       capturedAt,
       createdAt: capturedAt,
     };
