@@ -11197,13 +11197,13 @@ function harmonogramSequenceOptions(level) {
     : [["written", "outdoor", "report"], ["outdoor", "report", "written"]];
 }
 
-function harmonogramBuildGroupBlocks(group, settings) {
-  const dayStart = harmonogramParseTime(settings.dayStartTime);
-  const waveOffset = group.wave * (HARMONOGRAM_WELCOME_DURATION + HARMONOGRAM_MAIN_DURATION + settings.coffeeBreakMinutes);
-  let cursor = dayStart + waveOffset;
+function harmonogramBuildGroupBlocks(group, settings, welcomeEnd) {
+  // Waves stagger groups competing for the same examiner pair - the welcome itself is shared
+  // across every lane (see buildDefaultHarmonogramSchedule), only each wave's own activity
+  // sequence starts later.
+  const waveOffset = group.wave * (HARMONOGRAM_MAIN_DURATION + settings.coffeeBreakMinutes);
+  let cursor = welcomeEnd + waveOffset;
   const blocks = [];
-  blocks.push({ id: `${group.id}-welcome`, activity: "welcome", start: cursor, duration: HARMONOGRAM_WELCOME_DURATION });
-  cursor += HARMONOGRAM_WELCOME_DURATION;
   const sequence = harmonogramSequenceOptions(group.level)[group.groupIndex % harmonogramSequenceOptions(group.level).length];
   sequence.forEach((activity, index) => {
     blocks.push({ id: `${group.id}-${activity}`, activity, start: cursor, duration: HARMONOGRAM_MAIN_DURATION });
@@ -11222,7 +11222,11 @@ function harmonogramBuildGroupBlocks(group, settings) {
 // Pairs candidates two-at-a-time per level (matching the reference exam-programme sheets), then
 // spreads groups across as many parallel "lanes" as the examiner count supports (one lane needs
 // one examiner pair) and, beyond that, across days round-robin.
-function buildDefaultHarmonogramGroups(candidates, examiners, settings) {
+// Welcome happens once, for the whole cohort together, before anyone splits into their own
+// activity rotation - it is a single shared block, not one per group/lane (HarmonogramTimeline
+// renders it as its own full-width row above the per-group lanes; dragging it shifts every lane by
+// the same delta, since every day's schedule is built around the same "office hour" welcome time).
+function buildDefaultHarmonogramSchedule(candidates, examiners, settings) {
   const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
   const levels = ["Practicing", "Consulting"];
   const rawGroups = [];
@@ -11233,7 +11237,10 @@ function buildDefaultHarmonogramGroups(candidates, examiners, settings) {
     }
   });
   const days = Math.max(1, Number(settings.days) || 1);
-  return rawGroups.map((group, index) => {
+  const dayStart = harmonogramParseTime(settings.dayStartTime);
+  const welcome = { id: "welcome", activity: "welcome", start: dayStart, duration: HARMONOGRAM_WELCOME_DURATION };
+  const welcomeEnd = dayStart + HARMONOGRAM_WELCOME_DURATION;
+  const groups = rawGroups.map((group, index) => {
     const groupIndex = rawGroups.slice(0, index).filter((g) => g.level === group.level).length;
     const built = {
       ...group,
@@ -11242,8 +11249,9 @@ function buildDefaultHarmonogramGroups(candidates, examiners, settings) {
       wave: Math.floor(index / parallelLanes),
       day: index % days,
     };
-    return { ...built, blocks: harmonogramBuildGroupBlocks(built, settings) };
+    return { ...built, blocks: harmonogramBuildGroupBlocks(built, settings, welcomeEnd) };
   });
+  return { welcome, groups };
 }
 
 function harmonogramGroupLabel(group, t) {
@@ -11251,13 +11259,14 @@ function harmonogramGroupLabel(group, t) {
   return `${group.level === "Practicing" ? t("harmonogram.levelPracticing") : t("harmonogram.levelConsulting")} · ${names}`;
 }
 
-function printHarmonogramPdf(groups, days, t) {
+function printHarmonogramPdf(welcome, groups, days, t) {
   if (!groups.length) return;
+  const welcomeRow = `<tr style="background:${harmonogramActivityColor(welcome.activity)}"><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(welcome.start)}</td><td style="border:1px solid #ccc;padding:2mm">${welcome.duration} min</td><td style="border:1px solid #ccc;padding:2mm">${escapeHtml(t(`harmonogram.activity.${welcome.activity}`))}</td></tr>`;
   const dayPages = Array.from({ length: days }, (_, day) => {
     const dayGroups = groups.filter((g) => g.day === day);
     if (!dayGroups.length) return "";
     const groupTables = dayGroups.map((group) => {
-      const rows = group.blocks.map((block) => `<tr style="background:${harmonogramActivityColor(block.activity)}"><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(block.start)}</td><td style="border:1px solid #ccc;padding:2mm">${block.duration ? `${block.duration} min` : ""}</td><td style="border:1px solid #ccc;padding:2mm">${escapeHtml(t(`harmonogram.activity.${block.activity}`))}</td></tr>`).join("");
+      const rows = welcomeRow + group.blocks.map((block) => `<tr style="background:${harmonogramActivityColor(block.activity)}"><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(block.start)}</td><td style="border:1px solid #ccc;padding:2mm">${block.duration ? `${block.duration} min` : ""}</td><td style="border:1px solid #ccc;padding:2mm">${escapeHtml(t(`harmonogram.activity.${block.activity}`))}</td></tr>`).join("");
       return `<section style="break-inside:avoid;margin-bottom:6mm">
         <div style="font-weight:700;text-decoration:underline">${escapeHtml(group.level)}</div>
         <div style="margin-bottom:2mm">${escapeHtml(group.members.map((m) => m.name || m.id).join(", "))}</div>
@@ -11266,12 +11275,12 @@ function printHarmonogramPdf(groups, days, t) {
       </section>`;
     }).join("");
 
-    const allStarts = Array.from(new Set(dayGroups.flatMap((g) => g.blocks.map((b) => b.start)))).sort((a, b) => a - b);
+    const allStarts = Array.from(new Set([welcome.start, ...dayGroups.flatMap((g) => g.blocks.map((b) => b.start))])).sort((a, b) => a - b);
     const overviewRows = allStarts.map((start, i) => {
       const nextStart = allStarts[i + 1];
       const duration = nextStart ? nextStart - start : 0;
       const cells = dayGroups.map((g) => {
-        const block = g.blocks.find((b) => b.start <= start && start < b.start + Math.max(b.duration, 1));
+        const block = [welcome, ...g.blocks].find((b) => b.start <= start && start < b.start + Math.max(b.duration, 1));
         return `<td style="border:1px solid #ccc;padding:2mm;${block ? `background:${harmonogramActivityColor(block.activity)}` : ""}">${block ? escapeHtml(t(`harmonogram.activity.${block.activity}`)) : ""}</td>`;
       }).join("");
       return `<tr><td style="border:1px solid #ccc;padding:2mm">${harmonogramTimeLabel(start)}</td><td style="border:1px solid #ccc;padding:2mm">${duration ? `${duration} min` : ""}</td>${cells}</tr>`;
@@ -11301,6 +11310,12 @@ function printHarmonogramPdf(groups, days, t) {
 const HARMONOGRAM_BASE_PX_PER_MINUTE = 3;
 const HARMONOGRAM_BASE_ROW_HEIGHT = 40;
 const HARMONOGRAM_ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+// The visible axis is always at least 07:00-22:00 (extending further only if a coordinator drags
+// something outside that window) - the realistic target day runs 08:30-20:00, so this leaves
+// comfortable margin on both ends without the ruler jumping around as blocks move.
+const HARMONOGRAM_AXIS_START = 7 * 60;
+const HARMONOGRAM_AXIS_END = 22 * 60;
+const HARMONOGRAM_REALISTIC_END = 20 * 60;
 
 function harmonogramZoomStep(current, direction) {
   const index = HARMONOGRAM_ZOOM_STEPS.reduce((closest, value, i) => (Math.abs(value - current) < Math.abs(HARMONOGRAM_ZOOM_STEPS[closest] - current) ? i : closest), 0);
@@ -11308,32 +11323,57 @@ function harmonogramZoomStep(current, direction) {
   return HARMONOGRAM_ZOOM_STEPS[nextIndex];
 }
 
+// Vertical zoom scales row height fully (taps stay easy to hit at high zoom) but font size only by
+// its square root, capped - a 4x row-height zoom used to mean 4x-huge text, unreadable well before
+// it stopped being useful as a bigger tap target.
+function harmonogramFontSize(zoomY, base, min, max) {
+  return Math.max(min, Math.min(max, base * Math.sqrt(zoomY)));
+}
+
 // Independent horizontal (time scale) and vertical (row height) zoom, since a coordinator might
 // want a wide overview of the whole day or a tall, easy-to-tap view for fine-grained dragging on
 // a tablet - not always the same tradeoff.
-function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
+function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onResizeBlock, onDeleteBlock, t, maxHeight }) {
   const [zoomX, setZoomX] = useState(1);
   const [zoomY, setZoomY] = useState(1);
   const pxPerMinute = HARMONOGRAM_BASE_PX_PER_MINUTE * zoomX;
   const rowHeight = HARMONOGRAM_BASE_ROW_HEIGHT * zoomY;
-  const allStarts = groups.flatMap((g) => g.blocks.map((b) => b.start));
-  const allEnds = groups.flatMap((g) => g.blocks.map((b) => b.start + b.duration));
-  const minStart = Math.floor(Math.min(...allStarts, 0) / 60) * 60;
-  const maxEnd = Math.max(...allEnds, minStart + 60) + 30;
+  const allStarts = [welcome.start, ...groups.flatMap((g) => g.blocks.map((b) => b.start))];
+  const allEnds = [welcome.start + welcome.duration, ...groups.flatMap((g) => g.blocks.map((b) => b.start + b.duration))];
+  const minStart = Math.min(HARMONOGRAM_AXIS_START, Math.floor(Math.min(...allStarts) / 60) * 60);
+  const maxEnd = Math.max(HARMONOGRAM_AXIS_END, Math.max(...allEnds) + 30);
   const timelineWidth = (maxEnd - minStart) * pxPerMinute;
   const dragRef = useRef(null);
+  const scheduleEndsLate = Math.max(...allEnds) > HARMONOGRAM_REALISTIC_END;
 
   function startDrag(groupId, block, event) {
     event.preventDefault();
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
-    dragRef.current = { groupId, blockId: block.id, startClientX: event.clientX, startValue: block.start, pointerId: event.pointerId };
+    dragRef.current = { mode: "move", groupId, blockId: block.id, startClientX: event.clientX, startValue: block.start, pointerId: event.pointerId };
+  }
+  // Break/lunch blocks only - a drag on this narrow right-edge handle shortens the block instead
+  // of moving it; stopPropagation keeps the parent block's own onPointerDown (startDrag/move) from
+  // also firing.
+  function startResize(groupId, block, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
+    dragRef.current = { mode: "resize", groupId, blockId: block.id, startClientX: event.clientX, startDuration: block.duration, pointerId: event.pointerId };
   }
   function onMove(event) {
     const drag = dragRef.current;
     if (!drag || event.pointerId !== drag.pointerId) return;
     const deltaMinutes = (event.clientX - drag.startClientX) / pxPerMinute;
+    if (drag.mode === "resize") {
+      const snappedDuration = Math.max(5, Math.round((drag.startDuration + deltaMinutes) / 5) * 5);
+      onResizeBlock(drag.groupId, drag.blockId, snappedDuration);
+      return;
+    }
     const snapped = Math.max(0, Math.round((drag.startValue + deltaMinutes) / 5) * 5);
-    onMoveBlock(drag.groupId, drag.blockId, snapped);
+    // The welcome block isn't part of any group's own blocks array (it's shared across every
+    // lane), so it's routed to its own handler via this sentinel id rather than onMoveBlock.
+    if (drag.groupId === "__welcome__") onMoveWelcome(snapped);
+    else onMoveBlock(drag.groupId, drag.blockId, snapped);
   }
   function endDrag(event) {
     if (dragRef.current && event.pointerId === dragRef.current.pointerId) dragRef.current = null;
@@ -11341,6 +11381,51 @@ function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
 
   const hourMarks = [];
   for (let m = minStart; m <= maxEnd; m += 60) hourMarks.push(m);
+
+  const hourMarkFontSize = harmonogramFontSize(zoomY, 10, 10, 14);
+  const groupLabelFontSize = harmonogramFontSize(zoomY, 12, 11, 15);
+  const blockFontSize = harmonogramFontSize(zoomY, 10, 10, 15);
+
+  function renderBlock(groupId, block) {
+    const isBreakLike = block.activity === "break" || block.activity === "lunch";
+    return (
+      <div
+        key={block.id}
+        onPointerDown={(event) => startDrag(groupId, block, event)}
+        className="absolute top-0 flex cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center font-semibold text-slate-900 active:cursor-grabbing"
+        style={{
+          left: `${(block.start - minStart) * pxPerMinute}px`,
+          width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
+          height: `${rowHeight}px`,
+          fontSize: `${blockFontSize}px`,
+          background: harmonogramActivityColor(block.activity),
+          touchAction: "none",
+        }}
+        title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
+      >
+        {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
+        {isBreakLike && (
+          <>
+            <button
+              type="button"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => { event.stopPropagation(); onDeleteBlock(groupId, block.id); }}
+              title={t("harmonogram.removeBlock")}
+              aria-label={t("harmonogram.removeBlock")}
+              className="absolute -right-1.5 -top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold leading-none text-white shadow"
+            >
+              ×
+            </button>
+            <div
+              onPointerDown={(event) => startResize(groupId, block, event)}
+              className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
+              title={t("harmonogram.resizeBlock")}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -11358,37 +11443,31 @@ function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
         {(zoomX !== 1 || zoomY !== 1) && (
           <button type="button" onClick={() => { setZoomX(1); setZoomY(1); }} className="text-xs font-semibold text-slate-500 underline">{t("harmonogram.zoomReset")}</button>
         )}
+        {scheduleEndsLate && (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">{t("harmonogram.endTimeWarning")}</span>
+        )}
       </div>
       <div className="overflow-auto rounded-xl border bg-slate-50 p-3" onPointerMove={onMove} onPointerUp={endDrag} onPointerCancel={endDrag} style={maxHeight ? { maxHeight } : undefined}>
         <div className="relative" style={{ width: `${timelineWidth}px`, minWidth: "100%" }}>
           <div className="relative border-b" style={{ height: `${Math.max(24, rowHeight * 0.6)}px` }}>
             {hourMarks.map((m) => (
-              <div key={m} className="absolute top-0 border-l pl-1 font-semibold text-slate-500" style={{ left: `${(m - minStart) * pxPerMinute}px`, fontSize: `${Math.max(10, rowHeight * 0.25)}px` }}>{harmonogramTimeLabel(m)}</div>
+              <div key={m} className="absolute top-0 border-l pl-1 font-semibold text-slate-500" style={{ left: `${(m - minStart) * pxPerMinute}px`, fontSize: `${hourMarkFontSize}px` }}>{harmonogramTimeLabel(m)}</div>
             ))}
           </div>
-          <div className="mt-2 space-y-3">
+          {/* Welcome is shared across every lane (single row, full width) - dragging it shifts
+              every group's blocks below by the same delta (see CentreScheduleBuilder). */}
+          <div className="mt-2">
+            <div className="mb-1 font-semibold text-slate-600" style={{ fontSize: `${groupLabelFontSize}px` }}>{t("harmonogram.activity.welcome")}</div>
+            <div className="relative rounded-lg bg-white" style={{ width: `${timelineWidth}px`, height: `${rowHeight}px` }}>
+              {renderBlock("__welcome__", welcome)}
+            </div>
+          </div>
+          <div className="mt-3 space-y-3">
             {groups.map((group) => (
               <div key={group.id}>
-                <div className="mb-1 font-semibold text-slate-600" style={{ fontSize: `${Math.max(11, rowHeight * 0.3)}px` }}>{harmonogramGroupLabel(group, t)}</div>
+                <div className="mb-1 font-semibold text-slate-600" style={{ fontSize: `${groupLabelFontSize}px` }}>{harmonogramGroupLabel(group, t)}</div>
                 <div className="relative rounded-lg bg-white" style={{ width: `${timelineWidth}px`, height: `${rowHeight}px` }}>
-                  {group.blocks.filter((b) => b.duration > 0).map((block) => (
-                    <div
-                      key={block.id}
-                      onPointerDown={(event) => startDrag(group.id, block, event)}
-                      className="absolute top-0 flex cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center font-semibold text-slate-900 active:cursor-grabbing"
-                      style={{
-                        left: `${(block.start - minStart) * pxPerMinute}px`,
-                        width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
-                        height: `${rowHeight}px`,
-                        fontSize: `${Math.max(10, rowHeight * 0.24)}px`,
-                        background: harmonogramActivityColor(block.activity),
-                        touchAction: "none",
-                      }}
-                      title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
-                    >
-                      {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
-                    </div>
-                  ))}
+                  {group.blocks.filter((b) => b.duration > 0).map((block) => renderBlock(group.id, block))}
                 </div>
               </div>
             ))}
@@ -11403,6 +11482,7 @@ function HarmonogramTimeline({ groups, onMoveBlock, t, maxHeight }) {
 // backend alongside the rest of Centre Setup and read back by a Candidate's own device to render
 // its individual schedule widget - a plain local useState never leaves this browser tab.
 function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, setCentreSetupDirty, t }) {
+  const [welcome, setWelcome] = useState(null);
   const [groups, setGroups] = useState(null);
   const [activeDay, setActiveDay] = useState(0);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
@@ -11413,7 +11493,9 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
   }
 
   function regenerate() {
-    setGroups(buildDefaultHarmonogramGroups(candidates, examiners, settings));
+    const built = buildDefaultHarmonogramSchedule(candidates, examiners, settings);
+    setWelcome(built.welcome);
+    setGroups(built.groups);
     setActiveDay(0);
   }
 
@@ -11429,11 +11511,88 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateSignature, examinerSignature, settingsSignature]);
 
+  // Moving (not resizing) a block onto a neighbor's slot swaps the two instead of overlapping -
+  // there's no such thing as two activities happening in the same lane at once, and a swap is
+  // almost always what dragging one activity "past" another actually meant. Blocks have different
+  // durations, so just exchanging their start times isn't enough - "outdoor" (120min) swapping
+  // with the very next "break" (30min) can still spill into whatever comes after the break. Only
+  // an IMMEDIATE neighbor (in current start-time order) is swapped, and everything from the
+  // earlier of the two swapped blocks onward is re-flowed with no gaps, so the swap never creates
+  // a second overlap further down the lane. A drag that would overlap a block further away than
+  // the immediate neighbor is ignored rather than guessing at a multi-block reshuffle.
   function updateBlockStart(groupId, blockId, newStart) {
-    setGroups((prev) => (prev || []).map((group) => (group.id !== groupId ? group : {
+    setGroups((prev) => (prev || []).map((group) => {
+      if (group.id !== groupId) return group;
+      const moving = group.blocks.find((b) => b.id === blockId);
+      if (!moving) return group;
+      const newEnd = newStart + moving.duration;
+      const overlapping = group.blocks.find((b) => b.id !== blockId && newStart < b.start + b.duration && newEnd > b.start);
+      if (!overlapping) {
+        return { ...group, blocks: group.blocks.map((b) => (b.id === blockId ? { ...b, start: newStart } : b)) };
+      }
+      const ordered = [...group.blocks].sort((a, b) => a.start - b.start);
+      const movingIndex = ordered.findIndex((b) => b.id === blockId);
+      const overlapIndex = ordered.findIndex((b) => b.id === overlapping.id);
+      if (Math.abs(movingIndex - overlapIndex) !== 1) return group;
+      const reordered = [...ordered];
+      [reordered[movingIndex], reordered[overlapIndex]] = [reordered[overlapIndex], reordered[movingIndex]];
+      const fromIndex = Math.min(movingIndex, overlapIndex);
+      let cursor = ordered[fromIndex].start;
+      const nextStartById = {};
+      for (let i = fromIndex; i < reordered.length; i += 1) {
+        nextStartById[reordered[i].id] = cursor;
+        cursor += reordered[i].duration;
+      }
+      return {
+        ...group,
+        blocks: group.blocks.map((b) => (nextStartById[b.id] !== undefined ? { ...b, start: nextStartById[b.id] } : b)),
+      };
+    }));
+  }
+
+  // Welcome is shared across every lane, so moving it shifts every group's own blocks by the same
+  // delta - the whole day slides together rather than only the welcome bar moving on its own.
+  function updateWelcomeStart(newStart) {
+    if (!welcome || newStart === welcome.start) return;
+    const delta = newStart - welcome.start;
+    setWelcome((w) => ({ ...w, start: newStart }));
+    setGroups((prev) => (prev || []).map((group) => ({
       ...group,
-      blocks: group.blocks.map((block) => (block.id === blockId ? { ...block, start: newStart } : block)),
+      blocks: group.blocks.map((b) => ({ ...b, start: b.start + delta })),
     })));
+  }
+
+  // Break/lunch only: shrinking (or removing) one frees up time that the rest of that lane's day
+  // shifts earlier into, same as a real day running ahead of schedule once a break is cut short.
+  function resizeBreakBlock(groupId, blockId, newDuration) {
+    setGroups((prev) => (prev || []).map((group) => {
+      if (group.id !== groupId) return group;
+      const block = group.blocks.find((b) => b.id === blockId);
+      if (!block) return group;
+      const clamped = Math.max(5, newDuration);
+      const delta = block.duration - clamped;
+      if (delta === 0) return group;
+      return {
+        ...group,
+        blocks: group.blocks.map((b) => {
+          if (b.id === blockId) return { ...b, duration: clamped };
+          if (b.start > block.start) return { ...b, start: b.start - delta };
+          return b;
+        }),
+      };
+    }));
+  }
+
+  function deleteBreakBlock(groupId, blockId) {
+    setGroups((prev) => (prev || []).map((group) => {
+      if (group.id !== groupId) return group;
+      const block = group.blocks.find((b) => b.id === blockId);
+      if (!block) return group;
+      return {
+        ...group,
+        blocks: group.blocks.filter((b) => b.id !== blockId).map((b) => (b.start > block.start ? { ...b, start: b.start - block.duration } : b)),
+      };
+    }));
   }
 
   const days = Math.max(1, Number(settings.days) || 1);
@@ -11444,7 +11603,9 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
     return (
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm font-medium">{t("harmonogram.startTime")}
-          <input type="time" value={settings.dayStartTime} onChange={(event) => updateSettings((s) => ({ ...s, dayStartTime: event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
+          {/* Realistic target day starts no earlier than 08:30 (see HARMONOGRAM_AXIS_* for the
+              wider 07:00-22:00 display window this feeds into). */}
+          <input type="time" min="08:30" value={settings.dayStartTime} onChange={(event) => updateSettings((s) => ({ ...s, dayStartTime: event.target.value < "08:30" ? "08:30" : event.target.value }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
         </label>
         <label className="text-sm font-medium">{t("harmonogram.days")}
           <input type="number" min="1" value={settings.days} onChange={(event) => updateSettings((s) => ({ ...s, days: Math.max(1, Number(event.target.value) || 1) }))} className="mt-1 w-full rounded-xl border bg-white p-2" />
@@ -11481,8 +11642,8 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
-          <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
-          <Button onClick={() => setFullscreenOpen(true)} disabled={!groups?.length} className="rounded-2xl">
+          <Button onClick={() => printHarmonogramPdf(welcome, groups || [], days, t)} disabled={!welcome || !groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
+          <Button onClick={() => setFullscreenOpen(true)} disabled={!welcome || !groups?.length} className="rounded-2xl">
             <Maximize className="mr-1 h-4 w-4" />{t("harmonogram.openFullscreen")}
           </Button>
         </div>
@@ -11494,9 +11655,9 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
 
       {dayTabs()}
 
-      {visibleGroups.length > 0 ? (
+      {welcome && visibleGroups.length > 0 ? (
         <div className="mt-4">
-          <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} maxHeight="40vh" />
+          <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} t={t} maxHeight="40vh" />
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
@@ -11513,7 +11674,7 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
             </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={regenerate} variant="outline" className="rounded-2xl">{t("harmonogram.regenerate")}</Button>
-              <Button onClick={() => printHarmonogramPdf(groups || [], days, t)} disabled={!groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
+              <Button onClick={() => printHarmonogramPdf(welcome, groups || [], days, t)} disabled={!welcome || !groups?.length} variant="outline" className="rounded-2xl">{t("harmonogram.printPdf")}</Button>
               <Button onClick={() => setFullscreenOpen(false)} className="rounded-2xl">{t("common.close")}</Button>
             </div>
           </div>
@@ -11523,8 +11684,8 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
           {dayTabs()}
 
           <div className="mt-3 min-h-0 flex-1 overflow-auto">
-            {visibleGroups.length > 0 ? (
-              <HarmonogramTimeline groups={visibleGroups} onMoveBlock={updateBlockStart} t={t} maxHeight="65vh" />
+            {welcome && visibleGroups.length > 0 ? (
+              <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} t={t} maxHeight="65vh" />
             ) : (
               <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
             )}
@@ -12767,19 +12928,20 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
 // Schedule tab uses (CentreScheduleBuilder), so it always matches what the Centre would see for
 // this candidate without needing its own synced copy of drag-adjusted block positions.
 function CandidateScheduleWidget({ candidate, candidates, examiners, settings, t }) {
-  const groups = useMemo(
-    () => (settings && candidates?.length ? buildDefaultHarmonogramGroups(candidates, examiners || [], settings) : []),
+  const schedule = useMemo(
+    () => (settings && candidates?.length ? buildDefaultHarmonogramSchedule(candidates, examiners || [], settings) : null),
     [candidates, examiners, settings],
   );
-  const myGroup = groups.find((group) => group.members.some((member) => member.id === candidate.id));
-  if (!myGroup) return null;
+  const myGroup = schedule?.groups.find((group) => group.members.some((member) => member.id === candidate.id));
+  if (!schedule || !myGroup) return null;
+  const myBlocks = [schedule.welcome, ...myGroup.blocks];
 
   return (
     <div className="mt-3 rounded-2xl border bg-white p-3">
       <h4 className="text-sm font-semibold">{t("candidate.mySchedule.title")}</h4>
       <p className="mt-1 text-xs text-slate-500">{t("candidate.mySchedule.helper")}</p>
       <div className="mt-2 space-y-1.5">
-        {myGroup.blocks.map((block) => (
+        {myBlocks.map((block) => (
           <div key={block.id} className="flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-xs" style={{ background: harmonogramActivityColor(block.activity) }}>
             <span className="font-semibold">{harmonogramTimeLabel(block.start)}</span>
             <span className="flex-1 px-2">{t(`harmonogram.activity.${block.activity}`)}</span>
