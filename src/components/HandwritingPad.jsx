@@ -38,7 +38,15 @@ const COLORS = [
 const SIZES = [
   { key: "thin", value: 3 },
   { key: "medium", value: 7 },
-  { key: "thick", value: 14 },
+  // Examiner feedback: medium vs. thick was barely distinguishable at 7 vs. 14 - thick is now a
+  // clearly heavier line rather than a slight bump.
+  { key: "thick", value: 24 },
+];
+
+const ERASER_SIZES = [
+  { key: "small", value: 10 },
+  { key: "medium", value: ERASER_RADIUS },
+  { key: "large", value: 32 },
 ];
 
 function distanceToSegment(p, a, b) {
@@ -121,6 +129,12 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   const [color, setColor] = useState(COLORS[0].value);
   const [size, setSize] = useState(SIZES[1].value);
   const [eraserMode, setEraserMode] = useState(false);
+  // Whole-line erasing (default, unchanged) removes an entire stroke the eraser touches. Pixel
+  // erasing punches an actual round hole, same as erasing a previously-saved sketch already did -
+  // switching to it bakes any in-progress vector strokes onto the raster background layer first
+  // (flattenStrokesToBackground) so they become pixel-erasable too, matching old ink.
+  const [eraserPixelMode, setEraserPixelMode] = useState(false);
+  const [eraserSize, setEraserSize] = useState(ERASER_SIZES[1].value);
   // Outdoor sketches (lockMaximized) always open at full size and stay there - no toggle to shrink
   // back down, per the examiner's request that "Zvětšit" (Maximize) is simply how the pad looks now.
   const [maximized, setMaximized] = useState(lockMaximized);
@@ -217,7 +231,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
 
   // Cut a round hole through the old ink, joining it to the previous point of the same gesture so a
   // fast drag erases a continuous band instead of a dotted trail.
-  function eraseBackgroundAt(point) {
+  function eraseBackgroundAt(point, radius) {
     const canvas = bgCanvasRef.current;
     if (!canvas || !hasBackground) return;
     const ctx = canvas.getContext("2d");
@@ -225,7 +239,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     ctx.globalCompositeOperation = "destination-out";
     const previous = lastErasePointRef.current;
     if (previous) {
-      ctx.lineWidth = ERASER_RADIUS * 2;
+      ctx.lineWidth = radius * 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.beginPath();
@@ -234,15 +248,50 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
       ctx.stroke();
     }
     ctx.beginPath();
-    ctx.arc(point[0], point[1], ERASER_RADIUS, 0, Math.PI * 2);
+    ctx.arc(point[0], point[1], radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
     lastErasePointRef.current = point;
   }
 
+  // Bakes the in-progress vector strokes onto the raster background layer so the pixel eraser can
+  // punch through them exactly like it already does for a previously-saved sketch. One-way: once
+  // flattened, those strokes are no longer individually selectable by the whole-line eraser or by
+  // Undo - same limit that already applies to ink from an earlier session.
+  async function flattenStrokesToBackground() {
+    if (!strokes.length) return;
+    const canvas = bgCanvasRef.current;
+    if (!canvas) return;
+    const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvasWidth} ${canvasHeight}">${strokes.map((stroke) => `<path d="${pathFor(stroke)}" fill="${stroke.color}" />`).join("")}</svg>`;
+    const svgUrl = URL.createObjectURL(new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" }));
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = svgUrl;
+      });
+      canvas.getContext("2d").drawImage(img, 0, 0, canvasWidth, canvasHeight);
+      setHasBackground(true);
+      setStrokes([]);
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  }
+
+  function selectEraserMode(pixelMode) {
+    if (pixelMode && !eraserPixelMode) flattenStrokesToBackground();
+    setEraserPixelMode(pixelMode);
+  }
+
   function eraseAt(point) {
+    if (eraserPixelMode) {
+      eraseBackgroundAt(point, eraserSize);
+      setDirty(true);
+      return;
+    }
     setStrokes((prev) => prev.filter((stroke) => !strokeHitTest(stroke, point, ERASER_RADIUS)));
-    eraseBackgroundAt(point);
+    eraseBackgroundAt(point, ERASER_RADIUS);
     setDirty(true);
   }
 
@@ -415,6 +464,34 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           <Button type="button" onClick={() => setEraserMode((v) => !v)} variant={eraserMode ? "default" : "outline"} className="rounded-2xl">
             <EraserIcon className="mr-1 h-4 w-4" />{tr(t, "handwriting.eraser", "Eraser")}
           </Button>
+          {eraserMode && (
+            <>
+              <div className="inline-flex items-center gap-1 rounded-full border p-1.5" role="group" aria-label={tr(t, "handwriting.eraserModeGroup", "Eraser mode")}>
+                <button type="button" onClick={() => selectEraserMode(false)} className={`rounded-full px-2.5 py-1 text-xs font-medium ${!eraserPixelMode ? "bg-slate-950 text-white" : "bg-white text-slate-700"}`} aria-pressed={!eraserPixelMode}>
+                  {tr(t, "handwriting.eraserMode.stroke", "Whole line")}
+                </button>
+                <button type="button" onClick={() => selectEraserMode(true)} className={`rounded-full px-2.5 py-1 text-xs font-medium ${eraserPixelMode ? "bg-slate-950 text-white" : "bg-white text-slate-700"}`} aria-pressed={eraserPixelMode}>
+                  {tr(t, "handwriting.eraserMode.pixel", "Pixel")}
+                </button>
+              </div>
+              {eraserPixelMode && (
+                <div className="inline-flex items-center gap-1 rounded-full border p-1.5" role="group" aria-label={tr(t, "handwriting.eraserSizeGroup", "Eraser size")}>
+                  {ERASER_SIZES.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setEraserSize(s.value)}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full ${eraserSize === s.value ? "bg-slate-950" : "bg-white"}`}
+                      aria-label={tr(t, `handwriting.eraserSize.${s.key}`, s.key)}
+                      aria-pressed={eraserSize === s.value}
+                    >
+                      <span className="rounded-full border border-current" style={{ width: Math.min(s.value, 20), height: Math.min(s.value, 20), color: eraserSize === s.value ? "#fff" : "#0f172a" }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
           <Button type="button" onClick={undo} variant="outline" className="rounded-2xl" disabled={!strokes.length}>
             <UndoIcon className="mr-1 h-4 w-4" />{tr(t, "handwriting.undo", "Undo")}
           </Button>
