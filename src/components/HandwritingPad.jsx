@@ -96,7 +96,7 @@ function wrapTemplateLines(text, maxChars) {
 // area without leaving stray ink from a resting hand. Strokes are kept as vector point data (not
 // baked into the canvas immediately) so color/thickness/eraser/undo all just add or remove entries
 // from `strokes` — the visible ink is only ever a re-render.
-export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, lockMaximized = false, templateText = "", t, Button, CloseIcon, EraserIcon, UndoIcon }) {
+export function HandwritingPad({ onClose, onSave, title, helperText, existingImage, tallCanvas = false, lockMaximized = false, templateText = "", preserveImageAspect = false, hideMaximizeToggle = false, t, Button, CloseIcon, EraserIcon, UndoIcon }) {
   const svgRef = useRef(null);
   const scrollRef = useRef(null);
   // Ink saved in an earlier session arrives as a flat PNG (`existingImage`), so it has no stroke
@@ -124,6 +124,12 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // Outdoor sketches (lockMaximized) always open at full size and stay there - no toggle to shrink
   // back down, per the examiner's request that "Zvětšit" (Maximize) is simply how the pad looks now.
   const [maximized, setMaximized] = useState(lockMaximized);
+  // When annotating a real photo (preserveImageAspect), the canvas is sized to match that photo's
+  // own pixel dimensions instead of the fixed 1600×900 default - otherwise drawImage below stretches
+  // whatever aspect ratio the photo actually has to fill the fixed box, visibly distorting it.
+  const [imageNaturalSize, setImageNaturalSize] = useState(null);
+  const canvasWidth = preserveImageAspect && imageNaturalSize ? imageNaturalSize.width : CANVAS_WIDTH;
+  const imageBaseHeight = preserveImageAspect && imageNaturalSize ? imageNaturalSize.height : CANVAS_HEIGHT;
 
   // `tallCanvas` doubles the vertical writing area (a genuinely taller viewBox, not just a
   // letterboxed box), giving ~2× the room the examiner asked for; the extra height overflows the
@@ -131,7 +137,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // Maximizing does NOT scale the drawing up (the examiner asked to keep pen/text size constant) —
   // it keeps the same width and only LENGTHENS the canvas (3× height), so full-screen just gives
   // more room to write, not a bigger, wider drawing.
-  const baseCanvasHeight = CANVAS_HEIGHT * (maximized ? 3 : tallCanvas ? 2 : 1);
+  const baseCanvasHeight = imageBaseHeight * (maximized ? 3 : tallCanvas ? 2 : 1);
 
   // Task 1: the item's helper texts (without the question text) are copied into the sketch as a
   // light-grey template the examiner annotates over. It is part of the drawing (not the stripped
@@ -142,7 +148,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // its own height, so text past the bottom edge was invisible, not just scrolled out of view. The
   // canvas grows to fit it exactly, then adds one full base height of actual writing room below it.
   const templateBlockHeight = templateLines.length ? TEMPLATE_MARGIN_TOP + templateLines.length * TEMPLATE_LINE_HEIGHT + TEMPLATE_LINE_HEIGHT : 0;
-  const canvasHeight = Math.max(baseCanvasHeight, templateBlockHeight + CANVAS_HEIGHT);
+  const canvasHeight = Math.max(baseCanvasHeight, templateBlockHeight + imageBaseHeight);
 
   function isDrawingPointer(event) {
     // Pen and mouse draw; touch (finger) does not. Some Bluetooth/EMR styluses on Android report
@@ -171,10 +177,10 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     const svg = svgRef.current;
     const rect = svg.getBoundingClientRect();
     // The <svg> keeps its default preserveAspectRatio ("xMidYMid meet"), so unless the
-    // element's on-screen box happens to have exactly the CANVAS_WIDTH:canvasHeight ratio,
+    // element's on-screen box happens to have exactly the canvasWidth:canvasHeight ratio,
     // the viewBox content is letterboxed (centered, with blank padding on two sides) inside
     // that box. Reproduce the same "meet" fit here so the ink lands under the stylus tip.
-    const viewBoxAspect = CANVAS_WIDTH / canvasHeight;
+    const viewBoxAspect = canvasWidth / canvasHeight;
     const rectAspect = rect.width / rect.height;
     let renderWidth = rect.width;
     let renderHeight = rect.height;
@@ -187,7 +193,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
       renderHeight = rect.width / viewBoxAspect;
       offsetY = (rect.height - renderHeight) / 2;
     }
-    const x = ((event.clientX - rect.left - offsetX) / renderWidth) * CANVAS_WIDTH;
+    const x = ((event.clientX - rect.left - offsetX) / renderWidth) * canvasWidth;
     const y = ((event.clientY - rect.top - offsetY) / renderHeight) * canvasHeight;
     const pressure = event.pressure > 0 ? event.pressure : 0.5;
     return [x, y, pressure];
@@ -201,12 +207,13 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     const img = new Image();
     img.onload = () => {
       if (cancelled || bgClearedRef.current) return;
-      canvas.getContext("2d").drawImage(img, 0, 0, CANVAS_WIDTH, canvasHeight);
+      if (preserveImageAspect) setImageNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+      canvas.getContext("2d").drawImage(img, 0, 0, canvasWidth, canvasHeight);
       setHasBackground(true);
     };
     img.src = existingImage;
     return () => { cancelled = true; };
-  }, [existingImage, canvasHeight]);
+  }, [existingImage, canvasHeight, canvasWidth, preserveImageAspect]);
 
   // Cut a round hole through the old ink, joining it to the previous point of the same gesture so a
   // fast drag erases a continuous band instead of a dotted trail.
@@ -308,7 +315,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
     setStrokes([]);
     bgClearedRef.current = true;
     const canvas = bgCanvasRef.current;
-    if (canvas) canvas.getContext("2d").clearRect(0, 0, CANVAS_WIDTH, canvasHeight);
+    if (canvas) canvas.getContext("2d").clearRect(0, 0, canvasWidth, canvasHeight);
     setHasBackground(false);
     setDirty(true);
   }
@@ -329,11 +336,11 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
         img.src = svgUrl;
       });
       const canvas = document.createElement("canvas");
-      canvas.width = CANVAS_WIDTH;
+      canvas.width = canvasWidth;
       canvas.height = canvasHeight;
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, CANVAS_WIDTH, canvasHeight);
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
       // Composite the *live* background layer, not `existingImage` — it carries whatever the
       // eraser has already removed, so erasures survive the save.
       if (bgCanvasRef.current) ctx.drawImage(bgCanvasRef.current, 0, 0);
@@ -351,7 +358,7 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
   // scale — and thus pen/text size — is unchanged); the taller `canvasHeight` above is what makes it
   // longer, overflowing into the scroll container.
   const svgSizeClass = (maximized || tallCanvas) ? "w-full" : "h-[420px]";
-  const svgSizeStyle = (maximized || tallCanvas) ? { aspectRatio: `${CANVAS_WIDTH} / ${canvasHeight}`, height: "auto" } : {};
+  const svgSizeStyle = (maximized || tallCanvas) ? { aspectRatio: `${canvasWidth} / ${canvasHeight}`, height: "auto" } : {};
 
   return (
     <div className={`fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 ${maximized ? "p-0" : "p-4"}`}>
@@ -363,9 +370,11 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
           </div>
           {!lockMaximized && (
             <div className="flex items-center gap-2">
-              <Button type="button" onClick={() => setMaximized((v) => !v)} variant="outline" className="rounded-2xl">
-                {maximized ? tr(t, "handwriting.restore", "Restore") : tr(t, "handwriting.maximize", "Maximize")}
-              </Button>
+              {!hideMaximizeToggle && (
+                <Button type="button" onClick={() => setMaximized((v) => !v)} variant="outline" className="rounded-2xl">
+                  {maximized ? tr(t, "handwriting.restore", "Restore") : tr(t, "handwriting.maximize", "Maximize")}
+                </Button>
+              )}
               <Button type="button" onClick={onClose} variant="outline" className="rounded-2xl">
                 <CloseIcon className="mr-1 h-4 w-4" />{tr(t, "common.close", "Close")}
               </Button>
@@ -422,14 +431,14 @@ export function HandwritingPad({ onClose, onSave, title, helperText, existingIma
         <div className={`relative shrink-0 overflow-hidden rounded-2xl border bg-white ${svgSizeClass}`} style={svgSizeStyle}>
         <canvas
           ref={bgCanvasRef}
-          width={CANVAS_WIDTH}
+          width={canvasWidth}
           height={canvasHeight}
           className="pointer-events-none absolute inset-0 h-full w-full"
           style={{ objectFit: "contain" }}
         />
         <svg
           ref={svgRef}
-          viewBox={`0 0 ${CANVAS_WIDTH} ${canvasHeight}`}
+          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}

@@ -13917,6 +13917,8 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             onClose={() => setAnnotatingPhoto(null)}
             onSave={saveAnnotatedPhoto}
             existingImage={annotatingPhoto.dataUrl}
+            preserveImageAspect
+            hideMaximizeToggle
             title={t("report.annotatePhoto.title")}
             helperText={t("report.annotatePhoto.helper")}
             t={t}
