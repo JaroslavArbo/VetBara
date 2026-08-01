@@ -6714,6 +6714,15 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
   // printed map, so what is framed on screen is what lands in the PDF.
   const [centreMapZoom, setCentreMapZoom] = useState(18);
   const changeCentreMapZoom = (delta) => setCentreMapZoom((current) => Math.max(13, Math.min(19, current + delta)));
+  // The map container's onPointerDown starts a pan drag (startCentreDrag) unconditionally on
+  // anything pressed inside it. Marker buttons already stop propagation on their own pointerDown,
+  // which is how they avoid also starting a pan - the zoom +/- buttons never got the same guard, so
+  // a press on them was captured as a pan gesture (preventDefault + setPointerCapture on the
+  // container) that frequently ate the click before React's onClick fired. Stops the same class of
+  // pointer events the map's own pan/drag handlers listen for, before they can reach the container.
+  function stopMapControlEvent(event) {
+    event.stopPropagation();
+  }
   // World-pixel pan offset at centreMapZoom, on top of the reference-coordinate center - a purely
   // visual "look elsewhere on the map" that never touches prep.referenceLatitude/Longitude or any
   // marker's recorded position. Reset whenever the reference point or zoom changes, so re-centering
@@ -7391,7 +7400,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                 {centreMapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="lazy" alt="" />)}
               </div>
               <div className="absolute left-3 top-3 z-20 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">N ▲</div>
-              <div className="absolute left-3 top-12 z-30 flex flex-col gap-1.5">
+              <div className="absolute left-3 top-12 z-30 flex flex-col gap-1.5" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
                 <button type="button" onClick={() => changeCentreMapZoom(1)} disabled={centreMapZoom >= 19} title={t("fieldPrep.zoomIn")} aria-label={t("fieldPrep.zoomIn")} className="flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm hover:bg-white disabled:opacity-40">+</button>
                 <button type="button" onClick={() => changeCentreMapZoom(-1)} disabled={centreMapZoom <= 13} title={t("fieldPrep.zoomOut")} aria-label={t("fieldPrep.zoomOut")} className="flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 text-lg font-bold text-slate-700 shadow-sm hover:bg-white disabled:opacity-40">−</button>
                 <div className="rounded-full bg-white/90 px-2 py-0.5 text-center text-[10px] font-semibold text-slate-500 shadow-sm">{centreMapZoom}</div>
