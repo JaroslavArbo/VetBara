@@ -12928,6 +12928,7 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
 // user gesture, so a blocked request is retried on the next interaction rather than given up on.
 function useExamFullscreen(active) {
   const [inFullscreen, setInFullscreen] = useState(() => (typeof document === "undefined" ? false : Boolean(document.fullscreenElement || document.webkitFullscreenElement)));
+  const exitTimerRef = useRef(null);
 
   function requestFullscreen() {
     const element = document.documentElement;
@@ -12937,7 +12938,22 @@ function useExamFullscreen(active) {
 
   useEffect(() => {
     if (!active || typeof document === "undefined") return undefined;
-    const sync = () => setInFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+    // A long/fast scroll on some mobile browsers (notably iOS Safari) briefly reports fullscreen
+    // as exited while the browser's own chrome reappears and settles back down a moment later -
+    // that must not flash the "you left fullscreen" banner mid-scroll. Re-entering is reflected
+    // immediately (no reason to delay good news); only a still-exited state after a short grace
+    // period counts as a real exit and shows the notice.
+    const sync = () => {
+      const nowFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      window.clearTimeout(exitTimerRef.current);
+      if (nowFullscreen) {
+        setInFullscreen(true);
+        return;
+      }
+      exitTimerRef.current = window.setTimeout(() => {
+        setInFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+      }, 1200);
+    };
     sync();
     requestFullscreen();
     const onFirstGesture = () => {
@@ -12953,6 +12969,7 @@ function useExamFullscreen(active) {
     document.addEventListener("fullscreenchange", sync);
     document.addEventListener("webkitfullscreenchange", sync);
     return () => {
+      window.clearTimeout(exitTimerRef.current);
       removeGesture();
       document.removeEventListener("fullscreenchange", sync);
       document.removeEventListener("webkitfullscreenchange", sync);
@@ -12964,8 +12981,10 @@ function useExamFullscreen(active) {
 
 function FullscreenExitNotice({ inFullscreen, onReturn, t }) {
   if (inFullscreen) return null;
+  // Sticky so it stays visible (and doesn't reflow the page under the reader) regardless of how
+  // far down the candidate has scrolled - a real exit should be easy to act on from anywhere.
   return (
-    <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
+    <div role="alert" className="sticky top-0 z-30 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm font-semibold text-amber-950 shadow-md">
       <span>{t("candidate.fullscreen.exited")}</span>
       <Button onClick={onReturn} className="rounded-2xl">{t("candidate.fullscreen.return")}</Button>
     </div>
