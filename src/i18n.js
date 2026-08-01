@@ -113,6 +113,9 @@ export const translations = {
     "qr.examinerDemo": "demo fallback Examiner QR",
     "qr.printAll": "Print all QR codes",
     "qr.printTest": "Print test",
+    "qr.delivery.print": "Printed materials",
+    "qr.delivery.tablet": "Tablet",
+    "qr.openOnTablet": "Open on this tablet",
   },
 
   cs: {
@@ -211,6 +214,9 @@ export const translations = {
     "qr.examinerDemo": "demo fallback Examiner QR",
     "qr.printAll": "Tisk všech QR kódů",
     "qr.printTest": "Tisk testu",
+    "qr.delivery.print": "Tištěné podklady",
+    "qr.delivery.tablet": "Tablet",
+    "qr.openOnTablet": "Otevřít na tabletu",
   },
 };
 
@@ -885,6 +891,9 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "centre.levels.title": "Levels",
+  "centre.wifi.title": "WiFi access",
+  "centre.wifi.ssid": "Network name",
+  "centre.wifi.password": "Password",
   "centre.variants.title": "Approved test variants",
   "centre.variants.helper": "Import CSV or JSON package with real tests. The selected variant is then shown to candidates.",
   "centre.variants.import": "Import tests",
@@ -895,6 +904,9 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "centre.levels.title": "Úrovně",
+  "centre.wifi.title": "WiFi přístup",
+  "centre.wifi.ssid": "Název sítě",
+  "centre.wifi.password": "Heslo",
   "centre.variants.title": "Schválené testové varianty",
   "centre.variants.helper": "Importujte CSV nebo JSON balíček se skutečnými testy. Vybraná varianta se poté zobrazí kandidátům.",
   "centre.variants.import": "Importovat testy",
@@ -1151,6 +1163,7 @@ Object.assign(translations.en, {
   "centre.review.legendTitle": "Legend",
   "centre.review.status.locked": "started",
   "centre.review.status.open": "opened by candidate",
+  "centre.review.status.openExaminer": "opened by examiner",
   "centre.review.status.closed": "closed by candidate",
   "centre.review.status.corrected": "corrected by examiner",
   "centre.review.identifyTitle": "Examiner identification",
@@ -1300,6 +1313,7 @@ Object.assign(translations.cs, {
   "centre.review.legendTitle": "Legenda",
   "centre.review.status.locked": "zahájeno",
   "centre.review.status.open": "otevřeno kandidátem",
+  "centre.review.status.openExaminer": "otevřeno zkoušejícím",
   "centre.review.status.closed": "uzavřeno kandidátem",
   "centre.review.status.corrected": "opraveno examinerem",
   "centre.review.identifyTitle": "Identifikace examinera",

@@ -9807,7 +9807,8 @@ function ScanGradingModal({ candidate, pages, questions, initialScores, onSave, 
   );
 }
 
-function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t }) {
+function CentreReviewCell({ status, sectionKey, onClick, locked = false, lockedTitle = "", t }) {
+  const labelKey = sectionKey === "outdoor" && status === "open" ? "centre.review.status.openExaminer" : `centre.review.status.${status}`;
   return (
     <button
       type="button"
@@ -9816,7 +9817,7 @@ function CentreReviewCell({ status, onClick, locked = false, lockedTitle = "", t
       title={locked ? lockedTitle : undefined}
       className={`w-full rounded-xl px-2 py-2 text-center text-xs font-bold ${CENTRE_REVIEW_STATUS_COLORS[status] || CENTRE_REVIEW_STATUS_COLORS.locked} ${locked ? "cursor-not-allowed opacity-50" : ""}`}
     >
-      {t(`centre.review.status.${status}`)}
+      {t(labelKey)}
     </button>
   );
 }
@@ -10198,10 +10199,18 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     const key = `${candidate.id}:${sectionKey}`;
     if (correctionStatus[key]) return "corrected";
     if (sectionKey === "outdoor") {
-      const scores = outdoor?.[candidate.id] || {};
-      const hasAny = Object.values(scores).some((value) => Number(value) > 0);
-      if (candidate.outdoor != null) return "closed";
-      return hasAny ? "open" : "locked";
+      // Driven by per-examiner outdoor_assessments rows (hydrateCentreResults), not the
+      // candidate's own local `.outdoor` field, which is only ever set on the same device that
+      // ran submitOutdoor() and never updated from the synced/backend data otherwise. Orange means
+      // an assigned examiner opened the field form and is mid-grading; red means every assigned
+      // examiner (primary, and secondary when one is assigned) has submitted.
+      const byExaminer = outdoorByExaminer?.[candidate.id] || {};
+      const openedExaminerIds = Object.keys(byExaminer);
+      const requiredExaminerIds = [assignments?.[candidate.id]?.primary, assignments?.[candidate.id]?.secondary].filter(Boolean);
+      const examinerIdsToCheck = requiredExaminerIds.length ? requiredExaminerIds : openedExaminerIds;
+      const allSubmitted = examinerIdsToCheck.length > 0 && examinerIdsToCheck.every((id) => byExaminer[id]?.submittedAt);
+      if (allSubmitted) return "closed";
+      return openedExaminerIds.length ? "open" : "locked";
     }
     const status = candidateStatus?.[candidate.id]?.[sectionKey];
     if (status === "closed") return "closed";
@@ -10380,6 +10389,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
                     <td key={section.key} className="py-2 pr-3">
                       <CentreReviewCell
                         status={cellStatus(candidate, section.key)}
+                        sectionKey={section.key}
                         locked={!cellReviewable(candidate, section.key)}
                         lockedTitle={t("centre.review.notSubmittedYet")}
                         t={t}
@@ -10786,6 +10796,46 @@ function CentreArchiveSection({ candidates, examiners, variants, testBank, testR
         </Button>
         {status && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{status}</div>}
         {error && <div className="mt-3 rounded-xl border border-rose-200 bg-white p-3 text-sm text-rose-900">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+const CENTRE_WIFI_ACCESS_KEY = "vetbara.centre.wifiAccess";
+
+// Just a place to jot down the venue's WiFi so it can be shown/read out to candidates and
+// examiners on request - not exam data, so it stays local to this device rather than round-
+// tripping through the centre setup save/load flow.
+function readCentreWifiAccess() {
+  if (typeof window === "undefined") return { ssid: "", password: "" };
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(scopedCacheKey(CENTRE_WIFI_ACCESS_KEY)) || "{}");
+    return { ssid: raw.ssid || "", password: raw.password || "" };
+  } catch {
+    return { ssid: "", password: "" };
+  }
+}
+
+function CentreWifiAccessBox({ t, centreExamId }) {
+  const [wifi, setWifi] = useState(() => readCentreWifiAccess());
+  // The exam scope that scopedCacheKey() reads is only set once the QR session resolves
+  // (applyResolvedAccess, asynchronous), which lands after this component's first render — so the
+  // lazy initializer above can read the cache under the wrong (unscoped) key on a fresh page load.
+  // Re-read once centreExamId shows up, since it's set in that same resolution step.
+  useEffect(() => {
+    setWifi(readCentreWifiAccess());
+  }, [centreExamId]);
+  function update(patch) {
+    const next = { ...wifi, ...patch };
+    setWifi(next);
+    if (typeof window !== "undefined") window.localStorage.setItem(scopedCacheKey(CENTRE_WIFI_ACCESS_KEY), JSON.stringify(next));
+  }
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <h3 className="mb-3 font-semibold">{t("centre.wifi.title")}</h3>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="text-sm font-medium">{t("centre.wifi.ssid")}<input value={wifi.ssid} onChange={(event) => update({ ssid: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+        <label className="text-sm font-medium">{t("centre.wifi.password")}<input value={wifi.password} onChange={(event) => update({ password: event.target.value })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
       </div>
     </div>
   );
@@ -11205,6 +11255,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                 </label>
               ))}
             </div>
+
+            <CentreWifiAccessBox t={t} centreExamId={centreExamId} />
 
           </div>
         </AdminDashboardSection>

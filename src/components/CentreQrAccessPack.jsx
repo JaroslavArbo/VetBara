@@ -13,7 +13,18 @@ function accessUrlFor(id, realUrlLookup) {
   return String(realUrlLookup(id) || "");
 }
 
+function DeliveryModeToggle({ mode, onChange, t }) {
+  return (
+    <div className="inline-flex rounded-2xl border bg-slate-50 p-0.5 text-xs font-semibold">
+      <button type="button" onClick={() => onChange("print")} className={`rounded-2xl px-3 py-1 ${mode === "print" ? "bg-white shadow-sm" : "text-slate-500"}`}>{tr(t, "qr.delivery.print", "Tištěné podklady")}</button>
+      <button type="button" onClick={() => onChange("tablet")} className={`rounded-2xl px-3 py-1 ${mode === "tablet" ? "bg-white shadow-sm" : "text-slate-500"}`}>{tr(t, "qr.delivery.tablet", "Tablet")}</button>
+    </div>
+  );
+}
+
 export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, examinerQrUrl, candidateQrFor, examinerQrFor, copiedQr, copyQrLink, QrCodeIcon, SectionTitle, StatusPill, Button, RealQr, t, onPrintAllQr, onPrintAllTests, onPrintCandidateTest }) {
+  const [candidateMode, setCandidateMode] = React.useState("print");
+  const [examinerMode, setExaminerMode] = React.useState("print");
   return (
     <div className="mt-4 rounded-2xl border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -36,20 +47,28 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
         </div>
       </div>
       {copiedQr && <div className="mb-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{copiedQr}</div>}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-6">
         <div>
-          <h3 className="mb-3 font-semibold">{tr(t, "qr.candidateLinks", "Candidate QR links")}</h3>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">{tr(t, "qr.candidateLinks", "Candidate QR links")}</h3>
+            <DeliveryModeToggle mode={candidateMode} onChange={setCandidateMode} t={t} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {candidates.map((c) => {
               const accessUrl = accessUrlFor(c.id, candidateQrUrl);
               return (
                 <div key={c.id} className="rounded-2xl border bg-white p-3">
                   <div className="flex gap-3">
-                    {accessUrl ? <RealQr value={accessUrl} size={96} /> : <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-amber-400 bg-amber-50 p-1 text-center text-[10px] font-semibold text-amber-800">{tr(t, "qr.missingShort", "No link yet")}</div>}
+                    {candidateMode === "print"
+                      ? (accessUrl ? <RealQr value={accessUrl} size={96} /> : <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-amber-400 bg-amber-50 p-1 text-center text-[10px] font-semibold text-amber-800">{tr(t, "qr.missingShort", "No link yet")}</div>)
+                      : null}
                     <div className="min-w-0">
                       <div className="font-semibold">{c.id} / {c.name}</div>
                       <div className="text-sm text-slate-600">{c.level}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
+                        {candidateMode === "tablet"
+                          ? <Button onClick={() => accessUrl && window.open(accessUrl, "_blank", "noopener")} disabled={!accessUrl} className="rounded-2xl">{tr(t, "qr.openOnTablet", "Otevřít na tabletu")}</Button>
+                          : null}
                         <Button onClick={() => copyQrLink(c.id, accessUrl)} disabled={!accessUrl} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
                         {onPrintCandidateTest && <Button onClick={() => onPrintCandidateTest(c)} variant="outline" className="rounded-2xl">{tr(t, "qr.printTest", "Tisk testu")}</Button>}
                       </div>
@@ -64,18 +83,26 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
           </div>
         </div>
         <div>
-          <h3 className="mb-3 font-semibold">{tr(t, "qr.examinerLinks", "Examiner QR links")}</h3>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">{tr(t, "qr.examinerLinks", "Examiner QR links")}</h3>
+            <DeliveryModeToggle mode={examinerMode} onChange={setExaminerMode} t={t} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {examiners.map((ex) => {
               const accessUrl = accessUrlFor(ex.id, examinerQrUrl);
               return (
                 <div key={ex.id} className="rounded-2xl border bg-white p-3">
                   <div className="flex gap-3">
-                    {accessUrl ? <RealQr value={accessUrl} size={96} /> : <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-amber-400 bg-amber-50 p-1 text-center text-[10px] font-semibold text-amber-800">{tr(t, "qr.missingShort", "No link yet")}</div>}
+                    {examinerMode === "print"
+                      ? (accessUrl ? <RealQr value={accessUrl} size={96} /> : <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl border border-dashed border-amber-400 bg-amber-50 p-1 text-center text-[10px] font-semibold text-amber-800">{tr(t, "qr.missingShort", "No link yet")}</div>)
+                      : null}
                     <div className="min-w-0">
                       <div className="font-semibold">{ex.id} / {ex.name}</div>
                       <div className="text-sm text-slate-600">{ex.registrationId}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
+                        {examinerMode === "tablet"
+                          ? <Button onClick={() => accessUrl && window.open(accessUrl, "_blank", "noopener")} disabled={!accessUrl} className="rounded-2xl">{tr(t, "qr.openOnTablet", "Otevřít na tabletu")}</Button>
+                          : null}
                         <Button onClick={() => copyQrLink(ex.id, accessUrl)} disabled={!accessUrl} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
                       </div>
                       {accessUrl
