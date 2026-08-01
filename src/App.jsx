@@ -15286,6 +15286,14 @@ function PauseIcon({ className }) { return <IconBase className={className}><rect
 function PlayTriangleIcon({ className }) { return <IconBase className={className}><path d="M7 5v14l11-7z" /></IconBase>; }
 
 // Live microphone level bars, polled on rAF while actively recording (frozen on pause).
+// Bars only need to look "live", not track every audio frame - the recording itself is
+// unaffected either way (this reads a side-tap analyser node, see OutdoorVoiceRecorder). A plain
+// requestAnimationFrame loop calls getVoiceLevels() (an analyser read + rebuilding 28 bins) and
+// re-renders 28 DOM nodes on every display refresh, 60-120 times a second depending on the
+// tablet - for the outdoor exam's full ~2h recording that adds up to a real, avoidable chunk of
+// battery drain for a decorative meter. Still scheduled via rAF (so it naturally pauses with a
+// backgrounded tab), just skipping the actual read/re-render on most frames.
+const VOICE_HISTOGRAM_INTERVAL_MS = 90;
 function VoiceHistogram({ getVoiceLevels, active }) {
   const [bins, setBins] = useState([]);
   const getLevelsRef = useRef(getVoiceLevels);
@@ -15293,7 +15301,14 @@ function VoiceHistogram({ getVoiceLevels, active }) {
   useEffect(() => {
     if (!active) return undefined;
     let raf = 0;
-    const tick = () => { setBins(getLevelsRef.current?.() ?? []); raf = requestAnimationFrame(tick); };
+    let lastUpdate = 0;
+    const tick = (timestamp) => {
+      if (timestamp - lastUpdate >= VOICE_HISTOGRAM_INTERVAL_MS) {
+        lastUpdate = timestamp;
+        setBins(getLevelsRef.current?.() ?? []);
+      }
+      raf = requestAnimationFrame(tick);
+    };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [active]);

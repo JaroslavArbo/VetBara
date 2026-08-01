@@ -32,6 +32,7 @@ export class OutdoorVoiceRecorder {
     this.context = null;
     this.recorder = null;
     this.analyser = null;
+    this._freqData = null;
     this.chunks = [];
     this.mimeType = "";
     this.startedAt = 0;
@@ -125,10 +126,15 @@ export class OutdoorVoiceRecorder {
     return false;
   }
 
-  // 0..1 bar heights for a live histogram; empty until start(). Cheap enough to poll on rAF.
+  // 0..1 bar heights for a live histogram; empty until start(). Now polled on a throttled
+  // interval rather than every rAF frame (see VoiceHistogram) - the scratch buffer is still
+  // reused rather than reallocated per call, since the recording can run for up to ~2h.
   getFrequencyBins(binCount = 28) {
     if (!this.analyser) return [];
-    const data = new Uint8Array(this.analyser.frequencyBinCount);
+    if (!this._freqData || this._freqData.length !== this.analyser.frequencyBinCount) {
+      this._freqData = new Uint8Array(this.analyser.frequencyBinCount);
+    }
+    const data = this._freqData;
     this.analyser.getByteFrequencyData(data);
     const bins = [];
     const step = Math.max(1, Math.floor(data.length / binCount));
