@@ -523,12 +523,10 @@ const REPORT_MARKING_TOTAL = REPORT_MARKING_SECTIONS.reduce((sum, section) => su
 const CANDIDATE_SECTIONS = {
   Practicing: [
     { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
-    { key: "field-trees", titleKey: "candidateSections.trees.title", descriptionKey: "candidateSections.trees.description" },
     { key: "test", titleKey: "candidateSections.writtenTest.title", descriptionKey: "candidateSections.writtenTest.practicingDescription" },
   ],
   Consulting: [
     { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
-    { key: "field-trees", titleKey: "candidateSections.trees.title", descriptionKey: "candidateSections.trees.description" },
     { key: "test", titleKey: "candidateSections.writtenTest.title", descriptionKey: "candidateSections.writtenTest.consultingDescription" },
     { key: "report", titleKey: "candidateSections.report.title", descriptionKey: "candidateSections.report.description" },
   ],
@@ -12156,30 +12154,6 @@ function normalizeCandidateTreePreparationDraft(value) {
   return { notesByTree: {}, sketchesByTree: {} };
 }
 
-function candidateTreePreparationNote(preparationDraft, tree) {
-  const notes = normalizeCandidateTreePreparationDraft(preparationDraft).notesByTree;
-  const key = fieldTreeKey(tree);
-  const code = String(tree?.code || "").toUpperCase();
-  return notes[key] ?? notes[code] ?? "";
-}
-
-function candidateTreePreparationSketch(preparationDraft, tree) {
-  const sketches = normalizeCandidateTreePreparationDraft(preparationDraft).sketchesByTree;
-  const key = fieldTreeKey(tree);
-  const code = String(tree?.code || "").toUpperCase();
-  return sketches[key] ?? sketches[code] ?? "";
-}
-
-function candidateTreeCharacteristics(tree) {
-  const data = tree?.managementData || tree?.practicingTreeAData || tree?.practicingData || tree?.treeData || tree || {};
-  const textValue = (...keys) => keys.map((key) => data?.[key] ?? tree?.[key]).find((value) => value !== undefined && value !== null && String(value).trim() !== "") || "-";
-  return [
-    ["Taxon", textValue("taxon", "species", "treeSpecies")],
-    ["Height", textValue("height", "heightM", "treeHeight")],
-    ["Stem diameter", textValue("stemDiameter", "stemDiameterCm", "diameter", "dbh")],
-    ["Crown spread", textValue("crownSpread", "crownSpreadM", "crownProjection")],
-  ];
-}
 
 // The Centre saves its field preparation under its OWN subject id (fieldPrepExamId = centreExamId,
 // e.g. "Casalgrande_Italy-2026-07-31"), but a candidate/examiner session's resolved scope is the
@@ -12283,7 +12257,6 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
   const [candidateFieldPackage, setCandidateFieldPackage] = useState(() => loggedCandidate ? readJsonLocalStorage(candidateFieldPackageStorageKey(loggedCandidate), null) : null);
   const [candidateFieldStatus, setCandidateFieldStatus] = useState("");
   const [candidateFieldError, setCandidateFieldError] = useState("");
-  const preparationSyncTimersRef = useRef({});
   const [candidateTreeAPreparation, setCandidateTreeAPreparation] = useState(() => loggedCandidate ? normalizeCandidateTreePreparationDraft(readJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), null)) : normalizeCandidateTreePreparationDraft(null));
   const canShowOfflinePackage = Boolean(
     loggedCandidate &&
@@ -12346,54 +12319,6 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
       });
     return () => { cancelled = true; };
   }, [loggedCandidate?.id, loggedCandidate?.level, confirmed]);
-
-  // The preparation used to live only in this browser's localStorage, so the Centre never saw it
-  // and clearing the browser lost it. Both writers now also emit a sync event; the note is debounced
-  // because it fires on every keystroke.
-  function syncCandidatePreparation(key, { note, sketch }) {
-    if (!loggedCandidate) return;
-    const updatedAt = new Date().toISOString();
-    sendSyncEvent({
-      clientEventId: localEventId(`candidate-preparation-saved-${loggedCandidate.id}-${key}`),
-      type: "candidate_preparation.saved",
-      entityType: "candidate_preparation",
-      entityId: `${loggedCandidate.id}:preparation:${key}`,
-      candidateId: loggedCandidate.id,
-      payload: { candidateId: loggedCandidate.id, sectionKey: "preparation", treeKey: key, note, sketch, updatedAt },
-      createdAt: updatedAt,
-    });
-  }
-
-  function updateCandidateTreePreparationNote(tree, value) {
-    if (!tree) return;
-    const key = fieldTreeKey(tree);
-    setCandidateTreeAPreparation((previous) => {
-      const normalized = normalizeCandidateTreePreparationDraft(previous);
-      const next = { ...normalized, notesByTree: { ...(normalized.notesByTree || {}), [key]: value } };
-      if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
-      window.clearTimeout(preparationSyncTimersRef.current[key]);
-      preparationSyncTimersRef.current[key] = window.setTimeout(() => {
-        syncCandidatePreparation(key, { note: value, sketch: next.sketchesByTree?.[key] ?? "" });
-      }, 1500);
-      return next;
-    });
-  }
-
-  async function updateCandidateTreePreparationSketch(tree, rawDataUrl) {
-    if (!tree) return;
-    const key = fieldTreeKey(tree);
-    const dataUrl = rawDataUrl ? await compressImageToDataUrl(rawDataUrl, { maxBytes: 150_000, maxDim: 1400 }) : rawDataUrl;
-    setCandidateTreeAPreparation((previous) => {
-      const normalized = normalizeCandidateTreePreparationDraft(previous);
-      const sketches = { ...(normalized.sketchesByTree || {}) };
-      if (dataUrl) sketches[key] = dataUrl; else delete sketches[key];
-      const next = { ...normalized, sketchesByTree: sketches };
-      if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
-      // A sketch is one deliberate save, so it goes straight out rather than being debounced.
-      syncCandidatePreparation(key, { note: next.notesByTree?.[key] ?? "", sketch: dataUrl || "" });
-      return next;
-    });
-  }
 
   function buildFullOfflineCandidatePackage() {
     if (!loggedCandidate) return null;
@@ -12462,11 +12387,11 @@ function CandidateView({ candidates, loggedCandidate, confirmed, loginCandidate,
   }
 
 
-  if (loggedCandidate && (activeSection === "field-orientation" || activeSection === "field-trees")) {
-    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} updatePreparationSketch={updateCandidateTreePreparationSketch} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} t={t} />;
+  if (loggedCandidate && activeSection === "field-orientation") {
+    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} setActiveSection={setActiveSection} t={t} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} className={`rounded-2xl ${candidateSendState === "done" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-white text-slate-950 hover:bg-slate-50"} border`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},
@@ -12620,16 +12545,13 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
   );
 }
 
-function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, preparationDraft, updatePreparationNote, updatePreparationSketch, setActiveSection, mode = "orientation", t }) {
-  const [mapLayer, setMapLayer] = useState(mode === "trees" ? "esri" : "osm");
+function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, setActiveSection, t }) {
+  const [mapLayer, setMapLayer] = useState("osm");
   const [gpsPosition, setGpsPosition] = useState(null);
-  const [sketchOpen, setSketchOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState("");
-  const [selectedTreeCode, setSelectedTreeCode] = useState("A");
   const level = candidateLevel(candidate);
   const trees = fieldPackage ? normalizeFieldTabletTrees(fieldPackage, level).filter((tree) => normalizeFieldLevel(tree.level) === level) : [];
   const orderedTrees = FIELD_TREE_CODES.map((code) => trees.find((tree) => String(tree.code || "").toUpperCase() === code)).filter(Boolean);
-  const selectedTree = orderedTrees.find((tree) => String(tree.code || "").toUpperCase() === selectedTreeCode) || orderedTrees[0] || null;
   const center = fieldPackage?.examCenter || {};
   const centerPoint = { lat: Number(center.latitude ?? center.lat), lng: Number(center.longitude ?? center.lng) };
   const defaultCenter = {
@@ -12640,8 +12562,6 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
     ...(Number.isFinite(centerPoint.lat) && Number.isFinite(centerPoint.lng) ? [{ key: "center", kind: "center", label: "Exam centre", latitude: centerPoint.lat, longitude: centerPoint.lng }] : []),
     ...orderedTrees.map((tree) => ({ key: fieldTreeKey(tree), kind: "tree", label: fieldTreeLabel(tree.level, tree.code), latitude: tree.latitude, longitude: tree.longitude })),
   ];
-  const selectedTreeCenter = selectedTree && Number.isFinite(Number(selectedTree.latitude)) && Number.isFinite(Number(selectedTree.longitude)) ? { lat: Number(selectedTree.latitude), lng: Number(selectedTree.longitude) } : defaultCenter;
-  const selectedTreeMarkers = selectedTree ? [{ key: fieldTreeKey(selectedTree), kind: "tree", label: fieldTreeLabel(selectedTree.level, selectedTree.code), latitude: selectedTree.latitude, longitude: selectedTree.longitude }] : [];
 
   function locate() {
     setGpsStatus("");
@@ -12663,7 +12583,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2 border-b bg-white/95 p-3 shadow-sm">
       <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
-      <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? t("candidateSections.trees.title") : t("candidateSections.orientation.title")}</div>
+      <div className="ml-1 mr-3 text-lg font-bold">{t("candidateSections.orientation.title")}</div>
       <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} className="rounded-2xl border bg-white px-3 py-2 text-sm font-medium text-slate-700">
         <option value="cuzk">{t("map.layer.cuzk")}</option>
         <option value="esri">{t("map.layer.esri")}</option>
@@ -12684,84 +12604,11 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
     );
   }
 
-  if (mode === "orientation") {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-white">
-        {toolbar}
-        <div className="min-h-0 flex-1">
-          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {toolbar}
-      <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
-        <div className="grid h-full gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="h-64 border-b bg-slate-100 lg:h-full lg:border-b-0 lg:border-r">
-            <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={17} maxZoom={21} title={t("candidateField.treePreparation")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
-          </div>
-          <div className="bg-white p-4 lg:min-h-0 lg:overflow-y-auto">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {FIELD_TREE_CODES.map((code) => {
-              const available = orderedTrees.some((tree) => String(tree.code || "").toUpperCase() === code);
-              return <Button key={code} onClick={() => setSelectedTreeCode(code)} disabled={!available} variant={selectedTreeCode === code ? "default" : "outline"} className="rounded-2xl">{code}</Button>;
-            })}
-          </div>
-          {selectedTree ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("candidateField.selectedTree")}</div>
-                <h3 className="text-2xl font-bold">{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTree.name || `${t("fieldPrep.tree")} ${selectedTree.code}`}</h3>
-                <div className="mt-1 font-mono text-xs text-slate-500">{formatFieldCoordinates({ lat: selectedTree.latitude, lng: selectedTree.longitude })}</div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {candidateTreeCharacteristics(selectedTree).map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border bg-slate-50 p-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-                    <div className="mt-1 whitespace-pre-wrap text-sm font-medium text-slate-900">{String(value || "-")}</div>
-                  </div>
-                ))}
-              </div>
-              <label className="block">
-                <span className="text-sm font-semibold">{t("candidateField.candidateNotes")}</span>
-                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={6} placeholder={t("candidateField.candidateNotesPlaceholder")} className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
-              </label>
-              {updatePreparationSketch && (() => {
-                const sketch = candidateTreePreparationSketch(preparationDraft, selectedTree);
-                return (
-                  <div>
-                    <span className="text-sm font-semibold">{t("candidateField.sketch")}</span>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {sketch && <img src={sketch} alt="" className="h-20 w-32 rounded-lg border object-cover" />}
-                      <Button type="button" onClick={() => setSketchOpen(true)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{sketch ? t("candidateField.editSketch") : t("candidateField.addSketch")}</Button>
-                      {sketch && <Button type="button" onClick={() => updatePreparationSketch(selectedTree, "")} variant="outline" className="rounded-2xl">{t("candidateField.removeSketch")}</Button>}
-                    </div>
-                    {sketchOpen && (
-                      <HandwritingPad
-                        onClose={() => setSketchOpen(false)}
-                        onSave={(dataUrl) => { updatePreparationSketch(selectedTree, dataUrl); setSketchOpen(false); }}
-                        existingImage={sketch || null}
-                        title={`${t("candidateField.sketch")} · ${fieldTreeLabel(selectedTree.level, selectedTree.code)}`}
-                        helperText={t("candidateField.sketchHelper")}
-                        t={t}
-                        Button={Button}
-                        CloseIcon={X}
-                        EraserIcon={Eraser}
-                        UndoIcon={Undo}
-                      />
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("candidateField.noTreesAvailable")}</div>
-          )}
-          </div>
-        </div>
+      <div className="min-h-0 flex-1">
+        <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
       </div>
     </div>
   );
