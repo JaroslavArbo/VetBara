@@ -343,6 +343,8 @@ Object.assign(translations.en, {
   "candidate.identity.examLevel": "Exam level",
   "candidate.identity.warning": "Confirm identity before opening exam sections.",
   "candidate.identity.confirmed": "Identity confirmed",
+  "candidate.identity.endExam": "End exam",
+  "candidate.identity.endExamConfirm": "End this candidate's session on this device? You'll need to scan a QR code to sign in again.",
 
   "candidate.landing.title": "Candidate landing page",
   "candidate.landing.helper": "Review which sections are ready before opening work for this exam attempt.",
@@ -465,6 +467,8 @@ Object.assign(translations.cs, {
   "candidate.identity.examLevel": "Úroveň zkoušky",
   "candidate.identity.warning": "Před otevřením částí zkoušky potvrďte identitu.",
   "candidate.identity.confirmed": "Identita potvrzena",
+  "candidate.identity.endExam": "Ukončit zkoušku",
+  "candidate.identity.endExamConfirm": "Ukončit session tohoto kandidáta na tomto zařízení? Pro opětovné přihlášení bude potřeba naskenovat QR kód.",
 
   "candidate.landing.title": "Úvodní stránka kandidáta",
   "candidate.landing.helper": "Zkontrolujte, které části jsou připravené, než otevřete práci pro tento pokus.",
@@ -570,6 +574,8 @@ Object.assign(translations.en, {
   "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registration ID",
   "examiner.identity.confirmed": "Identity confirmed",
+  "examiner.identity.endExam": "End exam",
+  "examiner.identity.endExamConfirm": "End this examiner's session on this device? You'll need to scan a QR code to sign in again.",
   "examiner.identity.confirm": "Confirm identity",
 
   "examiner.readiness.title": "Examiner readiness",
@@ -678,6 +684,8 @@ Object.assign(translations.cs, {
   "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registrační ID",
   "examiner.identity.confirmed": "Identita potvrzena",
+  "examiner.identity.endExam": "Ukončit zkoušku",
+  "examiner.identity.endExamConfirm": "Ukončit session tohoto zkoušejícího na tomto zařízení? Pro opětovné přihlášení bude potřeba naskenovat QR kód.",
   "examiner.identity.confirm": "Potvrdit identitu",
 
   "examiner.readiness.title": "Připravenost zkoušejícího",
@@ -1427,6 +1435,7 @@ Object.assign(translations.en, {
   "qrScanner.cameraUnavailable": "The camera is not available in this browser. Use manual entry below.",
   "qrScanner.cameraError": "The camera could not be opened (permission denied or unavailable). Use manual entry below.",
   "qrScanner.scan": "Scan {role} QR",
+  "qrScanner.reentryTitle": "Scan new entry permission",
 
   "admin.openExam.title": "Admin / Open exam event",
   "admin.openExam.subtitle": "Admin sets centre, date, place and exam language, then sends centre access QR.",
@@ -1532,6 +1541,7 @@ Object.assign(translations.cs, {
   "qrScanner.cameraUnavailable": "Kamera není v tomto prohlížeči dostupná. Použijte ruční vložení níže.",
   "qrScanner.cameraError": "Kameru se nepodařilo otevřít (odepřený přístup nebo nedostupná). Použijte ruční vložení níže.",
   "qrScanner.scan": "Skenovat {role} QR",
+  "qrScanner.reentryTitle": "Nascanovat nové oprávnění ke vstupu do systému",
 
   "admin.openExam.title": "Admin / otevření zkušební události",
   "admin.openExam.subtitle": "Admin nastaví centrum, datum, místo a jazyk zkoušky a potom odešle Centre access QR.",
