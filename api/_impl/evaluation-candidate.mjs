@@ -102,6 +102,20 @@ async function sessionExamEventId(session) {
   } catch { /* best-effort */ }
   return "";
 }
+// The Centre's own "current" exam event can drift from the event id a specific candidate's own
+// sessions actually wrote under (e.g. the Centre re-ran setup / imported a new roster after the
+// candidate had already started their report) - the candidate's own roster row still knows which
+// event their own writes are scoped to. Used only as a Centre-role fallback below, after every
+// candidate-authored read under the Centre's own scope comes back completely empty.
+async function candidateOwnExamEventId(candidateId) {
+  try {
+    if (!envReady()) return "";
+    const rows = await supabase(`candidates?id=eq.${encodeURIComponent(candidateId)}&select=exam_event_id,updated_at&order=updated_at.desc&limit=1`);
+    return rows[0]?.exam_event_id || "";
+  } catch { /* best-effort */ }
+  return "";
+}
+
 async function scopedRead(buildPath, examEventId) {
   if (eventScopingAvailable && examEventId !== undefined) {
     try {
@@ -344,7 +358,7 @@ export default async function handler(request, response) {
     if (!allowed) return sendJson(response, 403, { error: "Candidate is outside this session scope" });
 
     const examEventId = await sessionExamEventId(session);
-    const [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents, integrityEventRows, preparations] = await Promise.all([
+    let [sections, testResponses, outdoorAssessments, outdoorScores, reportEvents, examinerScoreEvents, integrityEventRows, preparations] = await Promise.all([
       readRows("candidate_sections", candidateId, examEventId),
       readRows("test_responses", candidateId, examEventId),
       readRows("outdoor_assessments", candidateId, examEventId),
@@ -356,6 +370,25 @@ export default async function handler(request, response) {
       // missing preparation must not take the whole evaluation read model down with it.
       readRows("candidate_preparations", candidateId, examEventId).catch(() => []),
     ]);
+
+    // All four candidate-authored reads came back empty under the Centre's own scope - retry once
+    // under the candidate's OWN resolved exam event before concluding they really have no data.
+    // Examiner-authored reads (outdoor scores, examiner_score events) are scoped by the examiner's
+    // session instead and are not affected by this, so they are not retried.
+    if (session.role === "Centre" && !sections.length && !testResponses.length && !reportEvents.length && !preparations.length) {
+      const candidateScope = await candidateOwnExamEventId(candidateId);
+      if (candidateScope && candidateScope !== examEventId) {
+        [sections, testResponses, reportEvents, preparations] = await Promise.all([
+          readRows("candidate_sections", candidateId, candidateScope),
+          readRows("test_responses", candidateId, candidateScope),
+          readReportEvents(candidateId, candidateScope),
+          readRows("candidate_preparations", candidateId, candidateScope).catch(() => []),
+        ]);
+        if (sections.length || testResponses.length || reportEvents.length || preparations.length) {
+          console.warn("Candidate evaluation recovered via own exam-event scope (Centre scope was stale/mismatched)", { candidateId, centreScope: examEventId, candidateScope });
+        }
+      }
+    }
 
     const reportDraft = buildReportDraft(reportEvents);
     const reportSummary = buildReportSummary(reportDraft, reportEvents, sections);

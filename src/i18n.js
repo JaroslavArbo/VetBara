@@ -2826,6 +2826,8 @@ Object.assign(translations.cs, {
 });
 
 Object.assign(translations.en, {
+  "qr.consultingField.label": "Mobile field data collection (report)",
+  "qr.consultingField.open": "Open",
   "consultingField.title": "Field data collection",
   "consultingField.bannerText": "Looks like you're on a phone. Switch to the simplified screen for taking report photos and recordings?",
   "consultingField.bannerSwitch": "Switch to mobile field data collection",
@@ -2848,6 +2850,8 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.cs, {
+  "qr.consultingField.label": "Mobilní sběr dat (report)",
+  "qr.consultingField.open": "Otevřít",
   "consultingField.title": "Sběr terénních dat",
   "consultingField.bannerText": "Vypadá to, že jste na mobilu. Přepnout na zjednodušenou obrazovku pro focení a nahrávání pro report?",
   "consultingField.bannerSwitch": "Přepnout na mobilní sběr dat",

@@ -92,14 +92,11 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
                     </div>
                   </div>
                   {mobileFieldUrl && (
-                    <div className="mt-3 flex items-center gap-3 border-t pt-3">
-                      <RealQr value={mobileFieldUrl} size={64} />
-                      <div className="min-w-0">
-                        <div className="mb-1 text-xs font-semibold text-slate-600">{tr(t, "qr.consultingField.label", "Mobilní sběr dat (report)")}</div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button onClick={() => window.open(mobileFieldUrl, "_blank", "noopener")} variant="outline" className="rounded-2xl">{tr(t, "qr.consultingField.open", "Otevřít")}</Button>
-                          <Button onClick={() => copyQrLink(`${c.id}-field`, mobileFieldUrl)} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
-                        </div>
+                    <div className="mt-3 border-t pt-3">
+                      <div className="mb-1 text-xs font-semibold text-slate-600">{tr(t, "qr.consultingField.label", "Mobilní sběr dat (report)")}</div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => window.open(mobileFieldUrl, "_blank", "noopener")} variant="outline" className="rounded-2xl">{tr(t, "qr.consultingField.open", "Otevřít")}</Button>
+                        <Button onClick={() => copyQrLink(`${c.id}-field`, mobileFieldUrl)} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
                       </div>
                     </div>
                   )}
