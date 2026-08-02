@@ -7,6 +7,11 @@ const DEMO_TOKENS = {
 };
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+// From the 2nd device onward using the SAME QR link at the same time is worth a flag in the audit
+// trail (a QR is meant for one person); the 4th is refused outright. Deliberately generous - this
+// exists to catch an accidentally-shared link, not to make life hard for someone using both their
+// phone and the exam tablet.
+const MAX_CONCURRENT_DEVICES = 3;
 
 function sendJson(response, status, body) {
   response.status(status).json(body);
@@ -59,24 +64,105 @@ async function supabase(path, options = {}) {
   return response.json();
 }
 
-async function createSession(access) {
+async function createSession(access, deviceId) {
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
 
   if (!envReady()) return { sessionToken: createDemoSessionToken(access, expiresAt), expiresAt };
 
   const sessionToken = crypto.randomBytes(32).toString("base64url");
-  await supabase("app_sessions", {
-    method: "POST",
-    body: JSON.stringify({
-      token_hash: hash(sessionToken),
-      role: access.role,
-      subject_id: access.subjectId,
-      qr_token_id: access.qrTokenId ?? null,
-      expires_at: expiresAt,
-    }),
-  });
+  const row = {
+    token_hash: hash(sessionToken),
+    role: access.role,
+    subject_id: access.subjectId,
+    qr_token_id: access.qrTokenId ?? null,
+    expires_at: expiresAt,
+  };
+  // device_id is a new (nullable) column - tolerate it not existing yet so this never blocks a
+  // real login just because the migration hasn't been applied.
+  try {
+    await supabase("app_sessions", { method: "POST", body: JSON.stringify({ ...row, device_id: deviceId ?? null }) });
+  } catch {
+    await supabase("app_sessions", { method: "POST", body: JSON.stringify(row) });
+  }
 
   return { sessionToken, expiresAt };
+}
+
+// Device-bound QR access for Candidate/Examiner links (see the 20260802 migration). Every branch
+// below is wrapped so that ANY failure - a missing table/column because the migration has not run,
+// an unexpected error, a malformed row - resolves to { outcome: "allow" }. A bug in this brand-new
+// gate must never be able to lock a real candidate or examiner out of their own exam; it may only
+// ever fail OPEN, never closed.
+async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin }) {
+  if (!qrTokenId || !deviceId || (role !== "Candidate" && role !== "Examiner")) {
+    return { outcome: "allow" };
+  }
+  try {
+    const tokenRows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}&select=pin_hash&limit=1`);
+    const pinHash = tokenRows[0]?.pin_hash ?? null;
+
+    const deviceRows = await supabase(`qr_token_devices?qr_token_id=eq.${encodeURIComponent(qrTokenId)}&device_id=eq.${encodeURIComponent(deviceId)}&select=id&limit=1`);
+    if (deviceRows.length) {
+      const now = new Date().toISOString();
+      supabase(`qr_token_devices?id=eq.${encodeURIComponent(deviceRows[0].id)}`, { method: "PATCH", body: JSON.stringify({ last_seen_at: now }) }).catch(() => {});
+      return { outcome: "allow" };
+    }
+
+    // A device we haven't seen before for this token.
+    if (pinHash) {
+      if (!pin) return { outcome: "requires-pin" };
+      if (hash(String(pin)) !== pinHash) return { outcome: "wrong-pin" };
+      // Correct PIN - trust this device, fall through to the concurrency check below.
+    }
+
+    const activeRows = await supabase(
+      `app_sessions?qr_token_id=eq.${encodeURIComponent(qrTokenId)}&revoked_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=device_id`
+    );
+    const distinctActiveDevices = new Set((activeRows || []).map((row) => row.device_id).filter(Boolean));
+    distinctActiveDevices.delete(deviceId);
+    if (distinctActiveDevices.size >= MAX_CONCURRENT_DEVICES) {
+      return { outcome: "device-limit" };
+    }
+
+    await supabase("qr_token_devices", { method: "POST", body: JSON.stringify({ qr_token_id: qrTokenId, device_id: deviceId }) }).catch(() => {});
+
+    return { outcome: "allow", isFirstDevice: !pinHash, isNewDevice: true, concurrentDeviceCount: distinctActiveDevices.size + 1 };
+  } catch {
+    return { outcome: "allow" };
+  }
+}
+
+// Fire-and-forget audit entry for a 2nd+ concurrent device on the same link - written directly as
+// a sync_events row (same shape the client's addAudit() produces) rather than through the normal
+// authenticated sync path, since this device has not finished logging in yet. Never awaited by the
+// caller and never allowed to affect the login outcome either way.
+function logConcurrentDeviceAlert(access, concurrentDeviceCount) {
+  if (!envReady()) return;
+  const now = new Date().toISOString();
+  const payload = {
+    action: "Simultaneous device use detected",
+    target: access.subjectId,
+    detail: `${concurrentDeviceCount}. zařízení současně na stejném QR odkazu`,
+    actorRole: access.role,
+    alert: true,
+    time: new Date(now).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+    createdAt: now,
+  };
+  supabase("sync_events", {
+    method: "POST",
+    body: JSON.stringify({
+      client_event_id: `qr-concurrent-${access.qrTokenId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      session_id: null,
+      role: access.role,
+      subject_id: access.subjectId,
+      event_type: "audit.logged",
+      entity_type: "audit_entry",
+      entity_id: `concurrent-${access.qrTokenId}-${Date.now()}`,
+      candidate_id: access.role === "Candidate" ? access.subjectId : null,
+      payload,
+      created_at: now,
+    }),
+  }).catch(() => {});
 }
 
 export default async function handler(request, response) {
@@ -85,6 +171,8 @@ export default async function handler(request, response) {
   try {
     const token = parseToken(String(request.body?.token || "").trim());
     if (!token) return sendJson(response, 400, { error: "Missing QR token" });
+    const deviceId = String(request.body?.deviceId || "").trim() || null;
+    const pin = request.body?.pin != null ? String(request.body.pin).trim() : null;
 
     let access = null;
 
@@ -104,8 +192,22 @@ export default async function handler(request, response) {
     if (!access && !envReady() && process.env.VETBARA_DEMO_MODE !== "false") access = DEMO_TOKENS[token] ?? null;
     if (!access) return sendJson(response, 401, { error: "Invalid or expired QR token" });
 
-    const session = await createSession(access);
-    return sendJson(response, 200, { role: access.role, subjectId: access.subjectId, ...session });
+    let deviceGate = null;
+    if (envReady() && access.qrTokenId) {
+      deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin });
+      if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: "This device needs the PIN for this QR code", requiresPin: true });
+      if (deviceGate.outcome === "wrong-pin") return sendJson(response, 401, { error: "Incorrect PIN", requiresPin: true, wrongPin: true });
+      if (deviceGate.outcome === "device-limit") return sendJson(response, 429, { error: "This QR code is already open on 3 devices at once", deviceLimitReached: true });
+    }
+
+    const session = await createSession(access, deviceId);
+    const extra = {};
+    if (deviceGate?.isFirstDevice) extra.promptSetPin = true;
+    if (deviceGate?.concurrentDeviceCount >= 2) {
+      extra.concurrentDeviceAlert = true;
+      logConcurrentDeviceAlert(access, deviceGate.concurrentDeviceCount);
+    }
+    return sendJson(response, 200, { role: access.role, subjectId: access.subjectId, ...session, ...extra });
   } catch (error) {
     return sendJson(response, 500, { error: error.message || "QR resolve failed" });
   }

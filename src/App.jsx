@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, fetchCentreAudit, downloadBase64File, loadCentreSetup } from "./lib/api";
+import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, fetchCentreAudit, setQrPin, resetQrPin, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp } from "./components/PilotInfoPanels";
 import { AuditSyncView, translateAuditAction } from "./components/AuditSyncView";
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
@@ -1347,6 +1347,11 @@ function VetBaraPrototype() {
   // "Scan {role} QR" one — same panel, different wording for a genuinely different moment.
   const [scannerReentry, setScannerReentry] = useState(false);
   const [authenticatedPortalRole, setAuthenticatedPortalRole] = useState(null);
+  // Device-bound QR PIN (see resolveAccessWithFallback/requestQrPin): qrPinChallenge holds the
+  // in-flight promise resolver while a new device is being asked for the PIN; qrSetPinPrompt holds
+  // the freshly-issued session token while the FIRST device on a token is being asked to choose one.
+  const [qrPinChallenge, setQrPinChallenge] = useState(null);
+  const [qrSetPinPrompt, setQrSetPinPrompt] = useState(null);
   const [activeSessionToken, setActiveSessionToken] = useState(null);
   const [reopenRequest, setReopenRequest] = useState(null);
   const [centreSetupLoading, setCentreSetupLoading] = useState(false);
@@ -1441,6 +1446,7 @@ function VetBaraPrototype() {
         action: entry.action,
         target: entry.target,
         detail: entry.detail ?? "",
+        alert: entry.alert === true,
         time: entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : nowStamp(),
         createdAt: entry.createdAt ?? new Date().toISOString(),
       }));
@@ -2030,35 +2036,62 @@ function VetBaraPrototype() {
     event.target.value = "";
   }
 
+  // Pauses resolution and shows a PIN-entry dialog; resolves to whatever the user submits (a PIN
+  // string), or null if they cancel. Kept as its own promise bridge so resolveAccessWithFallback
+  // below can just `await` it inline and retry - none of its three call sites need to know a PIN
+  // was ever involved.
+  function requestQrPin(context) {
+    return new Promise((resolve) => {
+      setQrPinChallenge({ ...context, resolve });
+    });
+  }
+
   async function resolveAccessWithFallback(parsed, detail) {
     const token = parsed.token || parsed.raw || window.location.href;
-    try {
-      const resolved = await resolveQrToken(token);
-      const session = await bootstrapSession(resolved.sessionToken);
-      return { ...resolved, ...session, sessionToken: resolved.sessionToken };
-    } catch (error) {
-      // Only fall back to local demo matching when there was no backend to authoritatively
-      // answer at all (offline LAN use, plain `vite dev` with no API, network down). A
-      // definitive server answer (e.g. 401 invalid token) must be respected as-is —
-      // otherwise anyone could present one of the public demo-token constants and get the
-      // client to grant access locally even though the server explicitly rejected it, which
-      // is exactly the gap this fixes.
-      if (!error?.isBackendUnavailable) {
-        console.warn("QR/session request rejected by server", error);
-        addAudit("QR resolve failed", parsed.id ?? "Unknown QR", error?.message || "The QR could not be verified.");
-        setAccessError(`${t("access.error.rejected")} ${error?.message ? `(${error.message})` : ""}`.trim());
+    const deviceId = getOrCreateDeviceId();
+    let pin;
+    // Bounded retry loop: a wrong PIN re-prompts (with wrongPin:true) rather than failing outright,
+    // up to 5 tries, so a typo doesn't force starting the whole scan over.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const resolved = await resolveQrToken(token, { deviceId, pin });
+        const session = await bootstrapSession(resolved.sessionToken);
+        if (resolved.promptSetPin) setQrSetPinPrompt({ sessionToken: resolved.sessionToken });
+        return { ...resolved, ...session, sessionToken: resolved.sessionToken };
+      } catch (error) {
+        if (error?.body?.requiresPin) {
+          pin = await requestQrPin({ wrongPin: Boolean(error?.body?.wrongPin) });
+          if (pin === null || pin === undefined) return null;
+          continue;
+        }
+        if (error?.body?.deviceLimitReached) {
+          setAccessError(t("qr.deviceLimit"));
+          return null;
+        }
+        // Only fall back to local demo matching when there was no backend to authoritatively
+        // answer at all (offline LAN use, plain `vite dev` with no API, network down). A
+        // definitive server answer (e.g. 401 invalid token) must be respected as-is —
+        // otherwise anyone could present one of the public demo-token constants and get the
+        // client to grant access locally even though the server explicitly rejected it, which
+        // is exactly the gap this fixes.
+        if (!error?.isBackendUnavailable) {
+          console.warn("QR/session request rejected by server", error);
+          addAudit("QR resolve failed", parsed.id ?? "Unknown QR", error?.message || "The QR could not be verified.");
+          setAccessError(`${t("access.error.rejected")} ${error?.message ? `(${error.message})` : ""}`.trim());
+          return null;
+        }
+        console.error("Backend unreachable; using local demo fallback when available", error);
+        const fallback = demoAccess(parsed);
+        if (fallback) {
+          addAudit("Backend unavailable", fallback.subjectId ?? fallback.role, `${detail}; local demo fallback used`);
+          return fallback;
+        }
+        addAudit("QR resolve failed", parsed.id ?? "Unknown QR", "The QR could not be verified.");
+        setAccessError(t("access.error.rejected"));
         return null;
       }
-      console.error("Backend unreachable; using local demo fallback when available", error);
-      const fallback = demoAccess(parsed);
-      if (fallback) {
-        addAudit("Backend unavailable", fallback.subjectId ?? fallback.role, `${detail}; local demo fallback used`);
-        return fallback;
-      }
-      addAudit("QR resolve failed", parsed.id ?? "Unknown QR", "The QR could not be verified.");
-      setAccessError(t("access.error.rejected"));
-      return null;
     }
+    return null;
   }
 
   function demoAccess(parsed) {
@@ -3824,14 +3857,72 @@ function VetBaraPrototype() {
     {accessError && <div role="alert" className="mb-4 flex items-start gap-3 rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-950 shadow-sm"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><div>{accessError}</div><div className="mt-1 font-normal">{t("access.error.help")}</div></div></div>}
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
-      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} harmonogramSettings={harmonogramSettings} setHarmonogramSettings={setHarmonogramSettings} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
+      {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} harmonogramSettings={harmonogramSettings} setHarmonogramSettings={setHarmonogramSettings} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} addAudit={addAudit} t={t} />}
       {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} activeSessionToken={activeSessionToken} sendSyncEvent={sendSyncEvent} localEventId={localEventId} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} activeSessionToken={activeSessionToken} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
     {scannerMode && <QrScannerPanel title={scannerReentry ? t("qrScanner.reentryTitle") : tf("qrScanner.scan", { role: roleLabel(scannerMode) })} onScan={handleQrScan} onClose={() => { setScannerMode(null); setScannerReentry(false); }} t={t} />}
     {reopenRequest && <ReopenSectionModal sectionKey={reopenRequest.key} error={reopenRequest.error} onConfirm={confirmReopenRequest} onCancel={() => setReopenRequest(null)} t={t} />}
+    {qrPinChallenge && (
+      <QrPinModal
+        mode="enter"
+        wrongPin={qrPinChallenge.wrongPin}
+        onSubmit={(pin) => { const resolve = qrPinChallenge.resolve; setQrPinChallenge(null); resolve(pin); }}
+        onCancel={() => { const resolve = qrPinChallenge.resolve; setQrPinChallenge(null); resolve(null); }}
+        t={t}
+      />
+    )}
+    {qrSetPinPrompt && (
+      <QrPinModal
+        mode="set"
+        onSubmit={async (pin) => {
+          try { await setQrPin(qrSetPinPrompt.sessionToken, pin); } catch (error) { console.warn("Setting QR PIN failed", error); }
+          setQrSetPinPrompt(null);
+        }}
+        onCancel={() => setQrSetPinPrompt(null)}
+        t={t}
+      />
+    )}
   </div></main>;
+}
+
+// Two roles, one dialog: "enter" is shown to a device the token doesn't recognise yet (once a PIN
+// is set), "set" is shown once, right after the very FIRST device ever resolves a token. onSubmit
+// resolving is what unblocks resolveAccessWithFallback's retry loop for "enter" mode.
+function QrPinModal({ mode, wrongPin, onSubmit, onCancel, t }) {
+  const [value, setValue] = useState("");
+  const isSet = mode === "set";
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5">
+        <h3 className="text-lg font-bold">{isSet ? t("qr.pin.setTitle") : t("qr.pin.enterTitle")}</h3>
+        <p className="mt-1 text-sm text-slate-600">{isSet ? t("qr.pin.setHelper") : t("qr.pin.enterHelper")}</p>
+        {!isSet && wrongPin && <p className="mt-2 text-sm font-semibold text-rose-700">{t("qr.pin.wrong")}</p>}
+        <input
+          autoFocus
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={8}
+          value={value}
+          onChange={(event) => setValue(event.target.value.replace(/\D/g, "").slice(0, 8))}
+          placeholder={isSet ? t("qr.pin.setPlaceholder") : t("qr.pin.enterPlaceholder")}
+          className="mt-4 w-full rounded-xl border p-3 text-center text-2xl font-bold tracking-[0.3em]"
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          {isSet && <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("qr.pin.setSkip")}</Button>}
+          {!isSet && <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>}
+          <Button
+            onClick={() => onSubmit(value)}
+            disabled={isSet ? value.length < 4 : !value}
+            className="rounded-2xl"
+          >
+            {isSet ? t("qr.pin.setConfirm") : t("qr.pin.enterConfirm")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Titles use a translated key, but "AUTHORING_DOCS" itself is a plain module-level array (no t()
@@ -6472,6 +6563,26 @@ function limitFieldTreesToRequiredCodes(trees, level = "Practicing", center = {}
 function vetbaraUid(prefix = "id") {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return `${prefix}-${crypto.randomUUID()}`;
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// A stable per-BROWSER (not per-session) identifier for the device-bound QR PIN feature (see the
+// 20260802 migration / api/qr/resolve.js) - generated once, kept in localStorage indefinitely, so
+// the SAME phone/tablet is recognised as the same device across logins, exam days and reloads,
+// and only a genuinely different browser/device ever has to deal with the PIN prompt at all.
+function getOrCreateDeviceId() {
+  try {
+    const key = "vetbara-device-id";
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+    const fresh = vetbaraUid("device");
+    window.localStorage.setItem(key, fresh);
+    return fresh;
+  } catch {
+    // Private browsing / storage blocked: a fresh id every call means this device will always
+    // look "new" to the PIN gate. Acceptable - fail-open in evaluateDeviceAccess means it can
+    // only ever add PIN friction, never lock this device out.
+    return vetbaraUid("device");
+  }
 }
 
 function parseFieldCoordinates(value) {
@@ -9643,32 +9754,73 @@ function ConsultingFieldMobilePage() {
     sessionToken: "", candidateId: candidateIdParam, candidateName: candidateNameParam,
     error: qrToken ? "" : t("consultingField.missingToken"),
   });
+  // This link carries the SAME qr_token as the candidate's main tablet session (just a different
+  // ?mode= for client-side routing) - so opening it on their own phone is, from the device-bound
+  // PIN gate's point of view, a genuinely different device asking for the SAME token. Handled the
+  // same way the main app's resolveAccessWithFallback does: a PIN challenge, or a one-time "choose
+  // a PIN" prompt if this happens to be the very first device to ever use the token.
+  const deviceIdRef = useRef(null);
+  if (!deviceIdRef.current) deviceIdRef.current = getOrCreateDeviceId();
+  const [pinChallenge, setPinChallenge] = useState(null);
+  const [setPinPrompt, setSetPinPrompt] = useState(null);
+
+  async function attemptAuth(pin) {
+    try {
+      const resolved = await resolveQrToken(qrToken, { deviceId: deviceIdRef.current, pin });
+      if (resolved.role && resolved.role !== "Candidate") {
+        setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
+        return;
+      }
+      const sessionToken = resolved.sessionToken;
+      const boot = await bootstrapSession(sessionToken).catch(() => null);
+      const candidateId = resolved.subjectId || candidateIdParam;
+      const candidateName = boot?.candidate?.name || candidateNameParam || candidateId;
+      setPinChallenge(null);
+      setAuth({ status: "ready", sessionToken, candidateId, candidateName, error: "" });
+      if (resolved.promptSetPin) setSetPinPrompt(sessionToken);
+    } catch (error) {
+      if (error?.body?.requiresPin) {
+        setPinChallenge({ wrongPin: Boolean(error?.body?.wrongPin) });
+        return;
+      }
+      if (error?.body?.deviceLimitReached) {
+        setAuth((prev) => ({ ...prev, status: "error", error: t("qr.deviceLimit") }));
+        return;
+      }
+      setAuth((prev) => ({ ...prev, status: "error", error: error?.message || t("consultingField.authFailed") }));
+    }
+  }
 
   useEffect(() => {
-    if (!qrToken) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const resolved = await resolveQrToken(qrToken);
-        if (cancelled) return;
-        if (resolved.role && resolved.role !== "Candidate") {
-          setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
-          return;
-        }
-        const sessionToken = resolved.sessionToken;
-        const boot = await bootstrapSession(sessionToken).catch(() => null);
-        if (cancelled) return;
-        const candidateId = resolved.subjectId || candidateIdParam;
-        const candidateName = boot?.candidate?.name || candidateNameParam || candidateId;
-        setAuth({ status: "ready", sessionToken, candidateId, candidateName, error: "" });
-      } catch (error) {
-        if (cancelled) return;
-        setAuth((prev) => ({ ...prev, status: "error", error: error?.message || t("consultingField.authFailed") }));
-      }
-    })();
-    return () => { cancelled = true; };
+    if (!qrToken) return;
+    attemptAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qrToken]);
+
+  if (pinChallenge) {
+    return (
+      <QrPinModal
+        mode="enter"
+        wrongPin={pinChallenge.wrongPin}
+        onSubmit={(pin) => attemptAuth(pin)}
+        onCancel={() => { setPinChallenge(null); setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.authFailed") })); }}
+        t={t}
+      />
+    );
+  }
+  if (setPinPrompt) {
+    return (
+      <QrPinModal
+        mode="set"
+        onSubmit={async (pin) => {
+          try { await setQrPin(setPinPrompt, pin); } catch (error) { console.warn("Setting QR PIN failed", error); }
+          setSetPinPrompt(null);
+        }}
+        onCancel={() => setSetPinPrompt(null)}
+        t={t}
+      />
+    );
+  }
 
   if (auth.status === "error") {
     return (
@@ -12279,7 +12431,7 @@ function tfHarmonogram(t, key, values) {
   return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
 }
 
-function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, harmonogramSettings, setHarmonogramSettings, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, t }) {
+function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, harmonogramSettings, setHarmonogramSettings, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, addAudit, t }) {
   const [copiedQr, setCopiedQr] = useState("");
   const [activeCentreSection, setActiveCentreSection] = useState("setup");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
@@ -12815,7 +12967,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
               <StatusPill tone={centreValidationIssues.length ? "warn" : "good"}>{accessMeta}</StatusPill>
               <StatusPill>{peopleMeta}</StatusPill>
             </div>
-            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintAllTests={printAllCandidateTests} onPrintCandidateTest={printCandidateTest} />
+            <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintAllTests={printAllCandidateTests} onPrintCandidateTest={printCandidateTest} activeSessionToken={activeSessionToken} addAudit={addAudit} />
           </div>
         </AdminDashboardSection>
 

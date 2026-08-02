@@ -30,16 +30,33 @@ async function requestJson(path, options = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.isBackendUnavailable = response.status === 404;
+    // Carries any extra flags a handler sent alongside its error (e.g. requiresPin,
+    // deviceLimitReached on /api/qr/resolve) so callers can react without re-parsing.
+    if (typeof body === "object" && body) error.body = body;
     throw error;
   }
 
   return body;
 }
 
-export function resolveQrToken(token) {
+export function resolveQrToken(token, { deviceId, pin } = {}) {
   return requestJson("/api/qr/resolve", {
     method: "POST",
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, deviceId, pin }),
+  });
+}
+
+export function setQrPin(sessionToken, pin) {
+  return requestJson("/api/qr/set-pin", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, pin }),
+  });
+}
+
+export function resetQrPin(sessionToken, role, subjectId) {
+  return requestJson("/api/centre/reset-qr-pin", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, role, subjectId }),
   });
 }
 

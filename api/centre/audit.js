@@ -113,6 +113,7 @@ export default async function handler(request, response) {
       target: row.payload?.target ?? row.candidate_id ?? row.subject_id,
       detail: row.payload?.detail ?? "",
       actorRole: row.payload?.actorRole ?? row.role,
+      alert: row.payload?.alert === true,
       time: row.payload?.time ?? "",
       createdAt: row.created_at,
     }));

@@ -1,4 +1,5 @@
 import React from "react";
+import { resetQrPin } from "../lib/api";
 
 function tr(t, key, fallback) {
   return typeof t === "function" ? t(key) : fallback;
@@ -22,12 +23,29 @@ function DeliveryModeToggle({ mode, onChange, t }) {
   );
 }
 
-export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, examinerQrUrl, candidateQrFor, examinerQrFor, copiedQr, copyQrLink, QrCodeIcon, SectionTitle, StatusPill, Button, RealQr, t, onPrintAllQr, onPrintAllTests, onPrintCandidateTest }) {
+export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, examinerQrUrl, candidateQrFor, examinerQrFor, copiedQr, copyQrLink, QrCodeIcon, SectionTitle, StatusPill, Button, RealQr, t, onPrintAllQr, onPrintAllTests, onPrintCandidateTest, activeSessionToken, addAudit }) {
   // Per-person, not per-section: a Centre handing out links often mixes delivery for the same
   // roster (e.g. one candidate already has their own tablet, the rest get a printed QR) - a single
   // toggle for the whole list couldn't represent that.
   const [candidateModes, setCandidateModes] = React.useState({});
   const [examinerModes, setExaminerModes] = React.useState({});
+  const [resetStatus, setResetStatus] = React.useState({});
+
+  // "Opakované generování": the QR link itself is derived deterministically from role+id+exam
+  // event, so it never changes - what this actually resets is the PIN and trusted-device list for
+  // it (see api/centre/reset-qr-pin.js), which is exactly what a forgotten PIN needs.
+  async function handleResetPin(role, person) {
+    if (!window.confirm(tr(t, "qr.resetPin.confirm", "Reset the PIN and trusted devices for this QR code? The next device to open it will be treated as new and asked to set a fresh PIN."))) return;
+    setResetStatus((prev) => ({ ...prev, [person.id]: "busy" }));
+    try {
+      await resetQrPin(activeSessionToken, role, person.id);
+      setResetStatus((prev) => ({ ...prev, [person.id]: "done" }));
+      addAudit?.("QR access reset in Centre", person.name || person.id, role);
+    } catch (error) {
+      console.error("QR PIN reset failed", error);
+      setResetStatus((prev) => ({ ...prev, [person.id]: "error" }));
+    }
+  }
   return (
     <div className="mt-4 rounded-2xl border bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -85,7 +103,13 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
                           : null}
                         <Button onClick={() => copyQrLink(c.id, accessUrl)} disabled={!accessUrl} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
                         {onPrintCandidateTest && <Button onClick={() => onPrintCandidateTest(c)} variant="outline" className="rounded-2xl">{tr(t, "qr.printTest", "Tisk testu")}</Button>}
+                        {activeSessionToken && (
+                          <Button onClick={() => handleResetPin("Candidate", c)} disabled={resetStatus[c.id] === "busy"} variant="outline" className="rounded-2xl border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200">
+                            {resetStatus[c.id] === "busy" ? "…" : tr(t, "qr.resetPin", "Opakované generování")}
+                          </Button>
+                        )}
                       </div>
+                      {resetStatus[c.id] === "done" && <div className="mt-2 text-[11px] font-medium text-emerald-800">{tr(t, "qr.resetPin.done", "QR access reset - the next device to open this link will set a new PIN.")}</div>}
                       {accessUrl
                         ? <div className="mt-2 break-all font-mono text-[10px] text-slate-500">{accessUrl}</div>
                         : <div className="mt-2 text-[11px] font-medium text-amber-800">{tr(t, "qr.missing", "Save the Centre setup to issue this person's access link.")}</div>}
@@ -132,7 +156,13 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
                           ? <Button onClick={() => accessUrl && window.open(accessUrl, "_blank", "noopener")} disabled={!accessUrl} className="rounded-2xl">{tr(t, "qr.openOnTablet", "Otevřít na tabletu")}</Button>
                           : null}
                         <Button onClick={() => copyQrLink(ex.id, accessUrl)} disabled={!accessUrl} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
+                        {activeSessionToken && (
+                          <Button onClick={() => handleResetPin("Examiner", ex)} disabled={resetStatus[ex.id] === "busy"} variant="outline" className="rounded-2xl border-slate-300 bg-slate-100 text-slate-600 hover:bg-slate-200">
+                            {resetStatus[ex.id] === "busy" ? "…" : tr(t, "qr.resetPin", "Opakované generování")}
+                          </Button>
+                        )}
                       </div>
+                      {resetStatus[ex.id] === "done" && <div className="mt-2 text-[11px] font-medium text-emerald-800">{tr(t, "qr.resetPin.done", "QR access reset - the next device to open this link will set a new PIN.")}</div>}
                       {accessUrl
                         ? <div className="mt-2 break-all font-mono text-[10px] text-slate-500">{accessUrl}</div>
                         : <div className="mt-2 text-[11px] font-medium text-amber-800">{tr(t, "qr.missing", "Save the Centre setup to issue this person's access link.")}</div>}

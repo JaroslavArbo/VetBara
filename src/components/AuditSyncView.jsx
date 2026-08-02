@@ -31,6 +31,15 @@ const AUDIT_ACTION_KEYS = {
   "Exited fullscreen": "audit.action.exitedFullscreen",
   "Switched away from app": "audit.action.switchedAwayFromApp",
   "Returned to app": "audit.action.returnedToApp",
+  "Examiner identified in Centre": "audit.action.examinerIdentifiedInCentre",
+  "Correction marked resolved in Centre": "audit.action.correctionMarkedResolved",
+  "Connection lost": "audit.action.connectionLost",
+  "Connection restored": "audit.action.connectionRestored",
+  "Candidate workspace closed": "audit.action.candidateWorkspaceClosed",
+  "Examiner workspace closed": "audit.action.examinerWorkspaceClosed",
+  "Centre workspace closed": "audit.action.centreWorkspaceClosed",
+  "Simultaneous device use detected": "audit.action.simultaneousDeviceUse",
+  "QR access reset in Centre": "audit.action.qrAccessReset",
 };
 export function translateAuditAction(t, action) {
   const key = AUDIT_ACTION_KEYS[action];
@@ -141,7 +150,7 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
   const filtered = rows.filter((row) => {
     if (personFilter !== "all" && row.person.id !== personFilter) return false;
     if (actionFilter !== "all" && row.item.action !== actionFilter) return false;
-    if (alertsOnly && !ALERT_ACTIONS.has(row.item.action)) return false;
+    if (alertsOnly && !ALERT_ACTIONS.has(row.item.action) && row.item.alert !== true) return false;
     if (search.trim()) {
       const haystack = `${row.person.label} ${translateAuditAction(t, row.item.action)} ${row.item.detail ?? ""}`.toLowerCase();
       if (!haystack.includes(search.trim().toLowerCase())) return false;
@@ -155,7 +164,7 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
     return () => window.clearInterval(id);
   }, []);
   const liveState = useMemo(() => buildLiveState(rows, now), [rows, now]);
-  const alertCount = rows.filter((row) => ALERT_ACTIONS.has(row.item.action)).length;
+  const alertCount = rows.filter((row) => ALERT_ACTIONS.has(row.item.action) || row.item.alert === true).length;
   const auditGroups = groupAuditByDate(filtered.slice(0, 400).map((row) => row.item));
   const personOf = new Map(filtered.map((row) => [row.item.id, row.person]));
   const timeOf = (item) => (item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : item.time);
@@ -230,16 +239,30 @@ export function AuditSyncView({ audit, candidates, examiners, CloudOff, SectionT
                       const person = personOf.get(item.id);
                       const alert = ALERT_ACTIONS.has(item.action);
                       const offline = OFFLINE_ACTIONS.has(item.action);
+                      // A 2nd+ concurrent device on the same QR link (see AUDIT_EVENT_TYPE in
+                      // api/sync/batch.js / logConcurrentDeviceAlert in api/qr/resolve.js) - a
+                      // distinct orange from the amber fullscreen-exit alert, since it's a
+                      // different kind of concern (possible link sharing, not a candidate leaving
+                      // the exam interface).
+                      const deviceAlert = item.alert === true;
+                      const highlighted = deviceAlert
+                        ? "border border-orange-400 bg-orange-100 font-semibold text-orange-950"
+                        : alert
+                        ? "border border-amber-300 bg-amber-50 font-semibold text-amber-950"
+                        : offline
+                        ? "border border-blue-300 bg-blue-50 font-semibold text-blue-950"
+                        : "hover:bg-slate-50";
+                      const emphasized = deviceAlert || alert;
                       return (
                         <div
                           key={item.id}
-                          className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-lg px-2 py-1.5 text-xs leading-snug sm:grid-cols-[auto_14rem_minmax(0,1fr)] ${alert ? "border border-amber-300 bg-amber-50 font-semibold text-amber-950" : offline ? "border border-blue-300 bg-blue-50 font-semibold text-blue-950" : "hover:bg-slate-50"}`}
+                          className={`grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-lg px-2 py-1.5 text-xs leading-snug sm:grid-cols-[auto_14rem_minmax(0,1fr)] ${highlighted}`}
                         >
                           <span className="font-mono text-slate-500">{timeOf(item)}</span>
-                          <span className={alert ? "" : "font-medium text-slate-800"}>{person?.label}</span>
+                          <span className={emphasized ? "" : "font-medium text-slate-800"}>{person?.label}</span>
                           <span className="min-w-0">
-                            <span className={alert ? "" : "text-slate-700"}>{translateAuditAction(t, item.action)}</span>
-                            {item.detail && <span className={alert ? " font-normal" : " text-slate-400"}> ({item.detail})</span>}
+                            <span className={emphasized ? "" : "text-slate-700"}>{translateAuditAction(t, item.action)}</span>
+                            {item.detail && <span className={emphasized ? " font-normal" : " text-slate-400"}> ({item.detail})</span>}
                           </span>
                         </div>
                       );
