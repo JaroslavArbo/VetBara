@@ -92,6 +92,16 @@ export function exportCentreAuditPackage(sessionToken, format = "xls") {
   });
 }
 
+// The persistent, exam-wide activity log - every addAudit() call on any device (Candidate,
+// Examiner, Centre) also syncs as an "audit.logged" event; this reads it back so the Centre's own
+// audit view survives a page reload instead of only showing what happened in the current tab.
+export function fetchCentreAudit(sessionToken) {
+  return requestJson("/api/centre/audit", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken }),
+  });
+}
+
 export function downloadBase64File({ base64, filename, mimeType }) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);

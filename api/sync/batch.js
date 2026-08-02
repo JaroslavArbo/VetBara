@@ -12,6 +12,12 @@ const SESSION_EVENT_TYPES = new Set([
   "session.app_foregrounded",
 ]);
 
+// The persistent, exam-wide activity log entry: fired alongside every addAudit() call on the
+// client (any role), so the audit trail survives a page reload and looks the same from any
+// device instead of being lost the moment a Centre tab refreshes. See api/centre/audit.js for
+// the read side. No projection table - it lives in sync_events like the session-integrity events.
+const AUDIT_EVENT_TYPE = "audit.logged";
+
 const SUPPORTED_EVENT_TYPES = new Set([
   "candidate_section.opened",
   "candidate_section.closed",
@@ -25,6 +31,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "outdoor_assessment.submitted",
   "outdoor_score.saved",
   "examiner_score.saved",
+  AUDIT_EVENT_TYPE,
   ...SESSION_EVENT_TYPES,
 ]);
 
@@ -38,6 +45,7 @@ const EVENT_TYPES_BY_ROLE = {
     "report_draft.saved",
     "report_photo.added",
     "candidate_preparation.saved",
+    AUDIT_EVENT_TYPE,
     ...SESSION_EVENT_TYPES,
   ]),
   Examiner: new Set([
@@ -45,6 +53,7 @@ const EVENT_TYPES_BY_ROLE = {
     "outdoor_assessment.submitted",
     "outdoor_score.saved",
     "examiner_score.saved",
+    AUDIT_EVENT_TYPE,
     ...SESSION_EVENT_TYPES,
   ]),
   // The Centre is the exam authority and already reads every candidate in its event; section E lets
@@ -55,6 +64,7 @@ const EVENT_TYPES_BY_ROLE = {
   Centre: new Set([
     "outdoor_score.saved",
     "examiner_score.saved",
+    AUDIT_EVENT_TYPE,
   ]),
 };
 
@@ -161,6 +171,11 @@ function scopeError(session, candidateId, dbAssignedCandidateIds, eventType) {
   // event); an Examiner's has no candidate at all, so requiring one would 403 every one of them.
   if (!candidateId) {
     if (SESSION_EVENT_TYPES.has(eventType) && (session.role === "Candidate" || session.role === "Examiner")) return null;
+    // Most audit entries are about a general action (login, workspace open/close, identify) with
+    // no specific candidate - scoped by the row's own subject_id/role instead (see api/centre/audit.js).
+    // The ones that DO carry a candidateId (e.g. "Report corrected in Centre") still fall through
+    // to the normal per-role checks below like any other event.
+    if (eventType === AUDIT_EVENT_TYPE) return null;
     return "Missing candidate id for scoped sync event";
   }
 

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, downloadBase64File, loadCentreSetup } from "./lib/api";
+import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, fetchCentreAudit, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp } from "./components/PilotInfoPanels";
 import { AuditSyncView, translateAuditAction } from "./components/AuditSyncView";
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
@@ -889,43 +889,6 @@ export function tomorrowIsoDate() {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
-// Human-readable labels for the sync-event types pushed by Candidate/Examiner sessions
-// (candidate_section.opened, test_response.saved, session.fullscreen_exited, ...), so the
-// server-synced activity from OTHER devices can render in the Centre's audit trail the same
-// way locally-logged entries do. Unknown types fall back to a readable version of the raw type.
-const SYNC_EVENT_LABELS = {
-  "candidate_section.opened": "Candidate section opened",
-  "candidate_section.reopened": "Candidate section reopened",
-  "candidate_section.closed": "Candidate section closed",
-  "test_response.saved": "Test answer edited",
-  "report_draft.saved": "Report field edited",
-  "report_photo.added": "Report photo added",
-  "outdoor_assessment.opened": "Outdoor form opened",
-  "outdoor_assessment.submitted": "Outdoor assessment submitted",
-  "outdoor_score.saved": "Outdoor score edited",
-  "outdoor_note.saved": "Outdoor note edited",
-  "outdoor_note_sketch.saved": "Outdoor sketch edited",
-  "session.fullscreen_entered": "Entered fullscreen",
-  "session.fullscreen_exited": "Exited fullscreen",
-  "session.app_backgrounded": "Switched away from app",
-  "session.app_foregrounded": "Returned to app",
-};
-function describeSyncEventLabel(type) {
-  return SYNC_EVENT_LABELS[type] || String(type || "").replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-function syncEventToAuditEntry(event) {
-  const payload = event.payload || {};
-  const target = payload.subjectName || event.candidateId || payload.candidateId || payload.examinerId || event.entityId || "";
-  const detailParts = [payload.sectionKey, payload.questionId, payload.itemId, payload.treeId].filter(Boolean);
-  const time = event.createdAt || event.receivedAt ? new Date(event.createdAt || event.receivedAt).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-  return {
-    id: `remote-${event.clientEventId || `${event.type}-${event.entityId}-${event.receivedAt || event.createdAt}`}`,
-    action: describeSyncEventLabel(event.type),
-    target,
-    detail: detailParts.join(" / "),
-    time,
-  };
-}
 function createReportDraft() { return REPORT_TREES.reduce((acc, tree) => ({ ...acc, [tree]: { fieldNotes: "", photos: [], finalSections: REPORT_SECTIONS.reduce((s, sec) => ({ ...s, [sec.key]: "" }), {}) } }), {}); }
 function createSectionStatus(level) { return CANDIDATE_SECTIONS[level].reduce((acc, sec) => ({ ...acc, [sec.key]: "locked" }), {}); }
 function scoreLimits(level) { return level === "Consulting" ? { writtenMax: 97, outdoorMax: 58, reportMax: 117 } : { writtenMax: 46, outdoorMax: 102, reportMax: 0 }; }
@@ -1428,26 +1391,58 @@ function VetBaraPrototype() {
   const selectedMode = loggedExaminer && assignments[selectedCandidate.id]?.primary === loggedExaminer.id ? "primary" : loggedExaminer && assignments[selectedCandidate.id]?.secondary === loggedExaminer.id ? "secondary" : "unassigned";
   const activeScoreLimits = useMemo(() => scoreLimitsForCandidate(selectedCandidate, variants, testBank, outdoorItemsByLevel), [selectedCandidate, variants, testBank, outdoorItemsByLevel]);
   const summary = useMemo(() => ({ total: candidates.length, practicing: candidates.filter((c) => c.level === "Practicing").length, consulting: candidates.filter((c) => c.level === "Consulting").length }), [candidates]);
-  const addAudit = (action, target, detail = "") => setAudit((prev) => [{ id: `A-${prev.length + 1}`, action, target, detail, time: nowStamp(), createdAt: new Date().toISOString() }, ...prev]);
-  // Audit entries that happened on ANOTHER device and arrive later through the read model. They
-  // carry their own timestamp, so they are merged into the (newest-first) list by time rather
-  // than prepended, and each server event id is applied only once across polls.
+  // Persists alongside the local, instant-display state below: every call also fires an
+  // "audit.logged" sync event (see AUDIT_EVENT_TYPE in api/sync/batch.js), so the trail survives a
+  // page reload and reads the same from any Centre device - not just the tab that happened to
+  // witness the action. candidateId is only set for a logged-in Candidate's own actions; Centre-
+  // and Examiner-authored entries (corrections, identify, logins) are scoped by their own
+  // subject_id/role on read instead (see api/centre/audit.js), so they need no candidate id here.
+  const addAudit = (action, target, detail = "") => {
+    const createdAt = new Date().toISOString();
+    const id = `A-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setAudit((prev) => [{ id, action, target, detail, time: nowStamp(), createdAt }, ...prev]);
+    if (activeSessionToken) {
+      const actorRole = loggedCandidate ? "Candidate" : loggedExaminer ? "Examiner" : "Centre";
+      sendSyncEvent({
+        clientEventId: localEventId(`audit-${id}`),
+        type: "audit.logged",
+        entityType: "audit_entry",
+        entityId: id,
+        candidateId: loggedCandidate?.id || null,
+        // localId travels in the payload (not just as entityId) so a Centre reading its OWN
+        // entries back from the server can recognise "I already have this one locally" and skip
+        // it, instead of showing every one of its own actions twice once the poll catches up.
+        payload: { action, target, detail, actorRole, time: nowStamp(), createdAt, localId: id },
+        createdAt,
+      });
+    }
+  };
+  // Audit entries that happened on ANOTHER device (or this same Centre device, read back from its
+  // own persisted addAudit() calls) and arrive later through the read model. They carry their own
+  // timestamp, so they are merged into the (newest-first) list by time rather than prepended.
+  // Deduped twice: mergedAuditIdsRef skips re-processing the same poll result across ticks, and the
+  // setAudit updater also drops anything whose id already exists in the CURRENT list - the id an
+  // entry arrives with is the ORIGINAL client-generated one (see addAudit's payload.localId /
+  // api/centre/audit.js), so a Centre's own action - already shown instantly via its own addAudit
+  // call - is recognised as the same entry once the poll echoes it back, instead of showing twice.
   const mergedAuditIdsRef = useRef(new Set());
   const mergeRemoteAudit = (entries) => {
     const fresh = (entries ?? []).filter((entry) => entry.id && !mergedAuditIdsRef.current.has(entry.id));
     if (!fresh.length) return;
     fresh.forEach((entry) => mergedAuditIdsRef.current.add(entry.id));
-    setAudit((prev) => [
-      ...fresh.map((entry) => ({
-        id: `SYNC-${entry.id}`,
+    setAudit((prev) => {
+      const existingIds = new Set(prev.map((item) => item.id));
+      const toAdd = fresh.filter((entry) => !existingIds.has(entry.id)).map((entry) => ({
+        id: entry.id,
         action: entry.action,
         target: entry.target,
         detail: entry.detail ?? "",
         time: entry.createdAt ? new Date(entry.createdAt).toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : nowStamp(),
         createdAt: entry.createdAt ?? new Date().toISOString(),
-      })),
-      ...prev,
-    ].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)));
+      }));
+      if (!toAdd.length) return prev;
+      return [...toAdd, ...prev].sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+    });
   };
   const queue = (type, detail = "") => setSync((prev) => [{ id: `S-${prev.length + 1}`, type, detail, status: "Pending sync" }, ...prev]);
   const payload = (roleName, id, token = `VETBARA-${roleName.toUpperCase()}-${id}-2026`) => {
@@ -1522,35 +1517,56 @@ function VetBaraPrototype() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggedCandidate?.id, loggedExaminer?.id]);
 
-  // Centre runs on its own device from Candidates/Examiners on the real portable LAN
-  // deployment, so its local `audit` state alone never sees their opens/closes/edits/
-  // fullscreen-exits/app-switches. Poll the server's sync-event log (already fed by
-  // sendSyncEvent from every session) and merge it in, so the audit trail reflects activity
-  // across every device while more than one candidate is going through the exam at once.
+  // Connectivity + session-boundary logging for WHICHEVER role is active - Candidate, Examiner, or
+  // Centre alike, unlike the fullscreen/backgrounding tracking above (exam-integrity signals that
+  // only make sense for a candidate actually taking the exam). "Went offline"/"back online" and
+  // "closed the workspace" apply to all three, and are exactly what a clean, auditable exam needs
+  // to show: not just what someone did, but when they briefly lost connection or walked away.
   useEffect(() => {
-    if (role !== "Centre") return undefined;
-    let cancelled = false;
-    async function pollRemoteAudit() {
+    const activeSubject = loggedCandidate
+      ? { name: loggedCandidate.name, role: "Candidate" }
+      : loggedExaminer
+        ? { name: loggedExaminer.name, role: "Examiner" }
+        : role === "Centre"
+          ? { name: centreExamId || "Centre", role: "Centre" }
+          : null;
+    if (!activeSubject) return undefined;
+
+    function onOffline() { addAudit("Connection lost", activeSubject.name, activeSubject.role); }
+    function onOnline() { addAudit("Connection restored", activeSubject.name, activeSubject.role); }
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+
+    // beforeunload cannot await a normal fetch - the page is already tearing down - so this uses
+    // sendBeacon, which the browser guarantees to deliver even as the tab closes. Best-effort: if
+    // sendBeacon itself is unavailable, the workspace-closed moment is simply not logged, same as
+    // today (never worse than before this effect existed).
+    function onBeforeUnload() {
+      if (!activeSessionToken || !navigator.sendBeacon) return;
+      const now = new Date().toISOString();
+      const label = activeSubject.role === "Centre" ? "Centre workspace closed" : `${activeSubject.role} workspace closed`;
+      const event = {
+        clientEventId: localEventId(`audit-close-${activeSubject.role}`),
+        type: "audit.logged",
+        entityType: "audit_entry",
+        entityId: `close-${activeSubject.role}-${Date.now()}`,
+        candidateId: activeSubject.role === "Candidate" ? loggedCandidate?.id : null,
+        payload: { action: label, target: activeSubject.name, detail: "", actorRole: activeSubject.role, time: nowStamp(), createdAt: now },
+        createdAt: now,
+      };
       try {
-        const response = await fetch("/api/sync/recent?limit=300", { cache: "no-store" });
-        if (!response.ok) return;
-        const data = await response.json();
-        const events = Array.isArray(data.events) ? data.events : [];
-        if (cancelled || !events.length) return;
-        const remoteEntries = events.map(syncEventToAuditEntry).reverse();
-        setAudit((prev) => {
-          const existingIds = new Set(prev.map((item) => item.id));
-          const fresh = remoteEntries.filter((item) => !existingIds.has(item.id));
-          return fresh.length ? [...fresh, ...prev] : prev;
-        });
-      } catch {
-        // Best-effort; the next poll tick will retry. Dev server / no backend just no-ops here.
-      }
+        navigator.sendBeacon("/api/sync/batch", new Blob([JSON.stringify({ sessionToken: activeSessionToken, events: [event] })], { type: "application/json" }));
+      } catch { /* best-effort */ }
     }
-    pollRemoteAudit();
-    const intervalId = window.setInterval(pollRemoteAudit, 8000);
-    return () => { cancelled = true; window.clearInterval(intervalId); };
-  }, [role]);
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedCandidate?.id, loggedExaminer?.id, role, activeSessionToken]);
 
   // Centre runs on its own device, so the results overview (Section E) only ever saw work done
   // in THIS browser (local state + localStorage). Outdoor assessments an examiner submits on a
@@ -1772,6 +1788,28 @@ function VetBaraPrototype() {
     }
     hydrateCentreResults();
     const intervalId = window.setInterval(hydrateCentreResults, 12000);
+    return () => { cancelled = true; window.clearInterval(intervalId); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, activeSessionToken]);
+
+  // Pulls in the persisted audit trail (every device's addAudit() calls, see api/centre/audit.js)
+  // so the Centre's own view isn't limited to what happened in this one browser tab since its last
+  // reload - a Candidate's or Examiner's own device entries (logins, section opens, identify)
+  // arrive here the same way outdoor scores/report drafts do above.
+  useEffect(() => {
+    if (role !== "Centre" || !activeSessionToken) return undefined;
+    let cancelled = false;
+    async function hydrateCentreAudit() {
+      try {
+        const result = await fetchCentreAudit(activeSessionToken);
+        if (cancelled) return;
+        mergeRemoteAudit(Array.isArray(result?.entries) ? result.entries : []);
+      } catch {
+        // Best-effort; the next tick retries.
+      }
+    }
+    hydrateCentreAudit();
+    const intervalId = window.setInterval(hydrateCentreAudit, 15000);
     return () => { cancelled = true; window.clearInterval(intervalId); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, activeSessionToken]);
@@ -10600,7 +10638,7 @@ function CentreReviewCell({ status, sectionKey, onClick, locked = false, lockedT
   );
 }
 
-function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreExamId, centreCode, examDate, place, onExamClosed, examClosed, t }) {
+function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreExamId, centreCode, examDate, place, onExamClosed, examClosed, addAudit, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
@@ -11094,12 +11132,19 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   function confirmIdentify(examinerId) {
     setIdentifiedExaminerId(examinerId);
     setPendingIdentify(false);
+    const examiner = examiners.find((item) => item.id === examinerId);
+    addAudit?.(
+      "Examiner identified in Centre",
+      examiner?.name || examinerId,
+      reviewTarget ? `${reviewTarget.candidate?.name ?? reviewTarget.candidate?.id} / ${reviewTarget.sectionKey}` : ""
+    );
   }
 
   function markCorrected() {
     if (!reviewTarget || !identifiedExaminer) return;
     const key = `${reviewTarget.candidate.id}:${reviewTarget.sectionKey}`;
     setCorrectionStatus((current) => ({ ...current, [key]: true }));
+    addAudit?.("Correction marked resolved in Centre", `${reviewTarget.candidate?.name ?? reviewTarget.candidate?.id} / ${reviewTarget.sectionKey}`, identifiedExaminer?.name || "");
   }
 
   const sections = [
@@ -12759,6 +12804,7 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             place={place}
             examClosed={examClosed}
             onExamClosed={markExamClosed}
+            addAudit={addAudit}
             t={t}
           />
         </AdminDashboardSection>
