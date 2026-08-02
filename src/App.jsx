@@ -1570,6 +1570,9 @@ function VetBaraPrototype() {
         try {
           const result = await fetchCandidateEvaluation(activeSessionToken, candidate.id);
           if (cancelled) return;
+          if (result._scopeRecoveryDebug) {
+            console.warn("Candidate evaluation exam-event scope mismatch", candidate.id, result._scopeRecoveryDebug);
+          }
           // Each submitted Outdoor assessment (one per examiner/mode) → Centre results store,
           // which drives the "closed" total shown per examiner in the Outdoor column.
           (Array.isArray(result.outdoorAssessments) ? result.outdoorAssessments : [])

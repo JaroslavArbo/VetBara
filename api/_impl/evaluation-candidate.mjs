@@ -102,18 +102,29 @@ async function sessionExamEventId(session) {
   } catch { /* best-effort */ }
   return "";
 }
-// The Centre's own "current" exam event can drift from the event id a specific candidate's own
-// sessions actually wrote under (e.g. the Centre re-ran setup / imported a new roster after the
-// candidate had already started their report) - the candidate's own roster row still knows which
-// event their own writes are scoped to. Used only as a Centre-role fallback below, after every
-// candidate-authored read under the Centre's own scope comes back completely empty.
-async function candidateOwnExamEventId(candidateId) {
+// The Centre's own "current" exam event can drift from whichever event id a specific candidate's
+// own sessions actually wrote under. sessionExamEventId() itself prefers the candidate's QR TOKEN
+// label over their roster row's exam_event_id column - so if a token was minted before a roster
+// re-import/re-setup moved the roster row to a newer event, the candidate's session (still using
+// that older token) keeps writing under the OLD event, while a Centre-role fallback that only
+// checks the roster row would miss it entirely. Returns every plausible scope (every QR token ever
+// issued to this candidate, plus the roster row) so the caller can try each one in turn.
+async function candidateOwnExamEventIds(candidateId) {
+  const scopes = new Set();
   try {
-    if (!envReady()) return "";
-    const rows = await supabase(`candidates?id=eq.${encodeURIComponent(candidateId)}&select=exam_event_id,updated_at&order=updated_at.desc&limit=1`);
-    return rows[0]?.exam_event_id || "";
+    if (!envReady()) return [];
+    // Every token ever issued (not just the active one - a regenerated token can leave an older,
+    // unrevoked one behind, and it's whichever one the candidate's own device actually used that
+    // decides the scope their writes were stamped with).
+    const tokenRows = await supabase(`qr_tokens?subject_id=eq.${encodeURIComponent(candidateId)}&role=eq.Candidate&select=label`);
+    for (const row of tokenRows ?? []) {
+      const eventId = String(row?.label || "").trim().split(/\s+/).pop() || "";
+      if (eventId.startsWith("EXAM-")) scopes.add(eventId);
+    }
+    const rosterRows = await supabase(`candidates?id=eq.${encodeURIComponent(candidateId)}&select=exam_event_id`);
+    if (rosterRows[0]?.exam_event_id) scopes.add(rosterRows[0].exam_event_id);
   } catch { /* best-effort */ }
-  return "";
+  return Array.from(scopes);
 }
 
 async function scopedRead(buildPath, examEventId) {
@@ -371,21 +382,40 @@ export default async function handler(request, response) {
       readRows("candidate_preparations", candidateId, examEventId).catch(() => []),
     ]);
 
-    // All four candidate-authored reads came back empty under the Centre's own scope - retry once
-    // under the candidate's OWN resolved exam event before concluding they really have no data.
-    // Examiner-authored reads (outdoor scores, examiner_score events) are scoped by the examiner's
-    // session instead and are not affected by this, so they are not retried.
-    if (session.role === "Centre" && !sections.length && !testResponses.length && !reportEvents.length && !preparations.length) {
-      const candidateScope = await candidateOwnExamEventId(candidateId);
-      if (candidateScope && candidateScope !== examEventId) {
-        [sections, testResponses, reportEvents, preparations] = await Promise.all([
-          readRows("candidate_sections", candidateId, candidateScope),
-          readRows("test_responses", candidateId, candidateScope),
-          readReportEvents(candidateId, candidateScope),
-          readRows("candidate_preparations", candidateId, candidateScope).catch(() => []),
+    // A Centre-role read that came back empty for one of the candidate-authored datasets is retried
+    // under every OTHER plausible scope for that candidate (their other QR tokens, their roster
+    // row) before concluding they really have no data - independently per dataset, since e.g. their
+    // section-open events and their report events can easily have been written under two different
+    // scopes if a token was regenerated partway through the exam. Examiner-authored reads (outdoor
+    // scores, examiner_score events) are scoped by the examiner's own session instead and are not
+    // affected by this, so they are not retried.
+    let scopeRecoveryDebug = null;
+    if (session.role === "Centre" && (!sections.length || !testResponses.length || !reportEvents.length || !preparations.length)) {
+      const candidateScopes = (await candidateOwnExamEventIds(candidateId)).filter((scope) => scope && scope !== examEventId);
+      scopeRecoveryDebug = { centreScope: examEventId, candidateScopesTried: candidateScopes, recoveredScopes: null };
+      if (candidateScopes.length) {
+        const recover = async (rows, readFn) => {
+          if (rows.length) return { rows, recoveredScope: null };
+          for (const scope of candidateScopes) {
+            const retried = await readFn(scope);
+            if (retried.length) return { rows: retried, recoveredScope: scope };
+          }
+          return { rows, recoveredScope: null };
+        };
+        const [sectionsResult, testResponsesResult, reportEventsResult, preparationsResult] = await Promise.all([
+          recover(sections, (scope) => readRows("candidate_sections", candidateId, scope)),
+          recover(testResponses, (scope) => readRows("test_responses", candidateId, scope)),
+          recover(reportEvents, (scope) => readReportEvents(candidateId, scope)),
+          recover(preparations, (scope) => readRows("candidate_preparations", candidateId, scope).catch(() => [])),
         ]);
-        if (sections.length || testResponses.length || reportEvents.length || preparations.length) {
-          console.warn("Candidate evaluation recovered via own exam-event scope (Centre scope was stale/mismatched)", { candidateId, centreScope: examEventId, candidateScope });
+        sections = sectionsResult.rows;
+        testResponses = testResponsesResult.rows;
+        reportEvents = reportEventsResult.rows;
+        preparations = preparationsResult.rows;
+        const recoveredScopes = { sections: sectionsResult.recoveredScope, testResponses: testResponsesResult.recoveredScope, reportEvents: reportEventsResult.recoveredScope, preparations: preparationsResult.recoveredScope };
+        scopeRecoveryDebug.recoveredScopes = recoveredScopes;
+        if (Object.values(recoveredScopes).some(Boolean)) {
+          console.warn("Candidate evaluation recovered via an alternate exam-event scope (Centre scope was stale/mismatched)", { candidateId, centreScope: examEventId, candidateScopesTried: candidateScopes, recoveredScopes });
         }
       }
     }
@@ -410,6 +440,10 @@ export default async function handler(request, response) {
       integrityEvents: buildIntegrityEvents(integrityEventRows),
       preparations,
       summary: buildSummary(sections, testResponses, outdoorScores),
+      // Centre-only, and only present when at least one candidate-authored dataset was empty under
+      // the Centre's own scope - visible in the Network tab response so a "still shows nothing"
+      // report can be diagnosed from what was actually tried, instead of guessing again.
+      ...(scopeRecoveryDebug ? { _scopeRecoveryDebug: scopeRecoveryDebug } : {}),
     });
   } catch (error) {
     console.error("Candidate evaluation read model failed", error);
