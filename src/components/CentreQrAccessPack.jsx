@@ -67,9 +67,11 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
                 : "";
               return (
                 <div key={c.id} className="rounded-2xl border bg-white p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mb-2">
                     <div className="font-semibold">{c.id} / {c.name}</div>
-                    <DeliveryModeToggle mode={mode} onChange={(m) => setCandidateModes((prev) => ({ ...prev, [c.id]: m }))} t={t} />
+                    <div className="mt-1 flex justify-end">
+                      <DeliveryModeToggle mode={mode} onChange={(m) => setCandidateModes((prev) => ({ ...prev, [c.id]: m }))} t={t} />
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     {mode === "print"
@@ -116,9 +118,11 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
               const mode = examinerModes[ex.id] ?? "print";
               return (
                 <div key={ex.id} className="rounded-2xl border bg-white p-3">
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mb-2">
                     <div className="font-semibold">{ex.id} / {ex.name}</div>
-                    <DeliveryModeToggle mode={mode} onChange={(m) => setExaminerModes((prev) => ({ ...prev, [ex.id]: m }))} t={t} />
+                    <div className="mt-1 flex justify-end">
+                      <DeliveryModeToggle mode={mode} onChange={(m) => setExaminerModes((prev) => ({ ...prev, [ex.id]: m }))} t={t} />
+                    </div>
                   </div>
                   <div className="flex gap-3">
                     {mode === "print"

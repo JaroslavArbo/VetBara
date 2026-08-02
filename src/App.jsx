@@ -3780,7 +3780,7 @@ function VetBaraPrototype() {
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} harmonogramSettings={harmonogramSettings} setHarmonogramSettings={setHarmonogramSettings} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
-      {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} t={t} />}
+      {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} activeSessionToken={activeSessionToken} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} activeSessionToken={activeSessionToken} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
@@ -9162,20 +9162,15 @@ function ScanCaptureMobilePage() {
 // needs none of the Test/Outdoor/Orientation plumbing — only the report_draft/report_photo sync
 // events and media storage, called directly here with the same payload shapes ReportSection's
 // updateReport/addReportPhoto use, so both entry points write into the exact same report draft.
-function ConsultingFieldMobilePage() {
-  const [uiLanguage] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "cs");
-  const t = makeTranslator(uiLanguage);
+// Shared field-capture UI for Consulting candidates - Tree A/B switch, photo/audio capture, the
+// always-visible marking-criteria panel, and the two-step submit. Takes an ALREADY-resolved
+// session as props rather than doing its own auth, so it can run two different ways: standalone
+// inside ConsultingFieldMobilePage (its own QR/session resolution, for the dedicated mobile link)
+// or embedded inside CandidateView (reusing the session already open in that tab, for the
+// "switch to mobile field mode" banner offered on a small screen) - same component, same sync
+// events, no separate token ever has to be minted for the in-app case.
+function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, onClose }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
-  const query = new URLSearchParams(window.location.search);
-  const qrToken = query.get("token") || "";
-  const candidateIdParam = query.get("id") || "";
-  const candidateNameParam = query.get("name") || "";
-
-  const [auth, setAuth] = useState({
-    status: qrToken ? "loading" : "error",
-    sessionToken: "", candidateId: candidateIdParam, candidateName: candidateNameParam,
-    error: qrToken ? "" : t("consultingField.missingToken"),
-  });
   const [activeTree, setActiveTree] = useState(REPORT_TREES[0]);
   const [draft, setDraft] = useState(createReportDraft());
   const draftRef = useRef(draft);
@@ -9198,44 +9193,16 @@ function ConsultingFieldMobilePage() {
   const voiceRecordingSupported = isRecordingSupported();
 
   function sendEvent(type, entityType, entityId, payload) {
-    if (auth.status !== "ready") return Promise.resolve();
     const createdAt = new Date().toISOString();
-    return syncBatch(auth.sessionToken, [{
+    return syncBatch(sessionToken, [{
       clientEventId: `${type}-${entityId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type, entityType, entityId, candidateId: auth.candidateId, payload, createdAt,
+      type, entityType, entityId, candidateId, payload, createdAt,
     }]).catch((error) => console.error("Consulting field sync failed", type, error));
   }
 
   useEffect(() => {
-    if (!qrToken) return undefined;
     let cancelled = false;
-    (async () => {
-      try {
-        const resolved = await resolveQrToken(qrToken);
-        if (cancelled) return;
-        if (resolved.role && resolved.role !== "Candidate") {
-          setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
-          return;
-        }
-        const sessionToken = resolved.sessionToken;
-        const boot = await bootstrapSession(sessionToken).catch(() => null);
-        if (cancelled) return;
-        const candidateId = resolved.subjectId || candidateIdParam;
-        const candidateName = boot?.candidate?.name || candidateNameParam || candidateId;
-        setAuth({ status: "ready", sessionToken, candidateId, candidateName, error: "" });
-      } catch (error) {
-        if (cancelled) return;
-        setAuth((prev) => ({ ...prev, status: "error", error: error?.message || t("consultingField.authFailed") }));
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qrToken]);
-
-  useEffect(() => {
-    if (auth.status !== "ready") return undefined;
-    let cancelled = false;
-    fetchCandidateEvaluation(auth.sessionToken, auth.candidateId)
+    fetchCandidateEvaluation(sessionToken, candidateId)
       .then((result) => {
         if (cancelled) return;
         if (result?.reportDraft && typeof result.reportDraft === "object") {
@@ -9245,14 +9212,14 @@ function ConsultingFieldMobilePage() {
           .some((section) => (section.section_key ?? section.sectionKey) === "report");
         if (!alreadyOpen && !sectionOpenedRef.current) {
           sectionOpenedRef.current = true;
-          sendEvent("candidate_section.opened", "candidate_section", `${auth.candidateId}:report`, { sectionKey: "report", openedAt: new Date().toISOString(), openedAtLabel: nowStamp() });
+          sendEvent("candidate_section.opened", "candidate_section", `${candidateId}:report`, { sectionKey: "report", openedAt: new Date().toISOString(), openedAtLabel: nowStamp() });
         }
       })
       .catch(() => undefined)
       .finally(() => { if (!cancelled) setDraftLoaded(true); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.status, auth.sessionToken, auth.candidateId]);
+  }, [sessionToken, candidateId]);
 
   // Seed the field-notes textarea from the loaded draft (or the criteria template when empty) only
   // when the active tree changes or the draft first finishes loading — not on every draft update,
@@ -9267,13 +9234,13 @@ function ConsultingFieldMobilePage() {
   function saveFieldNotes(value = fieldNotesDraft) {
     const tree = activeTree;
     setDraft((prev) => ({ ...prev, [tree]: { ...(prev[tree] ?? createReportDraft()[tree]), fieldNotes: value } }));
-    sendEvent("report_draft.saved", "report_draft", `${auth.candidateId}:report:${tree}:fieldNotes`, {
-      candidateId: auth.candidateId, sectionKey: "report", treeId: tree, fieldKey: "fieldNotes", fieldType: "fieldNotes", value, updatedAt: new Date().toISOString(),
+    sendEvent("report_draft.saved", "report_draft", `${candidateId}:report:${tree}:fieldNotes`, {
+      candidateId, sectionKey: "report", treeId: tree, fieldKey: "fieldNotes", fieldType: "fieldNotes", value, updatedAt: new Date().toISOString(),
     });
   }
 
   async function handlePhotoFile(file) {
-    if (!file || auth.status !== "ready") return;
+    if (!file) return;
     setPhotoBusy(true);
     setPhotoStatus("");
     const tree = activeTree;
@@ -9289,18 +9256,18 @@ function ConsultingFieldMobilePage() {
         return { ...prev, [tree]: { ...current, photos: [...(current.photos ?? []), photo] } };
       });
 
-      await sendEvent("report_photo.added", "report_photo", `${auth.candidateId}:report:${tree}:${photo.id}`, {
-        candidateId: auth.candidateId, sectionKey: "report", treeId: tree, photoId: photo.id, name: photo.name, type: photo.type,
+      await sendEvent("report_photo.added", "report_photo", `${candidateId}:report:${tree}:${photo.id}`, {
+        candidateId, sectionKey: "report", treeId: tree, photoId: photo.id, name: photo.name, type: photo.type,
         size: photo.size, hasDataUrl: true, description: "", useInReport: true, caption: photo.caption, capturedAt,
       });
 
       try {
         const blob = dataUrlToBlob(dataUrl);
-        const clientMediaId = `photo-${auth.candidateId}-${tree}-${photo.id}`;
-        const meta = { clientMediaId, type: "photo", mediaType: "photo", candidateId: auth.candidateId, examinerId: null, sectionKey: "report", tree, fileName: photo.name, mimeType: blob.type, sizeBytes: blob.size, durationMs: null, cleaned: false, caption: photo.caption, description: "" };
+        const clientMediaId = `photo-${candidateId}-${tree}-${photo.id}`;
+        const meta = { clientMediaId, type: "photo", mediaType: "photo", candidateId, examinerId: null, sectionKey: "report", tree, fileName: photo.name, mimeType: blob.type, sizeBytes: blob.size, durationMs: null, cleaned: false, caption: photo.caption, description: "" };
         await saveLocalMedia({ ...meta, blob, createdAt: capturedAt });
         try {
-          const uploaded = await uploadExamMedia(auth.sessionToken, meta, blob);
+          const uploaded = await uploadExamMedia(sessionToken, meta, blob);
           await updateLocalMedia(clientMediaId, { uploadState: uploaded.stored ? "uploaded" : "local", remoteId: uploaded.id ?? null });
         } catch {
           await updateLocalMedia(clientMediaId, { uploadState: "local" });
@@ -9361,26 +9328,26 @@ function ConsultingFieldMobilePage() {
       const result = await recorder.stop();
       if (!result?.blob || result.blob.size === 0) { setRecordingStatus("idle"); return; }
       const capturedAt = new Date().toISOString();
-      const clientMediaId = `report-audio-${auth.candidateId}-${tree}-${Date.now()}`;
+      const clientMediaId = `report-audio-${candidateId}-${tree}-${Date.now()}`;
       const ext = result.mimeType.includes("mp4") ? "m4a" : result.mimeType.includes("ogg") ? "ogg" : "webm";
-      const fileName = `report_${auth.candidateId}_${tree}_${capturedAt.replace(/[:.]/g, "-")}.${ext}`;
+      const fileName = `report_${candidateId}_${tree}_${capturedAt.replace(/[:.]/g, "-")}.${ext}`;
       const meta = {
-        clientMediaId, type: "audio", mediaType: "audio", candidateId: auth.candidateId, examinerId: null, sectionKey: "report", tree,
+        clientMediaId, type: "audio", mediaType: "audio", candidateId, examinerId: null, sectionKey: "report", tree,
         fileName, mimeType: result.mimeType, sizeBytes: result.blob.size, durationMs: result.durationMs, cleaned: true,
-        caption: `${auth.candidateName} — report ${tree}`,
+        caption: `${candidateName} — report ${tree}`,
         payload: { recordingStartedAt: recordingStartedAtRef.current ? new Date(recordingStartedAtRef.current).toISOString() : null },
       };
       await saveLocalMedia({ ...meta, blob: result.blob });
       let uploadState = "local";
       try {
-        const uploaded = await uploadExamMedia(auth.sessionToken, meta, result.blob);
+        const uploaded = await uploadExamMedia(sessionToken, meta, result.blob);
         uploadState = uploaded.stored ? "uploaded" : "local";
         await updateLocalMedia(clientMediaId, { uploadState, remoteId: uploaded.id ?? null });
       } catch {
         await updateLocalMedia(clientMediaId, { uploadState: "local" });
       }
-      await sendEvent("report_audio.added", "report_audio", `${auth.candidateId}:report:${tree}:${clientMediaId}`, {
-        candidateId: auth.candidateId, sectionKey: "report", treeId: tree, clientMediaId, fileName, durationMs: result.durationMs, capturedAt, uploadState,
+      await sendEvent("report_audio.added", "report_audio", `${candidateId}:report:${tree}:${clientMediaId}`, {
+        candidateId, sectionKey: "report", treeId: tree, clientMediaId, fileName, durationMs: result.durationMs, capturedAt, uploadState,
       });
       setDraft((prev) => {
         const current = prev[tree] ?? createReportDraft()[tree];
@@ -9398,7 +9365,7 @@ function ConsultingFieldMobilePage() {
   async function finalizeSubmit() {
     setSubmitBusy(true);
     saveFieldNotes();
-    await sendEvent("candidate_section.closed", "candidate_section", `${auth.candidateId}:report`, {
+    await sendEvent("candidate_section.closed", "candidate_section", `${candidateId}:report`, {
       sectionKey: "report", closedAt: new Date().toISOString(), closedAtLabel: nowStamp(),
     });
     setSubmitBusy(false);
@@ -9406,29 +9373,13 @@ function ConsultingFieldMobilePage() {
     setSubmitted(true);
   }
 
-  if (auth.status === "error") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <div className="max-w-sm rounded-2xl border border-rose-500 bg-rose-950 p-5 text-center">
-          <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-rose-300" />
-          <p className="text-sm text-rose-100">{auth.error || t("consultingField.authFailed")}</p>
-        </div>
-      </main>
-    );
-  }
-  if (auth.status !== "ready") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
-        <p className="text-sm text-slate-300">{t("consultingField.loading")}</p>
-      </main>
-    );
-  }
   if (submitted) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
         <div className="max-w-sm rounded-2xl border border-emerald-500 bg-emerald-950 p-5 text-center">
           <Check className="mx-auto mb-2 h-8 w-8 text-emerald-300" />
           <p className="text-sm text-emerald-100">{t("consultingField.submitted")}</p>
+          {onClose && <button type="button" onClick={onClose} className="mt-4 rounded-2xl bg-white px-4 py-2 text-sm font-bold text-slate-950">{t("common.back")}</button>}
         </div>
       </main>
     );
@@ -9443,9 +9394,12 @@ function ConsultingFieldMobilePage() {
   return (
     <main className="min-h-screen bg-slate-950 pb-28 text-white">
       <div className="mx-auto max-w-md p-4">
-        <div className="mb-3">
-          <div className="text-xs uppercase tracking-wide text-slate-400">{t("consultingField.title")}</div>
-          <div className="text-lg font-bold">{auth.candidateName}</div>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-slate-400">{t("consultingField.title")}</div>
+            <div className="text-lg font-bold">{candidateName}</div>
+          </div>
+          {onClose && <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300">{t("common.back")}</button>}
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-2">
@@ -9577,6 +9531,71 @@ function ConsultingFieldMobilePage() {
       )}
     </main>
   );
+}
+
+// Thin wrapper: resolves its own QR/session (mode=consulting-field, scanned fresh on the
+// candidate's own phone) and hands the result to ConsultingFieldCapture. Kept separate from the
+// embedded in-app use (the "switch to mobile field mode" banner in CandidateView) so a page
+// opened straight from a QR code never needs an existing app session to work.
+function ConsultingFieldMobilePage() {
+  const [uiLanguage] = useState(() => (typeof window !== "undefined" && window.localStorage.getItem("vetbara-field-tablet-lang")) || "cs");
+  const t = makeTranslator(uiLanguage);
+  const query = new URLSearchParams(window.location.search);
+  const qrToken = query.get("token") || "";
+  const candidateIdParam = query.get("id") || "";
+  const candidateNameParam = query.get("name") || "";
+
+  const [auth, setAuth] = useState({
+    status: qrToken ? "loading" : "error",
+    sessionToken: "", candidateId: candidateIdParam, candidateName: candidateNameParam,
+    error: qrToken ? "" : t("consultingField.missingToken"),
+  });
+
+  useEffect(() => {
+    if (!qrToken) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resolved = await resolveQrToken(qrToken);
+        if (cancelled) return;
+        if (resolved.role && resolved.role !== "Candidate") {
+          setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
+          return;
+        }
+        const sessionToken = resolved.sessionToken;
+        const boot = await bootstrapSession(sessionToken).catch(() => null);
+        if (cancelled) return;
+        const candidateId = resolved.subjectId || candidateIdParam;
+        const candidateName = boot?.candidate?.name || candidateNameParam || candidateId;
+        setAuth({ status: "ready", sessionToken, candidateId, candidateName, error: "" });
+      } catch (error) {
+        if (cancelled) return;
+        setAuth((prev) => ({ ...prev, status: "error", error: error?.message || t("consultingField.authFailed") }));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrToken]);
+
+  if (auth.status === "error") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <div className="max-w-sm rounded-2xl border border-rose-500 bg-rose-950 p-5 text-center">
+          <AlertTriangle className="mx-auto mb-2 h-8 w-8 text-rose-300" />
+          <p className="text-sm text-rose-100">{auth.error || t("consultingField.authFailed")}</p>
+        </div>
+      </main>
+    );
+  }
+  if (auth.status !== "ready") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <p className="text-sm text-slate-300">{t("consultingField.loading")}</p>
+      </main>
+    );
+  }
+
+  return <ConsultingFieldCapture sessionToken={auth.sessionToken} candidateId={auth.candidateId} candidateName={auth.candidateName} t={t} />;
 }
 
 function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBank, setOutdoorItemsByLevel, setActiveAdminPackageMeta, setTestImportSummary, setCentreSetupDirty, language, t }) {
@@ -12975,11 +12994,36 @@ async function fetchCandidateFieldPackage(candidate) {
   throw lastError || new Error("Field package is not available.");
 }
 
-function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, moveReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, t }) {
+function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, moveReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, activeSessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   // "" | "sending" | "done" — the button is white until a transfer succeeds, then green, and goes
   // back to white on the next change so it always reflects the *current* state, never a stale one.
   const [candidateSendState, setCandidateSendState] = useState("");
+
+  // Offers the simplified mobile report-capture screen to a Consulting candidate who opened their
+  // ordinary access link on a small screen - a nudge, not a redirect: same standard QR/link works
+  // on any device, this just suggests the better fit rather than forcing it (see the "device-
+  // responsive vs. a second QR" discussion this was built from). Dismissal is remembered only for
+  // this browser tab's session, not forever, so it resets on the next exam day.
+  const mobileFieldBannerKey = loggedCandidate ? `vetbara-mobile-field-banner-dismissed-${loggedCandidate.id}` : "";
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1280));
+  const [mobileFieldBannerDismissed, setMobileFieldBannerDismissed] = useState(() => {
+    try { return mobileFieldBannerKey ? sessionStorage.getItem(mobileFieldBannerKey) === "1" : false; } catch { return false; }
+  });
+  const [showFieldCaptureOverlay, setShowFieldCaptureOverlay] = useState(false);
+  useEffect(() => {
+    function onResize() { setViewportWidth(window.innerWidth); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  function dismissMobileFieldBanner() {
+    setMobileFieldBannerDismissed(true);
+    try { if (mobileFieldBannerKey) sessionStorage.setItem(mobileFieldBannerKey, "1"); } catch { /* best-effort */ }
+  }
+  const showMobileFieldBanner = Boolean(
+    loggedCandidate && activeSessionToken && candidateLevel(loggedCandidate) === "Consulting" &&
+    viewportWidth < 700 && !mobileFieldBannerDismissed && activeSection === "landing"
+  );
 
   async function sendCandidateDataToServer() {
     setCandidateSendState("sending");
@@ -13162,7 +13206,19 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
     return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} setActiveSection={setActiveSection} t={t} />;
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  if (loggedCandidate && showFieldCaptureOverlay && activeSessionToken) {
+    return (
+      <ConsultingFieldCapture
+        sessionToken={activeSessionToken}
+        candidateId={loggedCandidate.id}
+        candidateName={loggedCandidate.name}
+        t={t}
+        onClose={() => setShowFieldCaptureOverlay(false)}
+      />
+    );
+  }
+
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{showMobileFieldBanner && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm text-emerald-950">{t("consultingField.bannerText")}</p><button type="button" onClick={dismissMobileFieldBanner} aria-label={t("common.close")} className="shrink-0 rounded-full p-1 text-lg leading-none text-emerald-700 hover:bg-emerald-100">×</button></div><div className="mt-3"><Button onClick={() => setShowFieldCaptureOverlay(true)} className="rounded-2xl">{t("consultingField.bannerSwitch")}</Button></div></div>}{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},

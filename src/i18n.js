@@ -2827,6 +2827,8 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "consultingField.title": "Field data collection",
+  "consultingField.bannerText": "Looks like you're on a phone. Switch to the simplified screen for taking report photos and recordings?",
+  "consultingField.bannerSwitch": "Switch to mobile field data collection",
   "consultingField.missingToken": "This link is missing its access token. Ask the certification centre for the mobile field-data QR code.",
   "consultingField.wrongRole": "This QR code does not belong to a candidate access link.",
   "consultingField.authFailed": "This link could not be verified. Ask the certification centre for a fresh QR code.",
@@ -2847,6 +2849,8 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "consultingField.title": "Sběr terénních dat",
+  "consultingField.bannerText": "Vypadá to, že jste na mobilu. Přepnout na zjednodušenou obrazovku pro focení a nahrávání pro report?",
+  "consultingField.bannerSwitch": "Přepnout na mobilní sběr dat",
   "consultingField.missingToken": "Tomuto odkazu chybí přístupový token. Vyžádejte si od centra certifikace mobilní QR kód pro terénní sběr dat.",
   "consultingField.wrongRole": "Tento QR kód nepatří k přístupovému odkazu kandidáta.",
   "consultingField.authFailed": "Tento odkaz se nepodařilo ověřit. Vyžádejte si od centra certifikace nový QR kód.",
