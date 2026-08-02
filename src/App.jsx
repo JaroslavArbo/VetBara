@@ -387,6 +387,17 @@ const REPORT_MARKING_SECTIONS = [
     key: "basic",
     title: "Section 1 - Basic information regarding the tree",
     perTreeMax: 5,
+    items: [
+      { key: "species", title: "Tree species identification", max: 1 },
+      { key: "measurements", title: "Measurements (girth, crown spread, height)", max: 1 },
+      { key: "form", title: "Tree form", max: 1 },
+      { key: "treeNumber", title: "Tree number / recording tag", max: 1 },
+      { key: "gridRef", title: "Grid reference / location on a plan", max: 1 },
+      { key: "conditions", title: "Conditions in which the tree is located", max: 1 },
+      { key: "photo", title: "Photograph locating the tree", max: 1 },
+      { key: "topography", title: "Topography", max: 1 },
+      { key: "soil", title: "Soil", max: 1 },
+    ],
     guidance: [
       "1 mark for any of the following:",
       "Correct tree species identification.",
@@ -404,6 +415,18 @@ const REPORT_MARKING_SECTIONS = [
     key: "health",
     title: "Section 2 - Health and vitality of the tree",
     perTreeMax: 10,
+    items: [
+      { key: "condition", title: "Condition score", max: 2 },
+      { key: "leafDensity", title: "Leaf / bud density", max: 2 },
+      { key: "leafSize", title: "Leaf size / colour", max: 2 },
+      { key: "extension", title: "Extension growth", max: 2 },
+      { key: "branchStructure", title: "Branch structure (ramification)", max: 2 },
+      { key: "crownSize", title: "Size of living crown / amount of foliage", max: 2 },
+      { key: "woundwood", title: "Woundwood, callous, occlusion", max: 2 },
+      { key: "adaptiveGrowth", title: "Adaptive growth", max: 2 },
+      { key: "epicormic", title: "Epicormic growth", max: 2 },
+      { key: "crownAge", title: "Consideration of different condition / age of the crown", max: 2 },
+    ],
     guidance: [
       "2 marks (poor) - correct 'condition score' only.",
       "4 marks (fair) - condition score and up to 2 pieces of supporting information.",
@@ -417,6 +440,15 @@ const REPORT_MARKING_SECTIONS = [
     key: "structure",
     title: "Section 3 - Structural condition (biomechanics) of the tree",
     perTreeMax: 10,
+    items: [
+      { key: "condition", title: "Condition score", max: 2 },
+      { key: "defects", title: "Biomechanical defect(s)", max: 2 },
+      { key: "fungal", title: "Fungal fruiting bodies / type & extent of decay", max: 2 },
+      { key: "history", title: "History of management, lapses, ongoing management", max: 2 },
+      { key: "failures", title: "Structural failures", max: 2 },
+      { key: "differentSections", title: "Different sections of the tree / functional units", max: 2 },
+      { key: "adaptiveGrowth", title: "Adaptive growth (or lack thereof)", max: 2 },
+    ],
     guidance: [
       "2 marks (poor) - correct 'condition score' only.",
       "4 marks (fair) - condition score and at least 1 piece of supporting information.",
@@ -430,6 +462,12 @@ const REPORT_MARKING_SECTIONS = [
     key: "values",
     title: "Section 4 - Wildlife, historical, cultural or social values of the tree",
     perTreeMax: 6,
+    items: [
+      { key: "wildlife", title: "Wildlife", max: 3 },
+      { key: "historical", title: "Historical", max: 3 },
+      { key: "cultural", title: "Cultural", max: 3 },
+      { key: "social", title: "Social values", max: 3 },
+    ],
     guidance: [
       "Marks under 2 headings only (wildlife, historical, cultural, social values); maximum 3 marks per heading.",
       "1 mark (poor) - basic description of the value.",
@@ -441,6 +479,10 @@ const REPORT_MARKING_SECTIONS = [
     key: "threats",
     title: "Section 5 - Threats to the tree",
     perTreeMax: 6,
+    items: [
+      { key: "threat", title: "Threat (identification, cause, affected parts, duration)", max: 3 },
+      { key: "doNothing", title: "What happens if management is not undertaken ('do nothing')", max: 3 },
+    ],
     guidance: [
       "3 marks for describing the threat, 3 marks for discussing 'do nothing'.",
       "Threat: correct identification of the threat, of its cause, which parts of the tree it affects, how long it has been posing a threat.",
@@ -462,6 +504,12 @@ const REPORT_MARKING_SECTIONS = [
     key: "justification",
     title: "Section 7 - Management justification summary",
     perTreeMax: 10,
+    items: [
+      { key: "justification", title: "Justification", max: 3 },
+      { key: "positive", title: "Positive impacts on the tree", max: 3 },
+      { key: "negative", title: "Negative impacts on the tree", max: 3 },
+      { key: "convincing", title: "Convincing the tree owner", max: 1 },
+    ],
     guidance: [
       "3 marks for the justification (good 3, fair 2, poor 1, none 0).",
       "3 marks for consideration of positive impacts on the tree.",
@@ -516,6 +564,40 @@ function reportPlanScore(mark) {
     return Math.min(REPORT_PLAN_CAP, sum);
   }
   return Number(mark.score) || 0;
+}
+
+// Generalises reportPlanScore to every section: the section score is the capped sum of its item
+// points. Falls back to the legacy flat `.score` for marks saved before per-item scoring existed
+// (a section only switches to items once at least one item has been given a value), so nothing
+// already marked resets to 0.
+function reportSectionScore(section, mark) {
+  if (!section) return 0;
+  if (section.key === "plan") return reportPlanScore(mark);
+  const hasItems = mark && mark.items && typeof mark.items === "object" && Object.keys(mark.items).length > 0;
+  if (hasItems && Array.isArray(section.items)) {
+    const sum = section.items.reduce((total, item) => total + (Number(mark.items[item.key]) || 0), 0);
+    return Math.min(section.perTreeMax, sum);
+  }
+  return Number(mark?.score) || 0;
+}
+
+// The .xlsx workbook (examWorkbooks.js) reads one `.score` per section per tree. Now that sections
+// are scored per item, stamp each section mark with its computed (capped) score before handing the
+// report off, so the official workbook cell contract stays exactly as it was.
+function withComputedReportSectionScores(marks) {
+  if (!marks || typeof marks !== "object") return marks;
+  const next = { ...marks };
+  REPORT_TREES.forEach((treeName) => {
+    const tree = marks[treeName];
+    if (!tree || typeof tree !== "object") return;
+    const nextTree = { ...tree };
+    REPORT_MARKING_SECTIONS.forEach((section) => {
+      const mark = tree[section.key];
+      if (mark && typeof mark === "object") nextTree[section.key] = { ...mark, score: reportSectionScore(section, mark) };
+    });
+    next[treeName] = nextTree;
+  });
+  return next;
 }
 
 // Whole-plan marks, not per tree: 3 each, 9 in total.
@@ -5831,7 +5913,7 @@ function reportMarksTotal(marks) {
   const perTree = REPORT_TREES.reduce((sum, treeName) => sum
     + REPORT_MARKING_SECTIONS.reduce((inner, section) => {
       const mark = marks?.[treeName]?.[section.key];
-      return inner + (section.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+      return inner + reportSectionScore(section, mark);
     }, 0), 0);
   const clarity = REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + (Number(marks?.clarity?.[item.key]) || 0), 0);
   return perTree + clarity;
@@ -10613,7 +10695,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
               const treeMarks = marks[treeName] || {};
               return REPORT_MARKING_SECTIONS.reduce((sum, s) => {
                 const mark = treeMarks[s.key];
-                return sum + (s.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+                return sum + reportSectionScore(s, mark);
               }, 0);
             };
             const activeTree = treeDrafts[activeReportTree] || {};
@@ -10721,8 +10803,11 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                       // min-h so each section takes up roughly the full modal height - candidate
                       // text, grading guidance and the score/comment all need room at once.
                       <div key={section.key} className="min-h-[70vh] rounded-2xl border bg-slate-50 p-4">
-                        <div className="text-sm font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
-                        <div className="mt-3 grid flex-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)]">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                          <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(reportSectionScore(section, mark))} / {section.perTreeMax} b.</div>
+                        </div>
+                        <div className="mt-3 grid flex-1 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1.7fr)]">
                           <div className="min-w-0 rounded-xl border bg-white p-3">
                             <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{t("centre.review.candidateAnswer")}</div>
                             <div className="whitespace-pre-wrap text-sm text-slate-800">{sectionText || <em>{t("centre.review.noAnswer")}</em>}</div>
@@ -10733,21 +10818,15 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                               {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
                             </ul>
                           </div>
-                          <div className="flex flex-col items-center gap-1 rounded-xl border bg-white p-3">
-                            {identifiedExaminer ? (
-                              <input
-                                type="number"
-                                step="0.5"
-                                min="0"
-                                max={section.perTreeMax}
-                                value={mark.score ?? ""}
-                                onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, section.key, { score: event.target.value })}
-                                className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${mark.score ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
-                              />
-                            ) : (
-                              <span className="text-sm font-semibold">{mark.score ? formatHalfPointScore(Number(mark.score)) : "-"}</span>
-                            )}
-                            <div className="text-[11px] text-slate-500">/ {section.perTreeMax} b.</div>
+                          <div className="min-w-0 rounded-xl border bg-white p-3">
+                            <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">{t("centre.review.itemMarks")}</div>
+                            <ReportSectionItems
+                              section={section}
+                              mark={mark}
+                              editable={Boolean(identifiedExaminer)}
+                              onItemChange={(itemKey, value) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, section.key, { items: { ...(mark.items || {}), [itemKey]: value } })}
+                              t={t}
+                            />
                           </div>
                         </div>
                         {identifiedExaminer ? (
@@ -11104,7 +11183,7 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
     const outside = Object.values(outdoorItemsByLevel?.[level] || {}).flatMap((items) =>
       (items || []).map((item) => asScore(outdoorScores[item.id])));
 
-    const report = level === "Consulting" ? readReportMarks(candidate.id) : undefined;
+    const report = level === "Consulting" ? withComputedReportSectionScores(readReportMarks(candidate.id)) : undefined;
 
     return {
       candidate: {
@@ -17088,6 +17167,41 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
   );
 }
 
+// Shared per-item marking rubric for a report section (Section 1-5, 7). Renders one small point
+// input per sub-item (leaf size, structure, ...) exactly like the management-plan table already did,
+// so the examiner scores the parts and the section total is their capped sum. Used by both the
+// examiner's report review and the Centre's section-E correction modal.
+function ReportSectionItems({ section, mark, editable, onItemChange, t }) {
+  const items = section?.items || [];
+  if (!items.length) return null;
+  const values = mark?.items || {};
+  return (
+    <div className="space-y-1.5">
+      {items.map((item) => (
+        <div key={item.key} className="flex items-center justify-between gap-3 rounded-lg border bg-slate-50 p-2">
+          <div className="min-w-0 text-xs text-slate-700">{item.title}</div>
+          <label className="flex shrink-0 items-center gap-1 text-[10px] text-slate-500">
+            {editable ? (
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max={item.max}
+                value={values[item.key] ?? ""}
+                onChange={(event) => onItemChange(item.key, event.target.value)}
+                className="w-14 rounded-lg border bg-white p-1 text-right text-xs font-bold text-slate-950"
+              />
+            ) : (
+              <span className="w-14 text-right text-sm font-bold text-slate-900">{values[item.key] ?? "-"}</span>
+            )}
+            / {item.max}
+          </label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenReview, setActivePage, examinerName, activeAdminPackageMeta, onReportMarked, t }) {
   const candidateId = selectedCandidate?.id || "";
   const [marks, setMarks] = useState(() => readReportMarks(candidateId));
@@ -17235,7 +17349,7 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
           const treeMarks = marks[treeName] || {};
           const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => {
             const mark = treeMarks[section.key];
-            return sum + (section.key === "plan" ? reportPlanScore(mark) : (Number(mark?.score) || 0));
+            return sum + reportSectionScore(section, mark);
           }, 0);
           const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
           return (
@@ -17326,33 +17440,26 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
                   return (
                     <div key={section.key} className="grid gap-3 rounded-2xl border bg-white p-3 lg:grid-cols-2">
                       <div className="min-w-0">
-                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{section.title}</div>
+                          <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{formatHalfPointScore(reportSectionScore(section, mark))} / {section.perTreeMax}</div>
+                        </div>
                         <div className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm">
                           {candidateText || <em className="text-slate-400">{t("examiner.reportReview.missing")}</em>}
                         </div>
                       </div>
                       <div className="min-w-0 border-t pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <ul className="min-w-0 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-slate-600">
+                        <ReportSectionItems section={section} mark={mark} editable onItemChange={(itemKey, value) => updateMark(treeName, section.key, { items: { ...(mark.items || {}), [itemKey]: value } })} t={t} />
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-[11px] font-semibold text-slate-500">{t("examiner.reportReview.guidance")}</summary>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] leading-snug text-slate-600">
                             {section.guidance.map((line, guidanceIndex) => <li key={guidanceIndex}>{line}</li>)}
                           </ul>
-                          <label className="shrink-0 text-xs font-semibold text-slate-600">
-                            {t("centre.scan.score")} / {section.perTreeMax}
-                            <input
-                              type="number"
-                              step="0.5"
-                              min="0"
-                              max={section.perTreeMax}
-                              value={mark.score ?? ""}
-                              onChange={(event) => updateMark(treeName, section.key, { score: event.target.value })}
-                              className="mt-1 block w-24 rounded-lg border p-1 text-right text-sm font-bold"
-                            />
-                          </label>
-                        </div>
+                        </details>
                         <textarea
                           value={mark.comment ?? ""}
                           onChange={(event) => updateMark(treeName, section.key, { comment: event.target.value })}
-                          rows={3}
+                          rows={2}
                           placeholder={t("examiner.reportReview.commentPlaceholder")}
                           className="mt-2 w-full rounded-xl border p-2 text-sm"
                         />
