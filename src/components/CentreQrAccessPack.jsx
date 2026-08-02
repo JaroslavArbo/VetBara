@@ -77,12 +77,6 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
             {candidates.map((c) => {
               const accessUrl = accessUrlFor(c.id, candidateQrUrl);
               const mode = candidateModes[c.id] ?? "print";
-              // Consulting candidates get a second, dedicated link for the mobile report field-data
-              // page (photos + audio for Tree A/B) - meant to be scanned with their own phone while
-              // their main candidate session for Test/Outdoor stays on the shared exam tablet.
-              const mobileFieldUrl = c.level === "Consulting" && accessUrl
-                ? (() => { try { const u = new URL(accessUrl); u.searchParams.set("mode", "consulting-field"); return u.toString(); } catch { return ""; } })()
-                : "";
               return (
                 <div key={c.id} className="rounded-2xl border bg-white p-3">
                   <div className="mb-2">
@@ -115,15 +109,6 @@ export function CentreQrAccessPack({ candidates, examiners, candidateQrUrl, exam
                         : <div className="mt-2 text-[11px] font-medium text-amber-800">{tr(t, "qr.missing", "Save the Centre setup to issue this person's access link.")}</div>}
                     </div>
                   </div>
-                  {mobileFieldUrl && (
-                    <div className="mt-3 border-t pt-3">
-                      <div className="mb-1 text-xs font-semibold text-slate-600">{tr(t, "qr.consultingField.label", "Mobilní sběr dat (report)")}</div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={() => window.open(mobileFieldUrl, "_blank", "noopener")} variant="outline" className="rounded-2xl">{tr(t, "qr.consultingField.open", "Otevřít")}</Button>
-                        <Button onClick={() => copyQrLink(`${c.id}-field`, mobileFieldUrl)} variant="outline" className="rounded-2xl">{tr(t, "qr.copy", "Copy link")}</Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}

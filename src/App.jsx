@@ -12092,6 +12092,26 @@ function printHarmonogramPdf(welcome, groups, days, t) {
     </section>`;
   }).join("");
 
+  // The exam programme's "detail" half: what each activity on the timeline actually involves, plus
+  // the general notes (mirrors the reference Bologna programme's footnotes). Only activities that
+  // appear in this schedule are listed, in day order, each with its timeline colour swatch.
+  const activityOrder = ["welcome", "outdoor", "written", "report", "break", "lunch", "finish"];
+  const usedActivities = Array.from(new Set([welcome.activity, ...groups.flatMap((g) => g.blocks.map((b) => b.activity))]));
+  const orderedActivities = activityOrder.filter((a) => usedActivities.includes(a)).concat(usedActivities.filter((a) => !activityOrder.includes(a)));
+  const detailRows = orderedActivities.map((activity) => `<tr>
+      <td style="border:1px solid #ccc;padding:2mm;white-space:nowrap;font-weight:600"><span style="display:inline-block;width:4mm;height:4mm;border-radius:2px;background:${harmonogramActivityColor(activity)};vertical-align:middle;margin-right:2mm"></span>${escapeHtml(t(`harmonogram.activity.${activity}`))}</td>
+      <td style="border:1px solid #ccc;padding:2mm">${escapeHtml(t(`harmonogram.detail.${activity}`))}</td>
+    </tr>`).join("");
+  const detailsSection = `<section style="break-before:page">
+      <h1 style="font-size:14pt;margin:0 0 6mm">${escapeHtml(t("harmonogram.detailsTitle"))}</h1>
+      <table style="width:100%;border-collapse:collapse;font-size:9.5pt"><tbody>${detailRows}</tbody></table>
+      <h2 style="font-size:12pt;margin-top:6mm">${escapeHtml(t("harmonogram.notesTitle"))}</h2>
+      <ul style="font-size:9.5pt;margin:0;padding-left:5mm">
+        <li style="margin-bottom:1.5mm">${escapeHtml(t("harmonogram.note.coffee"))}</li>
+        <li>${escapeHtml(t("harmonogram.note.weather"))}</li>
+      </ul>
+    </section>`;
+
   const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(t("harmonogram.pdfTitle"))}</title><style>
     @page{size:A4 portrait;margin:14mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10pt}
     @media print{.actions{display:none}}
@@ -12099,6 +12119,7 @@ function printHarmonogramPdf(welcome, groups, days, t) {
   </style></head><body>
     <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
     ${dayPages}
+    ${detailsSection}
   </body></html>`;
   openPrintDocument(html, () => window.alert(t("harmonogram.printBlocked")));
 }
@@ -14930,7 +14951,7 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
             onChange={(e) => setFieldNotesDraft(e.target.value)}
             onBlur={() => updateReport(activeReportTree, "fieldNotes", fieldNotesDraft, "fieldNotes")}
             placeholder={t("report.fieldPlaceholder")}
-            className="mt-3 min-h-72 w-full rounded-xl border bg-white p-4 text-base"
+            className="mt-3 min-h-72 w-full rounded-xl border bg-white p-4 text-base text-blue-700"
             style={{ resize: "vertical" }}
             autoCapitalize="sentences"
             autoComplete="off"
