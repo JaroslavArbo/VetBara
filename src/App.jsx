@@ -12309,7 +12309,31 @@ function harmonogramFontSize(zoomY, base, min, max) {
 // Independent horizontal (time scale) and vertical (row height) zoom, since a coordinator might
 // want a wide overview of the whole day or a tall, easy-to-tap view for fine-grained dragging on
 // a tablet - not always the same tradeoff.
-function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onResizeBlock, onDeleteBlock, t, maxHeight }) {
+// The outdoor exam block runs several stations/parts back-to-back for each pair of candidates. That
+// division is edited on the timeline (double-click an outdoor block) and defaults to ONE shared
+// layout used by every group; a group can then override it. Stored on the harmonogram settings so
+// it rides the Centre setup save/localStorage like the rest of the schedule config.
+const DEFAULT_OUTDOOR_PARTS = [
+  { id: "generic", name: "Generic part", minutes: 30 },
+  { id: "ex2", name: "Exercise 2 / Station B", minutes: 20 },
+  { id: "ex3", name: "Exercise 3 / Station C", minutes: 20 },
+  { id: "ex4", name: "Exercise 4 / Station D", minutes: 20 },
+  { id: "treePrep", name: "Tree preparation", minutes: 15 },
+  { id: "interview", name: "Candidate interview (CV)", minutes: 15 },
+];
+
+function harmonogramSharedOutdoorParts(settings) {
+  return Array.isArray(settings?.outdoorParts) && settings.outdoorParts.length ? settings.outdoorParts : DEFAULT_OUTDOOR_PARTS;
+}
+
+// A group's outdoor parts = its own override if it has one, otherwise the shared division that the
+// first group defines for everyone.
+function harmonogramOutdoorParts(settings, groupId) {
+  const override = settings?.outdoorPartsByGroup?.[groupId];
+  return Array.isArray(override) ? override : harmonogramSharedOutdoorParts(settings);
+}
+
+function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onResizeBlock, onDeleteBlock, onEditOutdoor, t, maxHeight }) {
   const [zoomX, setZoomX] = useState(1);
   const [zoomY, setZoomY] = useState(1);
   const pxPerMinute = HARMONOGRAM_BASE_PX_PER_MINUTE * zoomX;
@@ -12364,11 +12388,13 @@ function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onRe
 
   function renderBlock(groupId, block) {
     const isBreakLike = block.activity === "break" || block.activity === "lunch";
+    const isOutdoor = block.activity === "outdoor";
     return (
       <div
         key={block.id}
         onPointerDown={(event) => startDrag(groupId, block, event)}
-        className="absolute top-0 flex cursor-grab items-center justify-center overflow-hidden rounded-md border border-white/60 px-1 text-center font-semibold text-slate-900 active:cursor-grabbing"
+        onDoubleClick={isOutdoor && onEditOutdoor ? (event) => { event.stopPropagation(); onEditOutdoor(groupId, block); } : undefined}
+        className={`absolute top-0 flex cursor-grab items-center justify-center overflow-hidden rounded-md border px-1 text-center font-semibold text-slate-900 active:cursor-grabbing ${isOutdoor && onEditOutdoor ? "border-orange-700/60 ring-1 ring-inset ring-orange-700/40" : "border-white/60"}`}
         style={{
           left: `${(block.start - minStart) * pxPerMinute}px`,
           width: `${Math.max(6, block.duration * pxPerMinute - 2)}px`,
@@ -12377,9 +12403,14 @@ function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onRe
           background: harmonogramActivityColor(block.activity),
           touchAction: "none",
         }}
-        title={`${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
+        title={isOutdoor && onEditOutdoor
+          ? `${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min — ${t("harmonogram.outdoor.editHint")}`
+          : `${harmonogramTimeLabel(block.start)} · ${t(`harmonogram.activity.${block.activity}`)} · ${block.duration} min`}
       >
         {block.duration * pxPerMinute > 40 ? t(`harmonogram.activity.${block.activity}`) : ""}
+        {isOutdoor && onEditOutdoor && block.duration * pxPerMinute > 24 && (
+          <span className="pointer-events-none absolute bottom-0.5 right-1 text-[9px] font-bold leading-none text-orange-900/80">⋯</span>
+        )}
         {isBreakLike && (
           <>
             <button
@@ -12457,16 +12488,91 @@ function HarmonogramTimeline({ welcome, groups, onMoveBlock, onMoveWelcome, onRe
 // Settings are lifted to VetBaraPrototype (rather than owned here) so they can be saved to the
 // backend alongside the rest of Centre Setup and read back by a Candidate's own device to render
 // its individual schedule widget - a plain local useState never leaves this browser tab.
+// Double-click editor for one group's outdoor session breakdown. The first group edits the shared
+// division applied to everyone; any other group edits its own override (with a reset-to-shared).
+function OutdoorSessionEditor({ group, isFirst, hasOverride, parts, outdoorMinutes, onChange, onResetToShared, onClose, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const total = parts.reduce((sum, part) => sum + (Number(part.minutes) || 0), 0);
+  const update = (index, patch) => onChange(parts.map((part, i) => (i === index ? { ...part, ...patch } : part)));
+  const addPart = () => onChange([...parts, { id: `part-${Date.now().toString(36)}`, name: "", minutes: 0 }]);
+  const removePart = (index) => onChange(parts.filter((_, i) => i !== index));
+  const move = (index, dir) => {
+    const target = index + dir;
+    if (target < 0 || target >= parts.length) return;
+    const next = parts.slice();
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b p-4">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold">{t("harmonogram.outdoor.editorTitle")}</h3>
+            <p className="mt-0.5 truncate text-sm text-slate-600">{harmonogramGroupLabel(group, t)}</p>
+          </div>
+          <Button onClick={onClose} variant="outline" className="shrink-0 rounded-2xl">{t("common.close")}</Button>
+        </div>
+        <div className={`px-4 py-2 text-xs font-medium ${isFirst ? "bg-emerald-50 text-emerald-800" : hasOverride ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600"}`}>
+          {isFirst ? t("harmonogram.outdoor.appliesToAll") : hasOverride ? t("harmonogram.outdoor.groupOverride") : t("harmonogram.outdoor.usingShared")}
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <div className="space-y-2">
+            {parts.length === 0 && <div className="rounded-xl border border-dashed p-3 text-center text-xs text-slate-500">{t("harmonogram.outdoor.empty")}</div>}
+            {parts.map((part, index) => (
+              <div key={part.id} className="flex items-center gap-2 rounded-xl border bg-slate-50 p-2">
+                <div className="flex flex-col leading-none">
+                  <button type="button" onClick={() => move(index, -1)} disabled={index === 0} className="px-1 text-xs text-slate-400 disabled:opacity-30" aria-label="↑">▲</button>
+                  <button type="button" onClick={() => move(index, 1)} disabled={index === parts.length - 1} className="px-1 text-xs text-slate-400 disabled:opacity-30" aria-label="↓">▼</button>
+                </div>
+                <input value={part.name ?? ""} onChange={(event) => update(index, { name: event.target.value })} placeholder={t("harmonogram.outdoor.partName")} className="min-w-0 flex-1 rounded-lg border bg-white p-2 text-sm text-slate-950" />
+                <div className="flex shrink-0 items-center gap-1">
+                  <input type="number" min="0" value={part.minutes ?? ""} onChange={(event) => update(index, { minutes: event.target.value === "" ? "" : Math.max(0, Number(event.target.value)) })} className="w-16 rounded-lg border bg-white p-2 text-right text-sm text-slate-950" />
+                  <span className="text-xs text-slate-500">min</span>
+                </div>
+                <button type="button" onClick={() => removePart(index)} aria-label={t("harmonogram.outdoor.removePart")} className="shrink-0 rounded-full px-2 text-lg leading-none text-slate-400 hover:text-rose-600">×</button>
+              </div>
+            ))}
+          </div>
+          <Button onClick={addPart} variant="outline" className="mt-3 rounded-2xl">+ {t("harmonogram.outdoor.addPart")}</Button>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t p-4">
+          <div className={`text-sm font-semibold ${total === outdoorMinutes ? "text-emerald-700" : "text-slate-600"}`}>{tf("harmonogram.outdoor.total", { total, block: outdoorMinutes })}</div>
+          {!isFirst && hasOverride && <Button onClick={onResetToShared} variant="outline" className="rounded-2xl text-xs">{t("harmonogram.outdoor.resetToShared")}</Button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, setCentreSetupDirty, t }) {
   const [welcome, setWelcome] = useState(null);
   const [groups, setGroups] = useState(null);
   const [activeDay, setActiveDay] = useState(0);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [outdoorEditGroupId, setOutdoorEditGroupId] = useState(null);
 
   function updateSettings(updater) {
     setCentreSetupDirty(true);
     setSettings(updater);
   }
+
+  // The first group defines the shared outdoor division for everyone; any other group edits its own
+  // override so it can differ without affecting the rest.
+  const firstGroupId = groups?.[0]?.id ?? null;
+  function setOutdoorPartsFor(groupId, nextParts) {
+    updateSettings((prev) => (groupId === firstGroupId
+      ? { ...prev, outdoorParts: nextParts }
+      : { ...prev, outdoorPartsByGroup: { ...(prev.outdoorPartsByGroup || {}), [groupId]: nextParts } }));
+  }
+  function resetOutdoorPartsFor(groupId) {
+    updateSettings((prev) => {
+      const next = { ...(prev.outdoorPartsByGroup || {}) };
+      delete next[groupId];
+      return { ...prev, outdoorPartsByGroup: next };
+    });
+  }
+  const outdoorEditGroup = (groups || []).find((group) => group.id === outdoorEditGroupId) || null;
 
   function regenerate() {
     const built = buildDefaultHarmonogramSchedule(candidates, examiners, settings);
@@ -12631,12 +12737,13 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
       {settingsGrid()}
 
       <p className="mt-2 text-xs text-slate-500">{tfHarmonogram(t, "harmonogram.lanesHelper", { lanes: parallelLanes })}</p>
+      <p className="mt-1 text-xs text-orange-700">{t("harmonogram.outdoor.timelineHint")}</p>
 
       {dayTabs()}
 
       {welcome && visibleGroups.length > 0 ? (
         <div className="mt-4">
-          <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} t={t} maxHeight="40vh" />
+          <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} onEditOutdoor={(groupId) => setOutdoorEditGroupId(groupId)} t={t} maxHeight="40vh" />
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
@@ -12660,16 +12767,31 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
 
           <div className="mt-3">{settingsGrid()}</div>
           <p className="mt-2 text-xs text-slate-500">{tfHarmonogram(t, "harmonogram.lanesHelper", { lanes: parallelLanes })}</p>
+      <p className="mt-1 text-xs text-orange-700">{t("harmonogram.outdoor.timelineHint")}</p>
           {dayTabs()}
 
           <div className="mt-3 min-h-0 flex-1 overflow-auto">
             {welcome && visibleGroups.length > 0 ? (
-              <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} t={t} maxHeight="65vh" />
+              <HarmonogramTimeline welcome={welcome} groups={visibleGroups} onMoveBlock={updateBlockStart} onMoveWelcome={updateWelcomeStart} onResizeBlock={resizeBreakBlock} onDeleteBlock={deleteBreakBlock} onEditOutdoor={(groupId) => setOutdoorEditGroupId(groupId)} t={t} maxHeight="65vh" />
             ) : (
               <div className="rounded-xl border border-dashed p-4 text-sm text-slate-500">{t("harmonogram.noCandidates")}</div>
             )}
           </div>
         </div>
+      )}
+
+      {outdoorEditGroup && (
+        <OutdoorSessionEditor
+          group={outdoorEditGroup}
+          isFirst={outdoorEditGroup.id === firstGroupId}
+          hasOverride={Boolean(settings.outdoorPartsByGroup?.[outdoorEditGroup.id])}
+          parts={harmonogramOutdoorParts(settings, outdoorEditGroup.id)}
+          outdoorMinutes={outdoorEditGroup.blocks.find((block) => block.activity === "outdoor")?.duration || HARMONOGRAM_MAIN_DURATION}
+          onChange={(nextParts) => setOutdoorPartsFor(outdoorEditGroup.id, nextParts)}
+          onResetToShared={() => resetOutdoorPartsFor(outdoorEditGroup.id)}
+          onClose={() => setOutdoorEditGroupId(null)}
+          t={t}
+        />
       )}
     </div>
   );
