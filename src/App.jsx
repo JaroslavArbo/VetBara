@@ -11967,8 +11967,8 @@ function harmonogramActivityColor(key) {
     outdoor: "#f4b183",
     written: "#bdd7ee",
     report: "#ffe699",
-    break: "#d9d9d9",
-    lunch: "#ffd966",
+    break: "#ddd6fe",
+    lunch: "#6d28d9",
     finish: "#c6e0b4",
   }[key] || "#e5e7eb";
 }
@@ -11985,22 +11985,28 @@ function harmonogramParseTime(value) {
   return (Number.isFinite(h) ? h : 8) * 60 + (Number.isFinite(m) ? m : 30);
 }
 
-// Only the two orderings that make sense are offered for Consulting: report-writing always comes
-// after the outdoor session that collects the field data it's based on.
-function harmonogramSequenceOptions(level) {
-  return level === "Practicing"
-    ? [["outdoor", "written"], ["written", "outdoor"]]
-    : [["written", "outdoor", "report"], ["outdoor", "report", "written"]];
+// Consulting report-writing always comes after the outdoor session that produced its field data,
+// so outdoor can only occupy the FIRST or SECOND main slot, never the last. Practicing has just the
+// two exam activities. `outdoorSlot` (0 or 1) is chosen per group by the scheduler below so several
+// groups run at once while their outdoor sessions stay within the available examiner teams.
+function harmonogramSequenceForOutdoorSlot(level, outdoorSlot) {
+  if (level === "Practicing") return outdoorSlot === 0 ? ["outdoor", "written"] : ["written", "outdoor"];
+  return outdoorSlot === 0 ? ["outdoor", "report", "written"] : ["written", "outdoor", "report"];
 }
 
+// Outdoor may sit in the first or the second main slot (see harmonogramSequenceForOutdoorSlot), so
+// there are two outdoor "station shifts" per wave, each with room for `examinerTeams` groups.
+const HARMONOGRAM_OUTDOOR_SLOTS = 2;
+
 function harmonogramBuildGroupBlocks(group, settings, welcomeEnd) {
-  // Waves stagger groups competing for the same examiner pair - the welcome itself is shared
-  // across every lane (see buildDefaultHarmonogramSchedule), only each wave's own activity
-  // sequence starts later.
-  const waveOffset = group.wave * (HARMONOGRAM_MAIN_DURATION + settings.coffeeBreakMinutes);
-  let cursor = welcomeEnd + waveOffset;
+  // Groups run concurrently right after the shared welcome; a group only starts a whole wave later
+  // when every outdoor station shift on its day is already full (see buildDefaultHarmonogramSchedule).
+  // One wave spans up to the end of the second outdoor slot (written + coffee + outdoor), so a later
+  // wave's outdoor never overlaps an earlier wave's on the same examiner team.
+  const waveSpan = 2 * HARMONOGRAM_MAIN_DURATION + settings.coffeeBreakMinutes;
+  let cursor = welcomeEnd + group.wave * waveSpan;
   const blocks = [];
-  const sequence = harmonogramSequenceOptions(group.level)[group.groupIndex % harmonogramSequenceOptions(group.level).length];
+  const sequence = harmonogramSequenceForOutdoorSlot(group.level, group.outdoorSlot);
   sequence.forEach((activity, index) => {
     blocks.push({ id: `${group.id}-${activity}`, activity, start: cursor, duration: HARMONOGRAM_MAIN_DURATION });
     cursor += HARMONOGRAM_MAIN_DURATION;
@@ -12015,15 +12021,18 @@ function harmonogramBuildGroupBlocks(group, settings, welcomeEnd) {
   return blocks;
 }
 
-// Pairs candidates two-at-a-time per level (matching the reference exam-programme sheets), then
-// spreads groups across as many parallel "lanes" as the examiner count supports (one lane needs
-// one examiner pair) and, beyond that, across days round-robin.
-// Welcome happens once, for the whole cohort together, before anyone splits into their own
-// activity rotation - it is a single shared block, not one per group/lane (HarmonogramTimeline
-// renders it as its own full-width row above the per-group lanes; dragging it shifts every lane by
-// the same delta, since every day's schedule is built around the same "office hour" welcome time).
+// Pairs candidates two-at-a-time per level (matching the reference exam-programme sheets), then runs
+// every group CONCURRENTLY after the single shared welcome. The scarce resource is examiner teams
+// for the outdoor exercise (one team = two examiners), NOT the total number of groups: the reference
+// Bologna programme ran three candidate groups in parallel on two examiner teams by staggering their
+// outdoor sessions (two groups outside 09:00-11:00, one 11:30-13:30) while the others sat the written
+// exam or wrote their report. So each group's outdoor session is placed in the earliest station shift
+// (day, wave, slot) that still has a free examiner team; a group only spills into a later wave once
+// both outdoor slots on its day are saturated for every earlier wave.
+// Welcome happens once, for the whole cohort together (HarmonogramTimeline renders it as its own
+// full-width row above the per-group lanes; dragging it shifts every lane by the same delta).
 function buildDefaultHarmonogramSchedule(candidates, examiners, settings) {
-  const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
+  const examinerTeams = Math.max(1, Math.floor((examiners?.length || 2) / 2));
   const levels = ["Practicing", "Consulting"];
   const rawGroups = [];
   levels.forEach((level) => {
@@ -12036,15 +12045,23 @@ function buildDefaultHarmonogramSchedule(candidates, examiners, settings) {
   const dayStart = harmonogramParseTime(settings.dayStartTime);
   const welcome = { id: "welcome", activity: "welcome", start: dayStart, duration: HARMONOGRAM_WELCOME_DURATION };
   const welcomeEnd = dayStart + HARMONOGRAM_WELCOME_DURATION;
+  const outdoorLoad = {}; // `${day}:${wave}:${slot}` -> groups already using that outdoor station shift
   const groups = rawGroups.map((group, index) => {
-    const groupIndex = rawGroups.slice(0, index).filter((g) => g.level === group.level).length;
-    const built = {
-      ...group,
-      id: `group-${index}`,
-      groupIndex,
-      wave: Math.floor(index / parallelLanes),
-      day: index % days,
-    };
+    const day = index % days;
+    // Earliest outdoor station shift with a free examiner team - keeps groups concurrent, only
+    // waving when both of the day's outdoor slots are full for every earlier wave.
+    let placed = null;
+    for (let wave = 0; !placed; wave += 1) {
+      for (let slot = 0; slot < HARMONOGRAM_OUTDOOR_SLOTS; slot += 1) {
+        const key = `${day}:${wave}:${slot}`;
+        if ((outdoorLoad[key] || 0) < examinerTeams) {
+          outdoorLoad[key] = (outdoorLoad[key] || 0) + 1;
+          placed = { wave, outdoorSlot: slot };
+          break;
+        }
+      }
+    }
+    const built = { ...group, id: `group-${index}`, day, wave: placed.wave, outdoorSlot: placed.outdoorSlot };
     return { ...built, blocks: harmonogramBuildGroupBlocks(built, settings, welcomeEnd) };
   });
   return { welcome, groups };
@@ -12414,7 +12431,10 @@ function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, s
 
   const days = Math.max(1, Number(settings.days) || 1);
   const visibleGroups = (groups || []).filter((g) => g.day === activeDay);
-  const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2));
+  // Concurrent groups the current examiner count supports: each team (two examiners) can run one
+  // outdoor session per slot, and outdoor is staggered across the two slots, so teams x 2 groups
+  // run at once (see buildDefaultHarmonogramSchedule).
+  const parallelLanes = Math.max(1, Math.floor((examiners?.length || 2) / 2)) * HARMONOGRAM_OUTDOOR_SLOTS;
 
   function settingsGrid() {
     return (
