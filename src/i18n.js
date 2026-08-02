@@ -2893,6 +2893,13 @@ Object.assign(translations.en, {
   "consultingField.confirmYes": "Yes, continue",
   "consultingField.submitting": "Submitting...",
   "consultingField.submitted": "Field data collection closed. You can put your phone away - continue writing the report from your exam tablet.",
+  "consultingField.recording": "Recording",
+  "consultingField.paused": "Paused",
+  "consultingField.processing": "Saving recording...",
+  "consultingField.photosHeading": "Photos ({count})",
+  "consultingField.recordingsHeading": "Voice notes ({count})",
+  "consultingField.captureHint": "Photograph the tree and record voice notes for {tree}.",
+  "consultingField.emptyCapture": "No photos or voice notes yet for {tree}.",
 });
 
 Object.assign(translations.cs, {
@@ -2941,6 +2948,13 @@ Object.assign(translations.cs, {
   "consultingField.confirmYes": "Ano, pokračovat",
   "consultingField.submitting": "Odesílám...",
   "consultingField.submitted": "Terénní sběr dat byl uzavřen. Telefon už nepotřebujete - v psaní reportu pokračujte na zkouškovém tabletu.",
+  "consultingField.recording": "Nahrávám",
+  "consultingField.paused": "Pozastaveno",
+  "consultingField.processing": "Ukládám nahrávku...",
+  "consultingField.photosHeading": "Fotky ({count})",
+  "consultingField.recordingsHeading": "Hlasové poznámky ({count})",
+  "consultingField.captureHint": "Vyfoťte strom a nahrajte hlasové poznámky pro {tree}.",
+  "consultingField.emptyCapture": "Zatím žádné fotky ani hlasové poznámky pro {tree}.",
 });
 
 for (const [language, dictionary] of Object.entries(draftRuntimeDictionaries)) {

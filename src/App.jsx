@@ -9402,7 +9402,7 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
   const [draftLoaded, setDraftLoaded] = useState(false);
   const sectionOpenedRef = useRef(false);
   const [fieldNotesDraft, setFieldNotesDraft] = useState(CONSULTING_FIELD_NOTES_TEMPLATE);
-  const [criteriaOpen, setCriteriaOpen] = useState(true);
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoStatus, setPhotoStatus] = useState("");
   const [recordingStatus, setRecordingStatus] = useState("idle");
@@ -9619,87 +9619,160 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
   const recording = recordingStatus === "recording";
   const paused = recordingStatus === "paused";
   const processing = recordingStatus === "processing";
+  const active = recording || paused;
 
   return (
     <main className="min-h-screen bg-slate-950 pb-28 text-white">
-      <div className="mx-auto max-w-md p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-slate-400">{t("consultingField.title")}</div>
-            <div className="text-lg font-bold">{candidateName}</div>
+      {/* STICKY COCKPIT: identity + the Tree A/B tabs + the capture controls all stay pinned to the
+          top while the reference/review content (criteria, gallery, notes) scrolls underneath - so
+          the consultant never loses which tree is active nor has to hunt for the camera / recorder. */}
+      <div className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 shadow-lg shadow-black/40 backdrop-blur">
+        <div className="mx-auto max-w-md px-4 pb-3 pt-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-base font-bold leading-tight">{candidateName}</div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-400">{t("consultingField.title")}</div>
+            </div>
+            {onClose && <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300">{t("common.back")}</button>}
           </div>
-          {onClose && <button type="button" onClick={onClose} className="shrink-0 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300">{t("common.back")}</button>}
-        </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-2">
-          {REPORT_TREES.map((tree) => (
-            <button
-              key={tree}
-              type="button"
-              onClick={() => setActiveTree(tree)}
-              className={`rounded-2xl border-2 px-3 py-3 text-sm font-bold ${tree === activeTree ? "border-emerald-400 bg-emerald-500/10 text-emerald-200" : "border-slate-700 bg-slate-900 text-slate-300"}`}
-            >
-              {tree} <span className="ml-1 text-xs font-normal text-slate-400">({(draft[tree]?.photos ?? []).length} 📷 · {(draft[tree]?.recordings ?? []).length} 🎙)</span>
-            </button>
-          ))}
-        </div>
+          {/* Tree A / B tabs */}
+          <div className="grid grid-cols-2 gap-2">
+            {REPORT_TREES.map((tree) => {
+              const isActive = tree === activeTree;
+              const photos = (draft[tree]?.photos ?? []).length;
+              const recs = (draft[tree]?.recordings ?? []).length;
+              return (
+                <button
+                  key={tree}
+                  type="button"
+                  onClick={() => setActiveTree(tree)}
+                  aria-pressed={isActive}
+                  className={`rounded-2xl border-2 px-3 py-2.5 text-left transition-colors ${isActive ? "border-emerald-400 bg-emerald-500/15 text-white" : "border-slate-800 bg-slate-900 text-slate-400"}`}
+                >
+                  <div className="text-base font-bold">{tree}</div>
+                  <div className={`mt-0.5 flex items-center gap-2 text-[11px] font-medium ${isActive ? "text-emerald-200" : "text-slate-500"}`}>
+                    <span className="inline-flex items-center gap-1"><Camera className="h-3.5 w-3.5" />{photos}</span>
+                    <span className="inline-flex items-center gap-1"><MicIcon className="h-3.5 w-3.5" />{recs}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Capture icon row - sticky so it stays reachable while the criteria panel / gallery /
-            field notes below get long enough to scroll (photos and recordings accumulate for two
-            trees over what can be a long walk between them). */}
-        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <label className="flex flex-col items-center gap-1">
-              <span className={`flex h-12 w-12 items-center justify-center rounded-full ${photoBusy ? "bg-emerald-800" : "bg-emerald-600"}`}>
-                <Camera className="h-5 w-5" />
-              </span>
-              <span className="text-[10px] font-semibold text-slate-300">{t("report.takePhoto")}</span>
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*,.heic,.heif"
-                capture="environment"
-                className="hidden"
-                disabled={photoBusy}
-                onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handlePhotoFile(file); }}
-              />
-            </label>
-
-            <button
-              type="button"
-              onClick={recording || paused ? stopRecording : startRecording}
-              disabled={processing || (!recording && !paused && !voiceRecordingSupported)}
-              className="flex flex-col items-center gap-1"
-            >
-              <span className={`flex h-12 w-12 items-center justify-center rounded-full ${paused ? "bg-amber-500" : recording ? "animate-pulse bg-red-600" : "bg-sky-600"}`}>
-                {recording || paused ? <StopIcon className="h-5 w-5" /> : <MicIcon className="h-5 w-5" />}
-              </span>
-              <span className="text-[10px] font-semibold text-slate-300">{t("consultingField.recordAudio")}</span>
-            </button>
-
-            {(recording || paused) && (
-              <>
+          {/* Capture controls: two large primary buttons at rest, expanding into a full recording
+              panel with big Pause/Resume + Stop targets while a voice note is being recorded. */}
+          <div className="mt-3">
+            {!active && !processing && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl py-4 text-sm font-bold ${photoBusy ? "bg-emerald-800 text-emerald-100" : "bg-emerald-600 text-white active:bg-emerald-700"}`}>
+                  <Camera className="h-7 w-7" />
+                  {t("report.takePhoto")}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*,.heic,.heif"
+                    capture="environment"
+                    className="hidden"
+                    disabled={photoBusy}
+                    onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handlePhotoFile(file); }}
+                  />
+                </label>
                 <button
                   type="button"
-                  onClick={paused ? resumeRecording : pauseRecording}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-700 bg-slate-900"
-                  aria-label={paused ? t("consultingField.resume") : t("consultingField.pause")}
+                  onClick={startRecording}
+                  disabled={!voiceRecordingSupported}
+                  className="flex flex-col items-center justify-center gap-1.5 rounded-2xl bg-sky-600 py-4 text-sm font-bold text-white active:bg-sky-700 disabled:opacity-40"
                 >
-                  {paused ? <PlayIcon className="h-5 w-5" /> : <PauseIcon className="h-5 w-5" />}
+                  <MicIcon className="h-7 w-7" />
+                  {t("consultingField.recordAudio")}
                 </button>
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono text-xs text-slate-300">{formatRecordingClock(recordingElapsedMs)}</div>
+              </div>
+            )}
+
+            {processing && (
+              <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-800 py-4 text-sm font-semibold text-slate-300">
+                {t("consultingField.processing")}
+              </div>
+            )}
+
+            {active && (
+              <div className="rounded-2xl border border-slate-700 bg-slate-900 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${paused ? "bg-amber-400" : "animate-pulse bg-red-500"}`} />
+                    <span className="text-sm font-semibold">{paused ? t("consultingField.paused") : t("consultingField.recording")}</span>
+                  </div>
+                  <span className="font-mono text-2xl font-bold tabular-nums">{formatRecordingClock(recordingElapsedMs)}</span>
+                </div>
+                <div className="mt-2">
                   <VoiceHistogram getVoiceLevels={() => recorderRef.current?.getFrequencyBins()} active={recording} />
                 </div>
-              </>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={paused ? resumeRecording : pauseRecording}
+                    className={`flex items-center justify-center gap-2 rounded-2xl py-4 text-base font-bold ${paused ? "bg-emerald-600 text-white active:bg-emerald-700" : "bg-amber-500 text-slate-950 active:bg-amber-600"}`}
+                  >
+                    {paused ? <PlayIcon className="h-6 w-6" /> : <PauseIcon className="h-6 w-6" />}
+                    {paused ? t("consultingField.resume") : t("consultingField.pause")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="flex items-center justify-center gap-2 rounded-2xl bg-red-600 py-4 text-base font-bold text-white active:bg-red-700"
+                  >
+                    <StopIcon className="h-6 w-6" />
+                    {t("consultingField.stop")}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
-          {photoStatus && <div className="mt-2 text-xs text-slate-400">{photoStatus}</div>}
+
+          {photoStatus && <div className="mt-2 text-xs text-emerald-300">{photoStatus}</div>}
           {recordingError && <div className="mt-2 rounded-xl border border-rose-500 bg-rose-950 p-2 text-xs text-rose-200">{recordingError}</div>}
           {!voiceRecordingSupported && <div className="mt-2 rounded-xl border border-amber-500 bg-amber-950 p-2 text-xs text-amber-200">{t("voice.error.unsupported")}</div>}
         </div>
+      </div>
 
-        <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-900">
+      <div className="mx-auto max-w-md p-4">
+        {/* Captured-for-this-tree review: photos then voice notes, each under a clear heading so the
+            consultant can see at a glance what they already have for the active tree. */}
+        {(treePhotos.length > 0 || treeRecordings.length > 0) ? (
+          <div className="mb-4 space-y-3">
+            {treePhotos.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{tf("consultingField.photosHeading", { count: treePhotos.length })}</div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[...treePhotos].reverse().map((photo) => (
+                    <img key={photo.id} src={photo.dataUrl} alt={photo.caption} className="h-16 w-full rounded-lg border border-slate-700 object-cover" />
+                  ))}
+                </div>
+              </div>
+            )}
+            {treeRecordings.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">{tf("consultingField.recordingsHeading", { count: treeRecordings.length })}</div>
+                <div className="flex flex-wrap gap-2">
+                  {treeRecordings.map((recEntry) => (
+                    <div key={recEntry.id} className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-300">
+                      <MicIcon className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                      <span className="font-mono">{formatRecordingClock(recEntry.durationMs || 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mb-4 rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
+            {tf("consultingField.emptyCapture", { tree: activeTree })}
+          </div>
+        )}
+
+        {/* Reference guidance, collapsed by default to keep the screen focused on capture. */}
+        <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900">
           <button type="button" onClick={() => setCriteriaOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 p-3 text-left text-sm font-semibold text-slate-200">
             {t("consultingField.criteriaTitle")}
             <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${criteriaOpen ? "rotate-180" : ""}`} />
@@ -9716,25 +9789,7 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
           )}
         </div>
 
-        {treePhotos.length > 0 && (
-          <div className="mb-4 grid grid-cols-4 gap-2">
-            {[...treePhotos].reverse().map((photo) => (
-              <img key={photo.id} src={photo.dataUrl} alt={photo.caption} className="h-16 w-full rounded-lg border border-slate-700 object-cover" />
-            ))}
-          </div>
-        )}
-        {treeRecordings.length > 0 && (
-          <div className="mb-4 space-y-1 text-xs text-slate-400">
-            {treeRecordings.map((recEntry) => (
-              <div key={recEntry.id} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1">
-                <MicIcon className="h-3.5 w-3.5 shrink-0" />
-                <span>{formatRecordingClock(recEntry.durationMs || 0)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mb-24">
+        <div className="mb-4">
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">{t("report.fieldNotesPrivate")}</label>
           <textarea
             value={fieldNotesDraft}
