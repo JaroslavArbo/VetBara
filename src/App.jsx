@@ -10298,6 +10298,30 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
     return () => { cancelled = true; };
   }, [section.kind, sessionToken, candidate.id]);
 
+  // reportDraft's own photo entries (from report_photo.added sync events) only ever carry
+  // metadata (id/caption/capturedAt) - never the actual image - so the photo grid below needs a
+  // separate lookup into the media store for a downloadUrl. Matched by clientMediaId, which every
+  // upload path builds as `photo-${candidateId}-${tree}-${photoId}` (see handlePhotoFile in
+  // ConsultingFieldCapture), so it can be reconstructed from what the draft already has.
+  const [reportPhotoUrls, setReportPhotoUrls] = useState({});
+  useEffect(() => {
+    setReportPhotoUrls({});
+    if (section.kind !== "report" || !sessionToken) return undefined;
+    let cancelled = false;
+    listExamMedia(sessionToken)
+      .then((result) => {
+        if (cancelled) return;
+        const media = Array.isArray(result?.media) ? result.media : [];
+        const byClientMediaId = {};
+        media
+          .filter((item) => item.mediaType === "photo" && item.sectionKey === "report" && item.candidateId === candidate.id && item.downloadUrl)
+          .forEach((item) => { byClientMediaId[item.clientMediaId] = item.downloadUrl; });
+        setReportPhotoUrls(byClientMediaId);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [section.kind, sessionToken, candidate.id]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/80 p-4">
       {/* Outdoor shows two examiner columns side by side and Report shows a 3-column layout per
@@ -10411,7 +10435,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
             };
             const activeTree = treeDrafts[activeReportTree] || {};
             const activeTreeMarks = marks[activeReportTree] || {};
-            const allPhotos = REPORT_TREES.flatMap((treeName) => (treeDrafts[treeName]?.photos || []).map((photo) => ({ ...photo, treeName })));
+            const allPhotos = REPORT_TREES.flatMap((treeName) => (treeDrafts[treeName]?.photos || []).map((photo) => ({ ...photo, treeName, url: photo.url || photo.dataUrl || reportPhotoUrls[`photo-${candidate.id}-${treeName}-${photo.id}`] })));
             return (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-slate-50 p-3 text-sm">

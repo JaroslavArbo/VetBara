@@ -89,17 +89,21 @@ export default async function handler(request, response) {
     } else {
       // Scope the library to THIS certification. It used to select every row in the table, so a
       // Centre saw the photos and recordings of every other exam ever run ("old exam's photos keep
-      // showing up in the new exam"). A row belongs here when it was captured for one of this exam
-      // event's candidates, or tagged with this certification's exam id (field/site photos).
+      // showing up in the new exam"). A row belongs here when it was captured for one of this
+      // CENTRE's own candidates, or tagged with this certification's exam id (field/site photos).
+      //
+      // Deliberately scoped by centre_id alone, not also exam_event_id=eq.<the "current" event>:
+      // that extra filter used to miss real candidates whenever the Centre's "current" exam_events
+      // row drifted from whatever event a candidate's own media was actually captured/tagged under
+      // (the same staleness already fixed for report text in evaluation-candidate.mjs) - a
+      // candidate's report photos would silently never appear even though the candidate themself
+      // was clearly the Centre's own. centre_id itself doesn't drift, so this stays scoped to the
+      // same tenant, just without an extra filter that can go stale independently of it.
       const centreId = String(session.subject_id || "");
       let rosterCandidateIds = [];
       try {
-        const eventRows = await supabase(`exam_events?centre_id=eq.${encodeURIComponent(centreId)}&status=eq.current&select=id&order=updated_at.desc&limit=1`);
-        const examEventId = eventRows[0]?.id;
-        if (examEventId) {
-          const candidateRows = await supabase(`candidates?exam_event_id=eq.${encodeURIComponent(examEventId)}&select=id`);
-          rosterCandidateIds = candidateRows.map((row) => row.id).filter(Boolean);
-        }
+        const candidateRows = await supabase(`candidates?centre_id=eq.${encodeURIComponent(centreId)}&select=id`);
+        rosterCandidateIds = candidateRows.map((row) => row.id).filter(Boolean);
       } catch (error) {
         // Fail closed: without a roster we still scope by exam id rather than listing everything.
         console.warn("Media list could not resolve the exam roster", error?.message || error);
