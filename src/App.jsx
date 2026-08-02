@@ -10600,6 +10600,13 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
           })()}
           {section.kind === "report" && (() => {
             const marks = snapshot.marks || {};
+            // The report has a SINGLE marking (unlike outdoor's two examiner columns). Any identified
+            // examiner - primary OR the second examiner - edits that one existing set, so corrections
+            // target the examiner who already owns the marks (correctionExaminerId), only falling back
+            // to the identified examiner when nobody has marked it yet. Writing to the identified
+            // examiner's own id instead forked a fresh empty bucket, wiping the primary's marks on the
+            // first keystroke - which is why a second examiner "couldn't edit" the report.
+            const reportExaminerId = snapshot.correctionExaminerId || identifiedExaminer?.id;
             const treeDrafts = Object.fromEntries(snapshot.trees);
             const treeMaxTotal = REPORT_MARKING_SECTIONS.reduce((sum, s) => sum + s.perTreeMax, 0);
             const treeTotalFor = (treeName) => {
@@ -10666,8 +10673,8 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                             <div className="min-w-0 rounded-xl border bg-white p-3">
                               {identifiedExaminer && (
                                 <div className="mb-3 inline-flex rounded-2xl border bg-slate-50 p-0.5 text-xs font-semibold">
-                                  <button type="button" onClick={() => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { mode: "management" })} className={`rounded-2xl px-3 py-1.5 ${mode === "management" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeManagement")}</button>
-                                  <button type="button" onClick={() => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { mode: "doNothing" })} className={`rounded-2xl px-3 py-1.5 ${mode === "doNothing" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeDoNothing")}</button>
+                                  <button type="button" onClick={() => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, "plan", { mode: "management" })} className={`rounded-2xl px-3 py-1.5 ${mode === "management" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeManagement")}</button>
+                                  <button type="button" onClick={() => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, "plan", { mode: "doNothing" })} className={`rounded-2xl px-3 py-1.5 ${mode === "doNothing" ? "bg-white shadow-sm" : "text-slate-500"}`}>{t("report.plan.modeDoNothing")}</button>
                                 </div>
                               )}
                               <div className="space-y-2">
@@ -10682,7 +10689,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                                           min="0"
                                           max={item.max}
                                           value={mark.items?.[item.key] ?? ""}
-                                          onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { items: { ...(mark.items || {}), [item.key]: event.target.value } })}
+                                          onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, "plan", { items: { ...(mark.items || {}), [item.key]: event.target.value } })}
                                           className="w-16 rounded-lg border-2 border-slate-300 p-1 text-right text-xs font-bold"
                                         />
                                       ) : (
@@ -10698,7 +10705,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                           {identifiedExaminer ? (
                             <textarea
                               value={mark.comment ?? ""}
-                              onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, "plan", { comment: event.target.value })}
+                              onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, "plan", { comment: event.target.value })}
                               rows={3}
                               placeholder={t("examiner.reportReview.commentPlaceholder")}
                               className="mt-3 w-full rounded-lg border p-2 text-sm"
@@ -10734,7 +10741,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                                 min="0"
                                 max={section.perTreeMax}
                                 value={mark.score ?? ""}
-                                onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, section.key, { score: event.target.value })}
+                                onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, section.key, { score: event.target.value })}
                                 className={`w-20 rounded-lg border-2 p-1.5 text-right text-sm font-bold ${mark.score ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-slate-300"}`}
                               />
                             ) : (
@@ -10746,7 +10753,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                         {identifiedExaminer ? (
                           <textarea
                             value={mark.comment ?? ""}
-                            onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, activeReportTree, section.key, { comment: event.target.value })}
+                            onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, activeReportTree, section.key, { comment: event.target.value })}
                             rows={3}
                             placeholder={t("examiner.reportReview.commentPlaceholder")}
                             className="mt-3 w-full rounded-lg border p-2 text-sm"
@@ -10786,7 +10793,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
                             min="0"
                             max={item.max}
                             value={marks.clarity?.[item.key] ?? ""}
-                            onChange={(event) => onReportCorrection?.(candidate, identifiedExaminer.id, null, item.key, event.target.value, "clarity")}
+                            onChange={(event) => onReportCorrection?.(candidate, reportExaminerId, null, item.key, event.target.value, "clarity")}
                             className="mt-1 block w-full rounded-lg border p-1 text-right text-sm font-bold"
                           />
                         ) : (
