@@ -167,7 +167,7 @@ async function readRows(table, candidateId, examEventId, orderBy = "updated_at.d
 
 async function readReportEvents(candidateId, examEventId) {
   if (!envReady()) return [];
-  const types = encodeURIComponent("report_draft.saved,report_photo.added");
+  const types = encodeURIComponent("report_draft.saved,report_photo.added,report_photo.moved");
   return scopedRead((scope) => `sync_events?candidate_id=eq.${encodeURIComponent(candidateId)}${scope}&event_type=in.(${types})&select=*&order=created_at.asc`, examEventId);
 }
 
@@ -281,6 +281,36 @@ function buildReportDraft(events) {
           },
         ],
       };
+    }
+
+    // A photo the candidate re-assigned to the other tree on the tablet. Remove it from the source
+    // tree and re-add it (under a fresh id) to the destination, so the Centre review shows it where
+    // the candidate put it, not on its original capture tree. Events are read created_at.asc, so a
+    // move always reduces after the add it targets.
+    if (event.event_type === "report_photo.moved") {
+      const oldId = payload.photoId || payload.id;
+      const fromTree = payload.fromTree;
+      const toTree = payload.toTree || payload.treeId;
+      const newId = payload.newPhotoId || oldId;
+      if (!oldId || !fromTree || !toTree) return draft;
+      if (!draft[fromTree]) draft[fromTree] = { fieldNotes: "", photos: [], finalSections: {} };
+      if (!draft[toTree]) draft[toTree] = { fieldNotes: "", photos: [], finalSections: {} };
+      const moving = (draft[fromTree].photos ?? []).find((photo) => photo.id === oldId);
+      draft[fromTree] = { ...draft[fromTree], photos: (draft[fromTree].photos ?? []).filter((photo) => photo.id !== oldId) };
+      const destExisting = draft[toTree].photos ?? [];
+      if (!destExisting.some((photo) => photo.id === newId)) {
+        draft[toTree] = {
+          ...draft[toTree],
+          photos: [
+            ...destExisting,
+            {
+              id: newId,
+              caption: payload.caption || moving?.caption || `${toTree} candidate photo ${destExisting.length + 1}`,
+              capturedAt: payload.capturedAt || moving?.capturedAt || event.created_at || null,
+            },
+          ],
+        };
+      }
     }
 
     return draft;

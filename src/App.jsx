@@ -3295,7 +3295,13 @@ function VetBaraPrototype() {
       return;
     }
     if (!blob || blob.size === 0) return;
-    const clientMediaId = localEventId(`photo-${candidateId}-${tree}-${photo.id}`);
+    // Deterministic id (NOT localEventId, which appends a timestamp + random suffix): the Centre's
+    // report review rebuilds this exact string as `photo-${candidateId}-${tree}-${photoId}` to match
+    // an uploaded image back to the draft's metadata-only photo entry (see reportPhotoUrls). A random
+    // suffix here uploaded the bytes to durable storage but under an id the Centre could never match,
+    // so shared-tablet report photos silently never appeared in review - the same bare key the mobile
+    // field-capture flow (ConsultingFieldCapture.handlePhotoFile) already builds.
+    const clientMediaId = `photo-${candidateId}-${tree}-${photo.id}`;
     const meta = {
       clientMediaId, type: "photo", mediaType: "photo", candidateId, examinerId: null,
       sectionKey: "report", tree, fileName: photo.name || `${candidateId}_${tree}_${photo.id}.jpg`,
@@ -3340,21 +3346,56 @@ function VetBaraPrototype() {
   // unchanged; only which tree's report it belongs to changes.
   function moveReportPhoto(fromTree, photoId, toTree) {
     if (!loggedCandidate || fromTree === toTree) return;
+    const draftNow = reportDrafts[loggedCandidate.id] ?? createReportDraft();
+    const movingPhoto = (draftNow[fromTree]?.photos ?? []).find((p) => p.id === photoId);
+    if (!movingPhoto) return;
+    // A moved photo gets a fresh id: both trees number their photos from P-1, so keeping the id
+    // would collide with the destination's own P-1 - the Centre's dedup-by-id projection would drop
+    // the moved photo and React keys would clash locally. The new id also becomes the media key's
+    // photo component below, so everything stays consistent under the destination tree.
+    const movedId = `${photoId}-mv-${Date.now().toString(36)}`;
+    const movedPhoto = { ...movingPhoto, id: movedId };
+    const movedAt = new Date().toISOString();
+
     setReportDrafts((prev) => {
       const draft = prev[loggedCandidate.id] ?? createReportDraft();
       const fromPhotos = draft[fromTree]?.photos ?? [];
-      const photo = fromPhotos.find((p) => p.id === photoId);
-      if (!photo) return prev;
+      if (!fromPhotos.some((p) => p.id === photoId)) return prev;
       const toPhotos = draft[toTree]?.photos ?? [];
       return {
         ...prev,
         [loggedCandidate.id]: {
           ...draft,
           [fromTree]: { ...draft[fromTree], photos: fromPhotos.filter((p) => p.id !== photoId) },
-          [toTree]: { ...draft[toTree], photos: [...toPhotos, photo] },
+          [toTree]: { ...draft[toTree], photos: [...toPhotos, movedPhoto] },
         },
       };
     });
+
+    // Tell the server the photo changed trees. Without this the Centre review (which rebuilds the
+    // report draft from report_photo.added events alone) keeps showing the photo under its original
+    // capture tree, never where the candidate moved it. See the report_photo.moved projection in
+    // evaluation-candidate.mjs / evaluation-export.mjs / centre/audit-export.js.
+    sendSyncEvent({
+      clientEventId: localEventId(`report-photo-moved-${loggedCandidate.id}-${photoId}-${toTree}`),
+      type: "report_photo.moved",
+      entityType: "report_photo",
+      entityId: `${loggedCandidate.id}:report:${toTree}:${movedId}`,
+      candidateId: loggedCandidate.id,
+      payload: {
+        candidateId: loggedCandidate.id, sectionKey: "report",
+        photoId, fromTree, toTree, treeId: toTree, newPhotoId: movedId,
+        name: movedPhoto.name, caption: movedPhoto.caption ?? "",
+        capturedAt: movedPhoto.capturedAt ?? movedAt, movedAt,
+      },
+      createdAt: movedAt,
+    });
+
+    // Re-store the image bytes under the destination-tree + new-id media key so the Centre's
+    // reconstructed `photo-${candidateId}-${toTree}-${movedId}` lookup finds the image (the original
+    // upload used the source tree + old id, which the moved photo no longer resolves to).
+    if (movedPhoto.dataUrl) persistReportPhotoMedia(loggedCandidate.id, toTree, movedPhoto, movedPhoto.capturedAt ?? movedAt);
+
     queue("Report photo moved", `${loggedCandidate.id} ${photoId} ${fromTree} -> ${toTree}`);
   }
 
