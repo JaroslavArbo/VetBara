@@ -17272,27 +17272,55 @@ function ExaminerReportReview({ selectedCandidate, reportDrafts, openWrittenRevi
   });
 
   function printReportReviewPdf() {
-    const bodyHtml = treeSummaries.map(({ treeName, tree, reportPhotos, completedSections }) => {
+    const fmtItem = (value) => (value === undefined || value === null || value === "" ? "–" : formatHalfPointScore(Number(value)));
+    const cell = "border-bottom:1px solid #e5e7eb;padding:1mm 1.5mm;vertical-align:top";
+    const scoreCell = `${cell};text-align:right;white-space:nowrap;font-weight:700`;
+    // One score row per marking sub-item (leaf size, structure, ...) - the breakdown behind each
+    // section total, mirroring the on-screen grading form and marking report_template.xlsx.
+    const itemRowsFor = (section, mark) => {
+      const items = section.key === "plan" ? reportPlanItemsForMode(mark.mode === "doNothing" ? "doNothing" : "management") : (section.items || []);
+      if (!items.length) return "";
+      const rows = items.map((item) => `<tr><td style="${cell}">${escapeHtml(item.title)}</td><td style="${scoreCell}">${fmtItem(mark.items?.[item.key])} / ${item.max}</td></tr>`).join("");
+      return `<table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:1mm">${rows}</table>`;
+    };
+    const treeMax = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + section.perTreeMax, 0);
+    const treesHtml = treeSummaries.map(({ treeName, tree, reportPhotos }) => {
+      const treeMarks = marks[treeName] || {};
+      const treeTotal = REPORT_MARKING_SECTIONS.reduce((sum, section) => sum + reportSectionScore(section, treeMarks[section.key]), 0);
       const photosHtml = reportPhotos.length
         ? `<div style="display:flex;flex-wrap:wrap;gap:3mm;margin:2mm 0">${reportPhotos.map((photo) => photo.dataUrl ? `<img src="${photo.dataUrl}" alt="" style="width:38mm;height:28mm;object-fit:cover;border-radius:6px;border:1px solid #dbe3dd" />` : "").join("")}</div>`
         : `<p class="exam-help">${escapeHtml(t("examiner.reportReview.noPhotos"))}</p>`;
-      const sectionsHtml = REPORT_SECTIONS.map((section) => {
-        const value = String(tree.finalSections?.[section.key] ?? "").trim();
-        return `<div style="margin-top:2mm"><div class="exam-block-head" style="margin-bottom:0.5mm">${escapeHtml(sectionTitle(t, section))}</div><div class="exam-answer">${value ? linesToHtml(value) : `<em>${escapeHtml(t("examiner.reportReview.missing"))}</em>`}</div></div>`;
+      const sectionsHtml = REPORT_MARKING_SECTIONS.map((section, index) => {
+        const mark = treeMarks[section.key] || {};
+        const answer = String(tree.finalSections?.[REPORT_SECTIONS[index]?.key] ?? "").trim() || (index === 0 ? String(tree.fieldNotes ?? "").trim() : "");
+        const commentHtml = mark.comment ? `<div class="exam-help" style="margin-top:1mm"><strong>${escapeHtml(t("examiner.reportReview.commentPlaceholder"))}:</strong> ${escapeHtml(mark.comment)}</div>` : "";
+        return `<div style="margin-top:2.5mm;break-inside:avoid">
+          <div class="exam-block-head" style="display:flex;justify-content:space-between;gap:4mm;margin-bottom:0.5mm"><span>${escapeHtml(section.title)}</span><span>${formatHalfPointScore(reportSectionScore(section, mark))} / ${section.perTreeMax}</span></div>
+          <div class="exam-answer">${answer ? linesToHtml(answer) : `<em>${escapeHtml(t("examiner.reportReview.missing"))}</em>`}</div>
+          ${itemRowsFor(section, mark)}
+          ${commentHtml}
+        </div>`;
       }).join("");
       return `<section class="exam-block">
-        <div class="exam-title">${escapeHtml(treeName)} <span class="exam-score">${completedSections} / ${REPORT_SECTIONS.length}</span></div>
+        <div class="exam-title">${escapeHtml(treeName)} <span class="exam-score">${formatHalfPointScore(treeTotal)} / ${treeMax}</span></div>
         <div class="exam-block-head">${escapeHtml(t("examiner.reportReview.fieldNotesLabel"))}</div>
         <div class="exam-answer">${String(tree.fieldNotes ?? "").trim() ? linesToHtml(tree.fieldNotes) : "-"}</div>
         ${photosHtml}
         ${sectionsHtml}
       </section>`;
     }).join("");
+    const clarityTotal = REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + (Number(marks.clarity?.[item.key]) || 0), 0);
+    const clarityMax = REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + item.max, 0);
+    const clarityHtml = `<section class="exam-block">
+      <div class="exam-title">${escapeHtml(t("examiner.reportReview.clarityTitle"))} <span class="exam-score">${formatHalfPointScore(clarityTotal)} / ${clarityMax}</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:9pt">${REPORT_CLARITY_ITEMS.map((item) => `<tr><td style="${cell}">${escapeHtml(item.title)}</td><td style="${scoreCell}">${fmtItem(marks.clarity?.[item.key])} / ${item.max}</td></tr>`).join("")}</table>
+    </section>`;
+    const totalHtml = `<section class="exam-block"><div class="exam-title">${escapeHtml(t("examiner.reportReview.title"))} <span class="exam-score">${formatHalfPointScore(marksTotal)} / ${REPORT_MARKING_TOTAL}</span></div></section>`;
     openPrintDocument(examinerPdfShellHtml({
       docTitle: t("examiner.pdf.reportReviewTitle"),
       candidate: selectedCandidate,
       examinerName,
-      bodyHtml,
+      bodyHtml: treesHtml + clarityHtml + totalHtml,
     }));
   }
 
