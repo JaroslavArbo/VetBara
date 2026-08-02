@@ -542,8 +542,12 @@ const REPORT_MARKING_TOTAL = REPORT_MARKING_SECTIONS.reduce((sum, section) => su
   + REPORT_CLARITY_ITEMS.reduce((sum, item) => sum + item.max, 0);
 
 const CANDIDATE_SECTIONS = {
+  // Tree preparation stays Practicing-only: kept removed for Consulting per an earlier request,
+  // restored here for Practicing (it was pulled from both levels only because it crashed - see
+  // syncCandidatePreparation below for the actual fix).
   Practicing: [
     { key: "field-orientation", titleKey: "candidateSections.orientation.title", descriptionKey: "candidateSections.orientation.description" },
+    { key: "field-trees", titleKey: "candidateSections.trees.title", descriptionKey: "candidateSections.trees.description" },
     { key: "test", titleKey: "candidateSections.writtenTest.title", descriptionKey: "candidateSections.writtenTest.practicingDescription" },
   ],
   Consulting: [
@@ -3821,7 +3825,7 @@ function VetBaraPrototype() {
     <div className="grid gap-4 lg:grid-cols-3">
       {role === "Admin" && <div className="lg:col-span-3"><AdminLoginGate t={t} addAudit={addAudit}><AdminView centre={centre} setCentre={setCentre} examDate={examDate} setExamDate={setExamDate} place={place} setPlace={setPlace} language={language} setLanguage={setLanguage} availableVariants={availableVariants} variants={variants} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} importTestPackage={importTestPackage} setStatus={setStatus} addAudit={addAudit} uiLanguage={uiLanguage} t={t}  adminPdfPackageLatest={adminPdfPackageLatest} setAdminPdfPackageStatus={setAdminPdfPackageStatus} setAdminPdfPackageError={setAdminPdfPackageError} setAdminPdfPackageLatest={setAdminPdfPackageLatest} /></AdminLoginGate></div>}
       {role === "Centre" && <CentreView centreUnlocked={centreUnlocked} centreCode={centreCode} setCentreCode={setCentreCode} centreExamId={centreExamId} unlockCentre={unlockCentre} enabledLevels={enabledLevels} toggleLevel={toggleLevel} language={language} availableVariants={availableVariants} variants={variants} setVariants={setVariants} setAvailableVariants={setAvailableVariants} testBank={testBank} setTestBank={setTestBank} setTestImportSummary={setTestImportSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} activeAdminPackageMeta={activeAdminPackageMeta} setActiveAdminPackageMeta={setActiveAdminPackageMeta} importTestPackage={importTestPackage} testImportStatus={testImportStatus} testImportError={testImportError} testImportSummary={testImportSummary} candidates={candidates} selectedCandidateId={selectedCandidateId} setSelectedCandidateId={setSelectedCandidateId} addCandidate={addCandidate} updateCandidate={updateCandidate} assignments={assignments} setAssignments={setAssignments} examiners={examiners} candidateQrFor={(id) => payload("Candidate", id)} examinerQrFor={(id) => payload("Examiner", id)} centreSetupLoading={centreSetupLoading} centreSetupSaving={centreSetupSaving} centreSetupError={centreSetupError} centreSetupStatus={centreSetupStatus} centreAuditExportLoading={centreAuditExportLoading} centreAuditExportError={centreAuditExportError} centreQrAccess={centreQrAccess} centreValidationIssues={centreValidationIssues} centreSetupDirty={centreSetupDirty} setCentreSetupDirty={setCentreSetupDirty} harmonogramSettings={harmonogramSettings} setHarmonogramSettings={setHarmonogramSettings} dataMode={centreDataMode} activeSessionToken={activeSessionToken} candidateConfirmed={candidateConfirmed} candidateStatus={candidateStatus} candidateTimes={candidateTimes} testResponses={testResponses} setTestResponses={setTestResponses} reportDrafts={reportDrafts} outdoor={outdoor} outdoorByExaminer={outdoorByExaminer} applyOutdoorCorrection={applyOutdoorCorrection} applyScanGrading={applyScanGrading} writtenScoresByExaminer={writtenScoresByExaminer} reportMarksByExaminer={reportMarksByExaminer} applyWrittenCorrection={applyWrittenCorrection} applyReportCorrection={applyReportCorrection} outdoorNotes={outdoorNotes} audit={audit} examDate={examDate} place={place} handleLoadCentreSetup={handleLoadCentreSetup} handleSaveCentreSetup={handleSaveCentreSetup} handleDownloadCentreAuditPackage={handleDownloadCentreAuditPackage} updateExaminer={updateExaminer} addExaminer={addExaminer} removeCandidate={removeCandidate} removeExaminer={removeExaminer} t={t} />}
-      {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} activeSessionToken={activeSessionToken} t={t} />}
+      {role === "Candidate" && <CandidateView candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} loggedCandidate={loggedCandidate} confirmed={loggedCandidate ? candidateConfirmed[loggedCandidate.id] : false} loginCandidate={loginCandidate} logoutCandidate={() => setLoggedCandidateId(null)} confirmCandidate={confirmCandidate} unconfirmCandidate={unconfirmCandidate} resendCandidateData={resendCandidateData} sections={loggedCandidate ? CANDIDATE_SECTIONS[loggedCandidate.level] : []} sectionStatus={loggedCandidate ? candidateStatus[loggedCandidate.id] ?? createSectionStatus(loggedCandidate.level) : {}} sectionTimes={loggedCandidate ? candidateTimes[loggedCandidate.id] ?? {} : {}} sectionTone={sectionTone} openSection={openCandidateSection} activeSection={activeCandidateSection} setActiveSection={setActiveCandidateSection} testResponses={testResponses} updateTest={updateTest} submitTest={submitTest} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} variants={variants} testBank={testBank} activeAdminPackageMeta={activeAdminPackageMeta} outdoorItemsByLevel={outdoorItemsByLevel} qrFor={(id) => payload("Candidate", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} activeSessionToken={activeSessionToken} sendSyncEvent={sendSyncEvent} localEventId={localEventId} t={t} />}
       {role === "Examiner" && <ExaminerView examiners={examiners} loggedExaminer={loggedExaminer} confirmed={loggedExaminer ? examinerConfirmed[loggedExaminer.id] : false} loginExaminer={loginExaminer} logoutExaminer={() => setLoggedExaminerId(null)} confirmExaminer={confirmExaminer} assignedCandidates={assignedCandidates} assignments={assignments} setPrimary={setPrimary} activePage={activeExaminerPage} setActivePage={setActiveExaminerPage} openOutdoor={openOutdoor} openWrittenReview={openExaminerWrittenReview} openReportReview={openExaminerReportReview} selectedCandidate={selectedCandidate} setSelectedCandidateId={setSelectedCandidateId} selectedMode={selectedMode} activeOutdoorSection={activeOutdoorSection} setActiveOutdoorSection={setActiveOutdoorSection} outdoor={outdoor} outdoorNotes={outdoorNotes} outdoorNoteDrawings={outdoorNoteDrawings} outdoorVariantChoice={outdoorVariantChoice} setOutdoorVariantChoice={setOutdoorVariantChoice} outdoorExamSummaries={outdoorExamSummaries} updateOutdoorExamSummary={updateOutdoorExamSummary} outdoorItemsByLevel={outdoorItemsByLevel} setOutdoorItemsByLevel={setOutdoorItemsByLevel} updateOutdoor={updateOutdoor} updateOutdoorNote={updateOutdoorNote} updateOutdoorNoteDrawing={updateOutdoorNoteDrawing} outdoorTotal={outdoorTotal} outdoorMax={outdoorMax} submitOutdoor={submitOutdoor} voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={voiceLevelBins} voiceRecordingSupported={voiceRecordingSupported} archivePlan={archivePlan} practicingArchive={practicingArchive} activeScoreLimits={activeScoreLimits} updateScore={updateScore} variants={variants} testBank={testBank} testResponses={testResponses} reportDrafts={reportDrafts} importedCandidatePackages={importedCandidatePackages} setImportedCandidatePackages={setImportedCandidatePackages} qrFor={(id) => payload("Examiner", id)} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} importOfflineCandidatePackageFile={importOfflineCandidatePackageFile} importOfflineCandidatePackageData={importOfflineCandidatePackageData} examinerTimes={loggedExaminer ? examinerTimes[loggedExaminer.id] ?? {} : {}} activeAdminPackageMeta={activeAdminPackageMeta} activeSessionToken={activeSessionToken} onReportMarked={applyReportMarking} t={t} />}
       {role === "Centre" && <AuditSyncView audit={audit} candidates={candidates} examiners={examiners} CloudOff={CloudOff} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} Card={Card} CardContent={CardContent} t={t} />}
     </div>
@@ -6700,8 +6704,35 @@ function readJsonLocalStorage(key, fallback = null) {
   }
 }
 
+function isQuotaExceededError(error) {
+  return error instanceof DOMException && (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED" || error.code === 22);
+}
+
+// Cache keys scoped per exam (see scopedCacheKey) mean a device reused across certifications - the
+// same shared tablet, exam after exam - keeps accumulating one full field-map package per past
+// exam, none of which are ever read again. That alone can exhaust this origin's whole localStorage
+// quota, which surfaced as "Field map package could not be downloaded: The quota has been exceeded"
+// on a candidate who had done nothing wrong. On QuotaExceededError, drop this same key's OTHER
+// exam-scoped copies (same candidate+level, different exam) before retrying once - always safe,
+// since only the current exam's copy is ever read back.
 function writeJsonLocalStorage(key, value) {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    if (!isQuotaExceededError(error)) throw error;
+    try {
+      const siblingPrefix = key.replace(/\.[^.]*$/, "");
+      for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+        const existingKey = window.localStorage.key(i);
+        if (existingKey && existingKey !== key && existingKey.startsWith(siblingPrefix)) {
+          window.localStorage.removeItem(existingKey);
+        }
+      }
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      throw error;
+    }
+  }
 }
 
 function appendFieldTabletSyncQueue(entry) {
@@ -9280,6 +9311,10 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
     });
   }
 
+  // photoBusy only covers the LOCAL part (compress + add to the draft, a few hundred ms) - sending
+  // the sync event, saving to IndexedDB, and uploading all continue in the background afterwards,
+  // so the candidate can start the next photo immediately instead of waiting for a network round
+  // trip every time.
   async function handlePhotoFile(file) {
     if (!file) return;
     setPhotoBusy(true);
@@ -9296,27 +9331,28 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
         const current = prev[tree] ?? createReportDraft()[tree];
         return { ...prev, [tree]: { ...current, photos: [...(current.photos ?? []), photo] } };
       });
-
-      await sendEvent("report_photo.added", "report_photo", `${candidateId}:report:${tree}:${photo.id}`, {
-        candidateId, sectionKey: "report", treeId: tree, photoId: photo.id, name: photo.name, type: photo.type,
-        size: photo.size, hasDataUrl: true, description: "", useInReport: true, caption: photo.caption, capturedAt,
-      });
-
-      try {
-        const blob = dataUrlToBlob(dataUrl);
-        const clientMediaId = `photo-${candidateId}-${tree}-${photo.id}`;
-        const meta = { clientMediaId, type: "photo", mediaType: "photo", candidateId, examinerId: null, sectionKey: "report", tree, fileName: photo.name, mimeType: blob.type, sizeBytes: blob.size, durationMs: null, cleaned: false, caption: photo.caption, description: "" };
-        await saveLocalMedia({ ...meta, blob, createdAt: capturedAt });
-        try {
-          const uploaded = await uploadExamMedia(sessionToken, meta, blob);
-          await updateLocalMedia(clientMediaId, { uploadState: uploaded.stored ? "uploaded" : "local", remoteId: uploaded.id ?? null });
-        } catch {
-          await updateLocalMedia(clientMediaId, { uploadState: "local" });
-        }
-      } catch (error) {
-        console.warn("Consulting field photo storage failed", error);
-      }
       setPhotoStatus(t("report.photoAdded"));
+
+      (async () => {
+        try {
+          await sendEvent("report_photo.added", "report_photo", `${candidateId}:report:${tree}:${photo.id}`, {
+            candidateId, sectionKey: "report", treeId: tree, photoId: photo.id, name: photo.name, type: photo.type,
+            size: photo.size, hasDataUrl: true, description: "", useInReport: true, caption: photo.caption, capturedAt,
+          });
+          const blob = dataUrlToBlob(dataUrl);
+          const clientMediaId = `photo-${candidateId}-${tree}-${photo.id}`;
+          const meta = { clientMediaId, type: "photo", mediaType: "photo", candidateId, examinerId: null, sectionKey: "report", tree, fileName: photo.name, mimeType: blob.type, sizeBytes: blob.size, durationMs: null, cleaned: false, caption: photo.caption, description: "" };
+          await saveLocalMedia({ ...meta, blob, createdAt: capturedAt });
+          try {
+            const uploaded = await uploadExamMedia(sessionToken, meta, blob);
+            await updateLocalMedia(clientMediaId, { uploadState: uploaded.stored ? "uploaded" : "local", remoteId: uploaded.id ?? null });
+          } catch {
+            await updateLocalMedia(clientMediaId, { uploadState: "local" });
+          }
+        } catch (error) {
+          console.warn("Consulting field photo background sync failed", error);
+        }
+      })();
     } catch (error) {
       console.error("Consulting field photo capture failed", error);
       setPhotoStatus(t("report.photoError"));
@@ -9456,6 +9492,61 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
           ))}
         </div>
 
+        {/* Capture icon row - sticky so it stays reachable while the criteria panel / gallery /
+            field notes below get long enough to scroll (photos and recordings accumulate for two
+            trees over what can be a long walk between them). */}
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <label className="flex flex-col items-center gap-1">
+              <span className={`flex h-12 w-12 items-center justify-center rounded-full ${photoBusy ? "bg-emerald-800" : "bg-emerald-600"}`}>
+                <Camera className="h-5 w-5" />
+              </span>
+              <span className="text-[10px] font-semibold text-slate-300">{t("report.takePhoto")}</span>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*,.heic,.heif"
+                capture="environment"
+                className="hidden"
+                disabled={photoBusy}
+                onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handlePhotoFile(file); }}
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={recording || paused ? stopRecording : startRecording}
+              disabled={processing || (!recording && !paused && !voiceRecordingSupported)}
+              className="flex flex-col items-center gap-1"
+            >
+              <span className={`flex h-12 w-12 items-center justify-center rounded-full ${paused ? "bg-amber-500" : recording ? "animate-pulse bg-red-600" : "bg-sky-600"}`}>
+                {recording || paused ? <StopIcon className="h-5 w-5" /> : <MicIcon className="h-5 w-5" />}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-300">{t("consultingField.recordAudio")}</span>
+            </button>
+
+            {(recording || paused) && (
+              <>
+                <button
+                  type="button"
+                  onClick={paused ? resumeRecording : pauseRecording}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-700 bg-slate-900"
+                  aria-label={paused ? t("consultingField.resume") : t("consultingField.pause")}
+                >
+                  {paused ? <PlayIcon className="h-5 w-5" /> : <PauseIcon className="h-5 w-5" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono text-xs text-slate-300">{formatRecordingClock(recordingElapsedMs)}</div>
+                  <VoiceHistogram getVoiceLevels={() => recorderRef.current?.getFrequencyBins()} active={recording} />
+                </div>
+              </>
+            )}
+          </div>
+          {photoStatus && <div className="mt-2 text-xs text-slate-400">{photoStatus}</div>}
+          {recordingError && <div className="mt-2 rounded-xl border border-rose-500 bg-rose-950 p-2 text-xs text-rose-200">{recordingError}</div>}
+          {!voiceRecordingSupported && <div className="mt-2 rounded-xl border border-amber-500 bg-amber-950 p-2 text-xs text-amber-200">{t("voice.error.unsupported")}</div>}
+        </div>
+
         <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-900">
           <button type="button" onClick={() => setCriteriaOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 p-3 text-left text-sm font-semibold text-slate-200">
             {t("consultingField.criteriaTitle")}
@@ -9473,48 +9564,9 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
           )}
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <label className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-emerald-400 p-4 text-center">
-            <Camera className="h-7 w-7" />
-            <span className="text-sm font-semibold">{photoBusy ? t("consultingField.savingPhoto") : t("report.takePhoto")}</span>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*,.heic,.heif"
-              capture="environment"
-              className="hidden"
-              disabled={photoBusy}
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) handlePhotoFile(file); }}
-            />
-          </label>
-
-          <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-sky-400 p-4 text-center">
-            <span className={`flex h-8 w-8 items-center justify-center rounded-full ${paused ? "bg-amber-500" : recording ? "bg-red-600 animate-pulse" : "bg-sky-600"}`}>
-              {paused ? <PauseIcon className="h-4 w-4" /> : recording ? <StopIcon className="h-4 w-4" /> : <MicIcon className="h-4 w-4" />}
-            </span>
-            {!recording && !paused && (
-              <button type="button" onClick={startRecording} disabled={processing || !voiceRecordingSupported} className="text-sm font-semibold">
-                {processing ? t("voice.status.processing") : t("consultingField.recordAudio")}
-              </button>
-            )}
-            {(recording || paused) && (
-              <>
-                <span className="font-mono text-xs text-slate-300">{formatRecordingClock(recordingElapsedMs)}</span>
-                <div className="flex gap-2">
-                  {recording && <button type="button" onClick={pauseRecording} className="rounded-full bg-amber-500 px-2 py-1 text-[11px] font-bold text-amber-950">{t("consultingField.pause")}</button>}
-                  {paused && <button type="button" onClick={resumeRecording} className="rounded-full bg-emerald-500 px-2 py-1 text-[11px] font-bold text-emerald-950">{t("consultingField.resume")}</button>}
-                  <button type="button" onClick={stopRecording} className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-900">{t("consultingField.stop")}</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-        {photoStatus && <div className="mb-3 text-xs text-slate-400">{photoStatus}</div>}
-        {recordingError && <div className="mb-3 rounded-xl border border-rose-500 bg-rose-950 p-2 text-xs text-rose-200">{recordingError}</div>}
-
         {treePhotos.length > 0 && (
           <div className="mb-4 grid grid-cols-4 gap-2">
-            {treePhotos.map((photo) => (
+            {[...treePhotos].reverse().map((photo) => (
               <img key={photo.id} src={photo.dataUrl} alt={photo.caption} className="h-16 w-full rounded-lg border border-slate-700 object-cover" />
             ))}
           </div>
@@ -9554,14 +9606,14 @@ function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, o
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-slate-900">
             <p className="text-sm font-semibold">
-              {submitStep === 1 ? t("consultingField.confirmTreeA") : t("consultingField.confirmTreeB")}
+              {t("consultingField.confirmBothTrees")}
             </p>
             <div className="mt-4 flex gap-2">
               <button type="button" onClick={() => setSubmitStep(0)} className="flex-1 rounded-xl border px-3 py-2 text-sm font-semibold">{t("common.back")}</button>
               <button
                 type="button"
                 disabled={submitBusy}
-                onClick={() => (submitStep === 1 ? setSubmitStep(2) : finalizeSubmit())}
+                onClick={finalizeSubmit}
                 className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
               >
                 {submitBusy ? t("consultingField.submitting") : t("consultingField.confirmYes")}
@@ -12993,6 +13045,31 @@ function normalizeCandidateTreePreparationDraft(value) {
   return { notesByTree: {}, sketchesByTree: {} };
 }
 
+function candidateTreePreparationNote(preparationDraft, tree) {
+  const notes = normalizeCandidateTreePreparationDraft(preparationDraft).notesByTree;
+  const key = fieldTreeKey(tree);
+  const code = String(tree?.code || "").toUpperCase();
+  return notes[key] ?? notes[code] ?? "";
+}
+
+function candidateTreePreparationSketch(preparationDraft, tree) {
+  const sketches = normalizeCandidateTreePreparationDraft(preparationDraft).sketchesByTree;
+  const key = fieldTreeKey(tree);
+  const code = String(tree?.code || "").toUpperCase();
+  return sketches[key] ?? sketches[code] ?? "";
+}
+
+function candidateTreeCharacteristics(tree) {
+  const data = tree?.managementData || tree?.practicingTreeAData || tree?.practicingData || tree?.treeData || tree || {};
+  const textValue = (...keys) => keys.map((key) => data?.[key] ?? tree?.[key]).find((value) => value !== undefined && value !== null && String(value).trim() !== "") || "-";
+  return [
+    ["Taxon", textValue("taxon", "species", "treeSpecies")],
+    ["Height", textValue("height", "heightM", "treeHeight")],
+    ["Stem diameter", textValue("stemDiameter", "stemDiameterCm", "diameter", "dbh")],
+    ["Crown spread", textValue("crownSpread", "crownSpreadM", "crownProjection")],
+  ];
+}
+
 
 // The Centre saves its field preparation under its OWN subject id (fieldPrepExamId = centreExamId,
 // e.g. "Casalgrande_Italy-2026-07-31"), but a candidate/examiner session's resolved scope is the
@@ -13043,7 +13120,7 @@ async function fetchCandidateFieldPackage(candidate) {
   throw lastError || new Error("Field package is not available.");
 }
 
-function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, moveReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, activeSessionToken, t }) {
+function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandidate, confirmed, loginCandidate, logoutCandidate, confirmCandidate, unconfirmCandidate, sections, sectionStatus, sectionTimes, sectionTone, openSection, activeSection, setActiveSection, testResponses, updateTest, submitTest, reportDrafts, activeReportTree, setActiveReportTree, updateReport, addReportPhoto, updateReportPhoto, moveReportPhoto, submitReport, resendCandidateData, variants, testBank, activeAdminPackageMeta, outdoorItemsByLevel, qrFor, setScannerMode, setScannerReentry, activeSessionToken, sendSyncEvent, localEventId, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   // "" | "sending" | "done" — the button is white until a transfer succeeds, then green, and goes
   // back to white on the next change so it always reflects the *current* state, never a stale one.
@@ -13122,6 +13199,58 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
   const [candidateFieldStatus, setCandidateFieldStatus] = useState("");
   const [candidateFieldError, setCandidateFieldError] = useState("");
   const [candidateTreeAPreparation, setCandidateTreeAPreparation] = useState(() => loggedCandidate ? normalizeCandidateTreePreparationDraft(readJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), null)) : normalizeCandidateTreePreparationDraft(null));
+  const preparationSyncTimersRef = useRef({});
+  // The preparation used to live only in this browser's localStorage, so the Centre never saw it
+  // and clearing the browser lost it. Both writers now also emit a sync event; the note is debounced
+  // because it fires on every keystroke. sendSyncEvent/localEventId are passed down from
+  // VetBaraPrototype (its own closures) rather than referenced directly - this component used to
+  // call them as if they were in scope here, which crashed with "Can't find variable: sendSyncEvent"
+  // the first time a candidate actually opened Tree preparation.
+  function syncCandidatePreparation(key, { note, sketch }) {
+    if (!loggedCandidate) return;
+    const updatedAt = new Date().toISOString();
+    sendSyncEvent({
+      clientEventId: localEventId(`candidate-preparation-saved-${loggedCandidate.id}-${key}`),
+      type: "candidate_preparation.saved",
+      entityType: "candidate_preparation",
+      entityId: `${loggedCandidate.id}:preparation:${key}`,
+      candidateId: loggedCandidate.id,
+      payload: { candidateId: loggedCandidate.id, sectionKey: "preparation", treeKey: key, note, sketch, updatedAt },
+      createdAt: updatedAt,
+    });
+  }
+
+  function updateCandidateTreePreparationNote(tree, value) {
+    if (!tree) return;
+    const key = fieldTreeKey(tree);
+    setCandidateTreeAPreparation((previous) => {
+      const normalized = normalizeCandidateTreePreparationDraft(previous);
+      const next = { ...normalized, notesByTree: { ...(normalized.notesByTree || {}), [key]: value } };
+      if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
+      window.clearTimeout(preparationSyncTimersRef.current[key]);
+      preparationSyncTimersRef.current[key] = window.setTimeout(() => {
+        syncCandidatePreparation(key, { note: value, sketch: next.sketchesByTree?.[key] ?? "" });
+      }, 1500);
+      return next;
+    });
+  }
+
+  async function updateCandidateTreePreparationSketch(tree, rawDataUrl) {
+    if (!tree) return;
+    const key = fieldTreeKey(tree);
+    const dataUrl = rawDataUrl ? await compressImageToDataUrl(rawDataUrl, { maxBytes: 150_000, maxDim: 1400 }) : rawDataUrl;
+    setCandidateTreeAPreparation((previous) => {
+      const normalized = normalizeCandidateTreePreparationDraft(previous);
+      const sketches = { ...(normalized.sketchesByTree || {}) };
+      if (dataUrl) sketches[key] = dataUrl; else delete sketches[key];
+      const next = { ...normalized, sketchesByTree: sketches };
+      if (loggedCandidate) writeJsonLocalStorage(candidateTreeAPreparationStorageKey(loggedCandidate), next);
+      // A sketch is one deliberate save, so it goes straight out rather than being debounced.
+      syncCandidatePreparation(key, { note: next.notesByTree?.[key] ?? "", sketch: dataUrl || "" });
+      return next;
+    });
+  }
+
   const canShowOfflinePackage = Boolean(
     loggedCandidate &&
     candidateSectionClosed("test") &&
@@ -13251,8 +13380,8 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
   }
 
 
-  if (loggedCandidate && activeSection === "field-orientation") {
-    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} setActiveSection={setActiveSection} t={t} />;
+  if (loggedCandidate && (activeSection === "field-orientation" || activeSection === "field-trees")) {
+    return <CandidateFieldResourcesSection candidate={loggedCandidate} fieldPackage={candidateFieldPackage} fieldStatus={candidateFieldStatus} fieldError={candidateFieldError} preparationDraft={candidateTreeAPreparation} updatePreparationNote={updateCandidateTreePreparationNote} updatePreparationSketch={updateCandidateTreePreparationSketch} setActiveSection={setActiveSection} mode={activeSection === "field-trees" ? "trees" : "orientation"} t={t} />;
   }
 
   if (loggedCandidate && showFieldCaptureOverlay && activeSessionToken) {
@@ -13421,13 +13550,16 @@ function FieldMapTiles({ mapLayer, mapZoom, mapCenter, markers = [], gpsPosition
   );
 }
 
-function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, setActiveSection, t }) {
-  const [mapLayer, setMapLayer] = useState("osm");
+function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, fieldError, preparationDraft, updatePreparationNote, updatePreparationSketch, setActiveSection, mode = "orientation", t }) {
+  const [mapLayer, setMapLayer] = useState(mode === "trees" ? "esri" : "osm");
   const [gpsPosition, setGpsPosition] = useState(null);
+  const [sketchOpen, setSketchOpen] = useState(false);
   const [gpsStatus, setGpsStatus] = useState("");
+  const [selectedTreeCode, setSelectedTreeCode] = useState("A");
   const level = candidateLevel(candidate);
   const trees = fieldPackage ? normalizeFieldTabletTrees(fieldPackage, level).filter((tree) => normalizeFieldLevel(tree.level) === level) : [];
   const orderedTrees = FIELD_TREE_CODES.map((code) => trees.find((tree) => String(tree.code || "").toUpperCase() === code)).filter(Boolean);
+  const selectedTree = orderedTrees.find((tree) => String(tree.code || "").toUpperCase() === selectedTreeCode) || orderedTrees[0] || null;
   const center = fieldPackage?.examCenter || {};
   const centerPoint = { lat: Number(center.latitude ?? center.lat), lng: Number(center.longitude ?? center.lng) };
   const defaultCenter = {
@@ -13438,6 +13570,8 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
     ...(Number.isFinite(centerPoint.lat) && Number.isFinite(centerPoint.lng) ? [{ key: "center", kind: "center", label: "Exam centre", latitude: centerPoint.lat, longitude: centerPoint.lng }] : []),
     ...orderedTrees.map((tree) => ({ key: fieldTreeKey(tree), kind: "tree", label: fieldTreeLabel(tree.level, tree.code), latitude: tree.latitude, longitude: tree.longitude })),
   ];
+  const selectedTreeCenter = selectedTree && Number.isFinite(Number(selectedTree.latitude)) && Number.isFinite(Number(selectedTree.longitude)) ? { lat: Number(selectedTree.latitude), lng: Number(selectedTree.longitude) } : defaultCenter;
+  const selectedTreeMarkers = selectedTree ? [{ key: fieldTreeKey(selectedTree), kind: "tree", label: fieldTreeLabel(selectedTree.level, selectedTree.code), latitude: selectedTree.latitude, longitude: selectedTree.longitude }] : [];
 
   function locate() {
     setGpsStatus("");
@@ -13459,7 +13593,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2 border-b bg-white/95 p-3 shadow-sm">
       <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">{t("common.back")}</Button>
-      <div className="ml-1 mr-3 text-lg font-bold">{t("candidateSections.orientation.title")}</div>
+      <div className="ml-1 mr-3 text-lg font-bold">{mode === "trees" ? t("candidateSections.trees.title") : t("candidateSections.orientation.title")}</div>
       <select value={mapLayer} onChange={(event) => setMapLayer(event.target.value)} className="rounded-2xl border bg-white px-3 py-2 text-sm font-medium text-slate-700">
         <option value="cuzk">{t("map.layer.cuzk")}</option>
         <option value="esri">{t("map.layer.esri")}</option>
@@ -13480,11 +13614,84 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
     );
   }
 
+  if (mode === "orientation") {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        {toolbar}
+        <div className="min-h-0 flex-1">
+          <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       {toolbar}
-      <div className="min-h-0 flex-1">
-        <FieldMapTiles mapLayer={mapLayer} mapZoom={18} mapCenter={defaultCenter} markers={orientationMarkers} gpsPosition={gpsPosition} minZoom={17} maxZoom={20} heightClass="h-full" title={t("candidateSections.orientation.title")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
+      <div className="min-h-0 flex-1 overflow-y-auto lg:overflow-hidden">
+        <div className="grid h-full gap-0 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="h-64 border-b bg-slate-100 lg:h-full lg:border-b-0 lg:border-r">
+            <FieldMapTiles mapLayer={mapLayer} mapZoom={20} mapCenter={selectedTreeCenter} markers={selectedTreeMarkers} gpsPosition={gpsPosition} allowPan={false} heightClass="h-full" minZoom={17} maxZoom={21} title={t("candidateField.treePreparation")} showHeader={false} onLocate={locate} gpsActive={Boolean(gpsPosition)} />
+          </div>
+          <div className="bg-white p-4 lg:min-h-0 lg:overflow-y-auto">
+          <div className="mb-4 flex flex-wrap gap-2">
+            {FIELD_TREE_CODES.map((code) => {
+              const available = orderedTrees.some((tree) => String(tree.code || "").toUpperCase() === code);
+              return <Button key={code} onClick={() => setSelectedTreeCode(code)} disabled={!available} variant={selectedTreeCode === code ? "default" : "outline"} className="rounded-2xl">{code}</Button>;
+            })}
+          </div>
+          {selectedTree ? (
+            <div className="space-y-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("candidateField.selectedTree")}</div>
+                <h3 className="text-2xl font-bold">{fieldTreeLabel(selectedTree.level, selectedTree.code)} · {selectedTree.name || `${t("fieldPrep.tree")} ${selectedTree.code}`}</h3>
+                <div className="mt-1 font-mono text-xs text-slate-500">{formatFieldCoordinates({ lat: selectedTree.latitude, lng: selectedTree.longitude })}</div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {candidateTreeCharacteristics(selectedTree).map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border bg-slate-50 p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm font-medium text-slate-900">{String(value || "-")}</div>
+                  </div>
+                ))}
+              </div>
+              <label className="block">
+                <span className="text-sm font-semibold">{t("candidateField.candidateNotes")}</span>
+                <textarea value={candidateTreePreparationNote(preparationDraft, selectedTree)} onChange={(event) => updatePreparationNote(selectedTree, event.target.value)} rows={6} placeholder={t("candidateField.candidateNotesPlaceholder")} className="mt-2 w-full rounded-2xl border bg-white p-4 text-base leading-relaxed shadow-inner" />
+              </label>
+              {updatePreparationSketch && (() => {
+                const sketch = candidateTreePreparationSketch(preparationDraft, selectedTree);
+                return (
+                  <div>
+                    <span className="text-sm font-semibold">{t("candidateField.sketch")}</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {sketch && <img src={sketch} alt="" className="h-20 w-32 rounded-lg border object-cover" />}
+                      <Button type="button" onClick={() => setSketchOpen(true)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{sketch ? t("candidateField.editSketch") : t("candidateField.addSketch")}</Button>
+                      {sketch && <Button type="button" onClick={() => updatePreparationSketch(selectedTree, "")} variant="outline" className="rounded-2xl">{t("candidateField.removeSketch")}</Button>}
+                    </div>
+                    {sketchOpen && (
+                      <HandwritingPad
+                        onClose={() => setSketchOpen(false)}
+                        onSave={(dataUrl) => { updatePreparationSketch(selectedTree, dataUrl); setSketchOpen(false); }}
+                        existingImage={sketch || null}
+                        title={`${t("candidateField.sketch")} · ${fieldTreeLabel(selectedTree.level, selectedTree.code)}`}
+                        helperText={t("candidateField.sketchHelper")}
+                        t={t}
+                        Button={Button}
+                        CloseIcon={X}
+                        EraserIcon={Eraser}
+                        UndoIcon={Undo}
+                      />
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{t("candidateField.noTreesAvailable")}</div>
+          )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -17055,6 +17262,7 @@ function StopIcon({ className }) { return <IconBase className={className}><rect 
 function ExpandIcon({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 
 function PauseIcon({ className }) { return <IconBase className={className}><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></IconBase>; }
+function PlayIcon({ className }) { return <IconBase className={className}><path d="M7 4l13 8-13 8V4z" fill="currentColor" stroke="none" /></IconBase>; }
 function PlayTriangleIcon({ className }) { return <IconBase className={className}><path d="M7 5v14l11-7z" /></IconBase>; }
 
 // Live microphone level bars, polled on rAF while actively recording (frozen on pause).
