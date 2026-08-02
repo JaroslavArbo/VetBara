@@ -2159,6 +2159,7 @@ function VetBaraPrototype() {
           birthDate: candidate.birthDate ?? "",
           documentId: candidate.documentId ?? "",
           email: candidate.email ?? "",
+          prerequisites: candidate.prerequisites || candidate.payload?.prerequisites || {},
           status: "Ready",
           written: null,
           outdoor: null,
@@ -2705,6 +2706,7 @@ function VetBaraPrototype() {
         documentId: candidate.documentId || candidate.document_id || candidate.payload?.documentId || candidate.payload?.document_id || "",
         email: candidate.email || candidate.payload?.email || "",
         level: candidate.level || candidate.payload?.level || "Practicing",
+        prerequisites: candidate.prerequisites || candidate.payload?.prerequisites || {},
         status: candidate.payload?.status || "Ready",
         written: candidate.payload?.written ?? null,
         outdoor: candidate.payload?.outdoor ?? null,
@@ -2874,6 +2876,7 @@ function VetBaraPrototype() {
           birthDate: candidate.birthDate ?? "",
           documentId: candidate.documentId ?? "",
           email: candidate.email ?? "",
+          prerequisites: candidate.prerequisites ?? {},
         })),
         examiners: examiners.map((examiner) => ({
           id: examiner.id,
@@ -10041,7 +10044,44 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
   );
 }
 
+// Entry prerequisites each candidate must physically hand over before the exam, per level - taken
+// from the VETcert "Prerequisites to entry" sheets (prerekvizity_praktik / _konzultant): the
+// Practising route needs the trade/safety certificates, the Consulting route only the ETT-level
+// qualification. declaration / references / invoicePaid are common to both. Stored on the candidate
+// as { [key]: boolean } and persisted through the Centre setup payload like any other field.
+const PREREQUISITE_ITEMS = {
+  Practicing: [
+    { key: "etw", labelKey: "prereq.etw" },
+    { key: "chainsaw", labelKey: "prereq.chainsaw" },
+    { key: "workAtHeights", labelKey: "prereq.workAtHeights" },
+    { key: "workWithPlatform", labelKey: "prereq.workWithPlatform" },
+    { key: "declaration", labelKey: "prereq.declaration" },
+    { key: "references", labelKey: "prereq.references" },
+    { key: "invoicePaid", labelKey: "prereq.invoicePaid" },
+  ],
+  Consulting: [
+    { key: "ettQualification", labelKey: "prereq.ettQualification" },
+    { key: "declaration", labelKey: "prereq.declaration" },
+    { key: "references", labelKey: "prereq.references" },
+    { key: "invoicePaid", labelKey: "prereq.invoicePaid" },
+  ],
+};
+
+function candidatePrerequisiteItems(level) {
+  return PREREQUISITE_ITEMS[level] || PREREQUISITE_ITEMS.Practicing;
+}
+
 function CandidateEditorCard({ candidate, selectedCandidateId, setSelectedCandidateId, removeCandidate, updateCandidate, candidatesCount, t }) {
+  const [prereqOpen, setPrereqOpen] = useState(false);
+  const prereqItems = candidatePrerequisiteItems(candidate.level ?? "Practicing");
+  const prereq = candidate.prerequisites ?? {};
+  const doneCount = prereqItems.filter((item) => prereq[item.key]).length;
+  const allDone = doneCount === prereqItems.length;
+
+  function togglePrereq(key, checked) {
+    updateCandidate(candidate.id, { prerequisites: { ...prereq, [key]: checked } });
+  }
+
   return (
     <div className={`rounded-2xl border bg-white p-3 text-sm ${selectedCandidateId === candidate.id ? "border-slate-950 bg-slate-50" : ""}`}>
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -10063,6 +10103,46 @@ function CandidateEditorCard({ candidate, selectedCandidateId, setSelectedCandid
           <option value="Consulting">Consulting</option>
         </select>
       </label>
+
+      {/* Prerequisites checklist: collapsed by default, its header turns green once every required
+          document/certificate has been handed over and stays amber while anything is still missing. */}
+      <div className={`mt-3 overflow-hidden rounded-xl border ${allDone ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+        <button
+          type="button"
+          onClick={() => setPrereqOpen((open) => !open)}
+          aria-expanded={prereqOpen}
+          className="flex w-full items-center justify-between gap-2 p-2.5 text-left"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white ${allDone ? "bg-emerald-500" : "bg-amber-500"}`}>
+              {allDone ? <Check className="h-3.5 w-3.5" /> : <span className="text-xs font-bold leading-none">!</span>}
+            </span>
+            <span className="truncate text-xs font-semibold text-slate-700">{t("centre.prereq.title")}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={`text-xs font-bold ${allDone ? "text-emerald-700" : "text-amber-700"}`}>
+              {allDone ? t("centre.prereq.complete") : `${doneCount}/${prereqItems.length}`}
+            </span>
+            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${prereqOpen ? "rotate-180" : ""}`} />
+          </span>
+        </button>
+        {prereqOpen && (
+          <div className={`space-y-1 border-t px-2.5 py-2 ${allDone ? "border-emerald-200" : "border-amber-200"}`}>
+            {prereqItems.map((item) => (
+              <label key={item.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-1 text-xs text-slate-700 hover:bg-white/60">
+                <input
+                  type="checkbox"
+                  checked={Boolean(prereq[item.key])}
+                  onFocus={() => setSelectedCandidateId(candidate.id)}
+                  onChange={(event) => togglePrereq(item.key, event.target.checked)}
+                  className="h-4 w-4 shrink-0 rounded border-slate-400 accent-emerald-600"
+                />
+                <span>{t(item.labelKey)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
