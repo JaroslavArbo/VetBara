@@ -938,6 +938,15 @@ Object.assign(translations.cs, {
 
 
 Object.assign(translations.en, {
+  "centre.examStart.title": "Start of the exam",
+  "centre.examStart.helper": "Press this the moment the exam physically starts for the candidates. Until then candidates and examiners can only open Orientation - Test, Outdoor and Report stay locked.",
+  "centre.examStart.startedHelper": "The exam is running. Candidates and examiners have access to all their sections.",
+  "centre.examStart.startedAt": "Started at {time}",
+  "centre.examStart.button": "Start the exam",
+  "centre.examStart.buttonStop": "Exam running - undo start",
+  "centre.examStart.confirmStart": "Start the exam now? Candidates and examiners will gain access to Test, Outdoor and Report.",
+  "centre.examStart.confirmStop": "Undo the exam start? Candidates and examiners will only be able to open Orientation again.",
+  "exam.notStartedYet": "The exam has not been started yet. The certification centre opens this section at the start of the exam; for now only Orientation is available.",
   "centre.levels.title": "Levels",
   "centre.tasks.title": "Tasks",
   "centre.tasks.helper": "Preparation checklist, grouped by phase and responsible person.",
@@ -1014,6 +1023,15 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.cs, {
+  "centre.examStart.title": "Zahájení zkoušky",
+  "centre.examStart.helper": "Toto tlačítko stiskněte v okamžiku, kdy kandidátům fyzicky začíná zkouška. Do té doby mají kandidáti i zkoušející přístup pouze do sekce Orientace - Test, Outdoor a Report jsou zamčené.",
+  "centre.examStart.startedHelper": "Zkouška běží. Kandidáti i zkoušející mají přístup do všech svých sekcí.",
+  "centre.examStart.startedAt": "Zahájeno v {time}",
+  "centre.examStart.button": "Zahájit zkoušku",
+  "centre.examStart.buttonStop": "Zkouška běží - vrátit zahájení",
+  "centre.examStart.confirmStart": "Zahájit zkoušku nyní? Kandidáti a zkoušející získají přístup k Testu, Outdooru a Reportu.",
+  "centre.examStart.confirmStop": "Vrátit zahájení zkoušky? Kandidáti a zkoušející budou moci otevřít znovu jen Orientaci.",
+  "exam.notStartedYet": "Zkouška ještě nebyla zahájena. Certifikační centrum tuto sekci otevře na začátku zkoušky; nyní je dostupná pouze Orientace.",
   "centre.levels.title": "Úrovně",
   "centre.tasks.title": "Úkoly",
   "centre.tasks.helper": "Checklist příprav, rozdělený po fázích a zodpovědné osobě.",

@@ -3148,8 +3148,18 @@ function VetBaraPrototype() {
     return true;
   }
 
+  // Until the Centre flips the "exam started" switch (section D), only the Orientation section is
+  // open to candidates and examiners - Test / Outdoor / Report are blocked. The flag travels on
+  // harmonogramSettings, which session bootstrap delivers to every role.
+  const examHasStarted = Boolean(harmonogramSettings?.examStarted);
+  const EXAM_START_EXEMPT_SECTIONS = new Set(["field-orientation", "landing"]);
+  function examStartBlocks(key) {
+    return !examHasStarted && !EXAM_START_EXEMPT_SECTIONS.has(key);
+  }
+
   function openCandidateSection(key) {
     if (!loggedCandidate || !candidateConfirmed[loggedCandidate.id]) return;
+    if (examStartBlocks(key)) { setStatus(t("exam.notStartedYet")); return; }
     const current = candidateStatus[loggedCandidate.id]?.[key];
     if (current === "closed") {
       // Reopening a closed section needs proctor approval on the spot, so this is shown as a
@@ -3653,6 +3663,7 @@ function VetBaraPrototype() {
   function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
   function setPrimary(candidateId, examinerId, primary) { setAssignments((prev) => { const current = prev[candidateId] ?? {}; return { ...prev, [candidateId]: primary ? { primary: examinerId, secondary: current.primary && current.primary !== examinerId ? current.primary : current.secondary } : { ...current, secondary: examinerId, primary: current.primary === examinerId ? current.secondary : current.primary } }; }); }
   async function openOutdoor(candidateId) {
+    if (examStartBlocks("outdoor")) { setStatus(t("exam.notStartedYet")); return; }
     const c = candidates.find((x) => x.id === candidateId);
     if (!c || !loggedExaminer) return;
     const assignment = assignments[candidateId] ?? {};
@@ -3695,6 +3706,7 @@ function VetBaraPrototype() {
     hydrateOutdoorProgress(activeSessionToken, loggedExaminer.id, candidateId);
   }
   function openExaminerWrittenReview(candidateId) {
+    if (examStartBlocks("test")) { setStatus(t("exam.notStartedYet")); return; }
     if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.written?.closedAt && !confirmedReopenAllowed(t("examiner.reopenLabel.writtenReview"), t)) return;
     setSelectedCandidateId(candidateId);
     setActiveExaminerPage("writtenReview");
@@ -3702,6 +3714,7 @@ function VetBaraPrototype() {
   }
 
   function openExaminerReportReview(candidateId) {
+    if (examStartBlocks("report")) { setStatus(t("exam.notStartedYet")); return; }
     if (loggedExaminer && examinerTimes[loggedExaminer.id]?.[candidateId]?.report?.closedAt && !confirmedReopenAllowed(t("examiner.reopenLabel.reportReview"), t)) return;
     setSelectedCandidateId(candidateId);
     setActiveExaminerPage("reportReview");
@@ -13213,6 +13226,21 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   const [unlockValue, setUnlockValue] = useState("");
   const [unlockError, setUnlockError] = useState(false);
   const lockClosedSections = examClosed && !sectionsUnlocked;
+  // Exam-start switch (Centre section D). Stored on harmonogramSettings so it rides the existing
+  // Centre-setup save and is delivered to candidates/examiners through session bootstrap.
+  const examStarted = Boolean(harmonogramSettings?.examStarted);
+  const examStartedAtLabel = harmonogramSettings?.examStartedAt
+    ? new Date(harmonogramSettings.examStartedAt).toLocaleTimeString()
+    : "";
+  const tfCentre = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  function toggleExamStarted() {
+    const next = !examStarted;
+    if (!window.confirm(next ? t("centre.examStart.confirmStart") : t("centre.examStart.confirmStop"))) return;
+    setCentreSetupDirty(true);
+    setHarmonogramSettings((prev) => ({ ...prev, examStarted: next, examStartedAt: next ? new Date().toISOString() : null }));
+    addAudit?.(next ? "Exam started" : "Exam start withdrawn", centreExamId || "Centre", new Date().toLocaleTimeString());
+  }
+
   function markExamClosed() {
     try { window.localStorage.setItem(examCloseKey, "1"); } catch { /* ignore storage errors */ }
     setExamClosed(true);
@@ -13695,6 +13723,29 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           setActiveSection={setActiveCentreSection}
         >
           <div className="space-y-4">
+            {/* Exam start switch. Until this is on, candidates and examiners can only open the
+                Orientation section - Test / Outdoor / Report stay blocked (see examStarted). */}
+            <div className={`rounded-2xl border-2 p-4 ${examStarted ? "border-emerald-500 bg-emerald-50" : "border-red-500 bg-red-50"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-bold ${examStarted ? "text-emerald-900" : "text-red-900"}`}>{t("centre.examStart.title")}</h3>
+                  <p className={`mt-1 max-w-2xl text-sm ${examStarted ? "text-emerald-900" : "text-red-900"}`}>
+                    {examStarted ? t("centre.examStart.startedHelper") : t("centre.examStart.helper")}
+                  </p>
+                  {examStarted && examStartedAtLabel && (
+                    <p className="mt-1 text-xs font-semibold text-emerald-800">{tfCentre("centre.examStart.startedAt", { time: examStartedAtLabel })}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleExamStarted}
+                  className={`shrink-0 rounded-2xl px-6 py-4 text-base font-bold text-white shadow-lg transition-colors ${examStarted ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}`}
+                >
+                  {examStarted ? t("centre.examStart.buttonStop") : t("centre.examStart.button")}
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone={centreValidationIssues.length ? "warn" : "good"}>{accessMeta}</StatusPill>
               <StatusPill>{peopleMeta}</StatusPill>
