@@ -939,6 +939,13 @@ Object.assign(translations.cs, {
 
 Object.assign(translations.en, {
   "centre.levels.title": "Levels",
+  "centre.tasks.title": "Tasks",
+  "centre.tasks.helper": "Preparation checklist, grouped by phase and responsible person.",
+  "centre.tasks.rolesLabel": "Responsible people (editable)",
+  "centre.tasks.filterAll": "All",
+  "centre.tasks.roleAdmin": "Admin",
+  "centre.tasks.roleCoordinator": "Coordinator",
+  "centre.tasks.progress": "{done}/{total} done",
   "centre.wifi.title": "WiFi access",
   "centre.wifi.ssid": "Network name",
   "centre.wifi.password": "Password",
@@ -1008,6 +1015,13 @@ Object.assign(translations.en, {
 
 Object.assign(translations.cs, {
   "centre.levels.title": "Úrovně",
+  "centre.tasks.title": "Úkoly",
+  "centre.tasks.helper": "Checklist příprav, rozdělený po fázích a zodpovědné osobě.",
+  "centre.tasks.rolesLabel": "Zodpovědné osoby (lze pojmenovat)",
+  "centre.tasks.filterAll": "Vše",
+  "centre.tasks.roleAdmin": "Admin",
+  "centre.tasks.roleCoordinator": "Koordinátor",
+  "centre.tasks.progress": "Hotovo {done}/{total}",
   "centre.wifi.title": "WiFi přístup",
   "centre.wifi.ssid": "Název sítě",
   "centre.wifi.password": "Heslo",

@@ -5381,9 +5381,16 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
 
 export function AdminDashboardSection({ id, icon: Icon, title, description, activeSection, setActiveSection, t, children, locked, lockedMessage, onUnlock, unlockLabel }) {
   const isOpen = !locked && activeSection === id;
+  // When a section is expanded, bring its top to the top of the viewport - with several long
+  // sections stacked, opening one lower down otherwise leaves the operator mid-page.
+  const anchorRef = useRef(null);
+  useEffect(() => {
+    if (isOpen && anchorRef.current) anchorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [isOpen]);
   return (
     <Card className="rounded-2xl shadow-sm lg:col-span-3">
       <CardContent className="p-5">
+        <div ref={anchorRef} className="scroll-mt-4" />
         <button
           type="button"
           onClick={() => { if (locked) return; setActiveSection(isOpen ? "" : id); }}
@@ -5812,7 +5819,7 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
 }
 
 function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, uiLanguage, t, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageLatest }) {
-  const [activeAdminSection, setActiveAdminSection] = useState("package-authoring");
+  const [activeAdminSection, setActiveAdminSection] = useState("");
 
   return (
     <>
@@ -12129,6 +12136,159 @@ function readCentreWifiAccess() {
   }
 }
 
+// Exam preparation to-do list for Centre section A. Grouped by phase, each task tagged with the
+// responsible role (admin / coordinator); the two role names are editable and drive a filter. Task
+// labels are fixed Czech domain data (the operators' own checklist), so they are not translated.
+const CENTRE_TASK_GROUPS = [
+  {
+    id: "advance",
+    title: "V předstihu",
+    tasks: [
+      ["Uzávěrka přihlášek měsíc předem", "admin"],
+      ["Kontrola plateb", "admin"],
+      ["Poslat základní informace s požadavkem na prerekvizity včetně termínu na zaslání", "admin"],
+      ["Vystavit prerekvizity či sdílené složky ke kontrole", "admin"],
+      ["Poslat základní informace (místo, čas, harmonogram, co sebou, jak to bude s jídlem)", "admin"],
+      ["Poslat ukázkový posudek konzultantům", "admin"],
+      ["Zajistit prostory", "admin"],
+      ["Domluvit komisaře", "coordinator"],
+      ["Občerstvení pro komisaře", "admin"],
+      ["Poslat informace komisařům", "admin"],
+      ["Výběr místa", "coordinator"],
+      ["Výběr stromů", "coordinator"],
+      ["Kontrola prerekvizit", "coordinator"],
+    ],
+  },
+  {
+    id: "certification",
+    title: "Na certifikaci",
+    tasks: [
+      ["Mapa stromů", "coordinator"],
+      ["Posudek pro praktiky", "coordinator"],
+      ["Situační plánek", "coordinator"],
+      ["Pravidla celková", "coordinator"],
+      ["Podklady tisk - test", "coordinator"],
+      ["Podklady tisk - outdoor", "coordinator"],
+      ["Podklady tisk - pravidla outdoor", "coordinator"],
+      ["Podklady tisk - pravidla indoor", "coordinator"],
+      ["Podklady tablet - test", "coordinator"],
+      ["Podklady tablet - outdoor", "coordinator"],
+      ["Podklady tablet - pravidla outdoor", "coordinator"],
+      ["Podklady tablet - pravidla indoor", "coordinator"],
+      ["Reflexní vesty", "admin"],
+      ["Laserové ukazovátko", "admin"],
+      ["Desky", "admin"],
+      ["Tužky", "admin"],
+      ["Papíry na poznámky", "admin"],
+      ["Výškoměry", "coordinator"],
+      ["Pásma", "coordinator"],
+      ["Palička", "coordinator"],
+      ["Dalekohled", "admin"],
+      ["Připínáčky", "admin"],
+      ["Izolepa", "admin"],
+      ["Euroobaly", "admin"],
+      ["Flashdisk", "admin"],
+      ["Nabité Power banky", "admin"],
+      ["Prodlužka", "admin"],
+      ["Náhradní tužkovky do laserového ukazovátka", "admin"],
+      ["Červené propisky na opravování", "admin"],
+      ["vzorky degradovaných dřev", "admin"],
+      ["sešívačka", "admin"],
+    ],
+  },
+  {
+    id: "after",
+    title: "Po zkoušce",
+    tasks: [
+      ["Vyhodnocení", "coordinator"],
+      ["Zpětná vazba", "coordinator"],
+      ["Archivace dat", "coordinator"],
+      ["Poslat výsledky EAC", "coordinator"],
+      ["Poslat výsledky kandidátům", "coordinator"],
+    ],
+  },
+].map((group) => ({ ...group, tasks: group.tasks.map(([label, role], index) => ({ id: `${group.id}-${index}`, label, role })) }));
+
+function CentreTasksPanel({ settings, setSettings, setCentreSetupDirty, t }) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const [filter, setFilter] = useState("all");
+  const done = settings.taskState || {};
+  const roleNames = {
+    admin: settings.taskRoleNames?.admin ?? t("centre.tasks.roleAdmin"),
+    coordinator: settings.taskRoleNames?.coordinator ?? t("centre.tasks.roleCoordinator"),
+  };
+  const roleStyle = {
+    admin: { dot: "bg-sky-500", chip: "border-sky-300 bg-sky-50 text-sky-800" },
+    coordinator: { dot: "bg-violet-500", chip: "border-violet-300 bg-violet-50 text-violet-800" },
+  };
+  function toggleTask(id, checked) {
+    setCentreSetupDirty?.(true);
+    setSettings((prev) => ({ ...prev, taskState: { ...(prev.taskState || {}), [id]: checked } }));
+  }
+  function setRoleName(role, value) {
+    setCentreSetupDirty?.(true);
+    setSettings((prev) => ({ ...prev, taskRoleNames: { ...(prev.taskRoleNames || {}), [role]: value } }));
+  }
+  const allTasks = CENTRE_TASK_GROUPS.flatMap((group) => group.tasks);
+  const doneCount = allTasks.filter((task) => done[task.id]).length;
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("centre.tasks.title")}</h3>
+          <p className="mt-0.5 text-sm text-slate-600">{t("centre.tasks.helper")}</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white">{tf("centre.tasks.progress", { done: doneCount, total: allTasks.length })}</span>
+      </div>
+
+      {/* Responsible people: editable role names (side list) that label the tasks and the filter. */}
+      <div className="mt-3">
+        <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t("centre.tasks.rolesLabel")}</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {["admin", "coordinator"].map((role) => (
+            <label key={role} className="flex items-center gap-2 rounded-xl border bg-slate-50 p-2 text-sm">
+              <span className={`h-3 w-3 shrink-0 rounded-full ${roleStyle[role].dot}`} />
+              <input value={roleNames[role]} onChange={(event) => setRoleName(role, event.target.value)} className="min-w-0 flex-1 rounded-lg border bg-white p-1.5 text-sm text-slate-950" />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {[["all", t("centre.tasks.filterAll")], ["admin", roleNames.admin], ["coordinator", roleNames.coordinator]].map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${filter === value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-600"}`}>{label}</button>
+        ))}
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {CENTRE_TASK_GROUPS.map((group) => {
+          const tasks = group.tasks.filter((task) => filter === "all" || task.role === filter);
+          if (!tasks.length) return null;
+          const groupDone = tasks.filter((task) => done[task.id]).length;
+          return (
+            <div key={group.id}>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{group.title}</div>
+                <div className="text-[11px] font-semibold text-slate-400">{groupDone}/{tasks.length}</div>
+              </div>
+              <div className="space-y-1">
+                {tasks.map((task) => (
+                  <label key={task.id} className={`flex items-center gap-2.5 rounded-lg border p-2 text-sm ${done[task.id] ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+                    <input type="checkbox" checked={Boolean(done[task.id])} onChange={(event) => toggleTask(task.id, event.target.checked)} className="h-4 w-4 shrink-0 rounded accent-emerald-600" />
+                    <span className={`min-w-0 flex-1 ${done[task.id] ? "text-slate-500 line-through" : "text-slate-800"}`}>{task.label}</span>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${roleStyle[task.role].chip}`}>{roleNames[task.role]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CentreWifiAccessBox({ t, centreExamId }) {
   const [wifi, setWifi] = useState(() => readCentreWifiAccess());
   // The exam scope that scopedCacheKey() reads is only set once the QR session resolves
@@ -12882,7 +13042,7 @@ function tfHarmonogram(t, key, values) {
 
 function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, unlockCentre, enabledLevels, toggleLevel, language, availableVariants, variants, setVariants, setAvailableVariants, testBank, setTestBank, setTestImportSummary, outdoorItemsByLevel, setOutdoorItemsByLevel, activeAdminPackageMeta, setActiveAdminPackageMeta, importTestPackage, testImportStatus, testImportError, testImportSummary, candidates, selectedCandidateId, setSelectedCandidateId, addCandidate, updateCandidate, assignments, setAssignments, examiners, candidateQrFor, examinerQrFor, centreSetupLoading, centreSetupSaving, centreSetupError, centreSetupStatus, centreAuditExportLoading, centreAuditExportError, centreQrAccess, centreValidationIssues, centreSetupDirty, setCentreSetupDirty, harmonogramSettings, setHarmonogramSettings, dataMode, activeSessionToken, candidateConfirmed, candidateStatus, candidateTimes, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, applyOutdoorCorrection, applyScanGrading, writtenScoresByExaminer, reportMarksByExaminer, applyWrittenCorrection, applyReportCorrection, outdoorNotes, audit, examDate, place, handleLoadCentreSetup, handleSaveCentreSetup, handleDownloadCentreAuditPackage, updateExaminer, addExaminer, removeCandidate, removeExaminer, addAudit, t }) {
   const [copiedQr, setCopiedQr] = useState("");
-  const [activeCentreSection, setActiveCentreSection] = useState("setup");
+  const [activeCentreSection, setActiveCentreSection] = useState("");
   // Field-preparation draft lives here (not inside CentreFieldPreparationModule) because the
   // dashboard sections mount their children only while open — switching to Candidates/Examiners
   // would otherwise unmount the module and discard unsaved site-prep edits. CentreView stays
@@ -13294,6 +13454,8 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
                 </label>
               ))}
             </div>
+
+            <CentreTasksPanel settings={harmonogramSettings} setSettings={setHarmonogramSettings} setCentreSetupDirty={setCentreSetupDirty} t={t} />
 
             <CentreWifiAccessBox t={t} centreExamId={centreExamId} />
 
