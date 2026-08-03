@@ -4752,8 +4752,6 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
   const [activeSectionFilter, setActiveSectionFilter] = useState("__all__");
   const [localStatus, setLocalStatus] = useState("");
   const [localError, setLocalError] = useState("");
-  const [pdfFiles, setPdfFiles] = useState({});
-  const [converting, setConverting] = useState(false);
 
   const activeDocMeta = AUTHORING_DOCS.find((doc) => doc.key === activeDocKey) || AUTHORING_DOCS[0];
   const activeDoc = draft.documents[activeDocKey] || {};
@@ -4951,35 +4949,6 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
     });
   }
 
-  // Import 4 exam PDFs → server extracts questions → load the built package into
-  // the editor. PDFs are sent base64 in JSON (no multipart).
-  async function convertPdfs() {
-    const slots = ["practicingWritten", "consultingWritten", "practicingOutdoor", "consultingOutdoor"];
-    const chosen = slots.filter((slot) => pdfFiles[slot]);
-    if (!chosen.length) { setLocalError(t("admin.pdfConvert.noFiles")); return; }
-    setConverting(true);
-    setLocalError("");
-    setLocalStatus(t("admin.pdfConvert.working"));
-    try {
-      const files = {};
-      for (const slot of chosen) files[slot] = await readFileBase64(pdfFiles[slot]);
-      const response = await fetch("/api/admin/test-package/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionToken: admin?.sessionToken, files }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      loadFromPackage(data.package);
-      setPdfFiles({});
-      setLocalStatus(tf("admin.pdfConvert.done", { packageId: data.package?.packageId || "" }));
-    } catch (error) {
-      setLocalError(error.message || t("admin.pdfConvert.failed"));
-      setLocalStatus("");
-    } finally {
-      setConverting(false);
-    }
-  }
 
   async function saveAsPackage() {
     setLocalStatus(t("admin.authoring.savingAsPackage"));
@@ -5186,20 +5155,6 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
-          <h4 className="text-sm font-semibold text-slate-900">{t("admin.pdfConvert.title")}</h4>
-          <p className="mt-1 text-xs text-slate-600">{t("admin.pdfConvert.helper")}</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {[["practicingWritten", "admin.pdfConvert.practicingWritten"], ["consultingWritten", "admin.pdfConvert.consultingWritten"], ["practicingOutdoor", "admin.pdfConvert.practicingOutdoor"], ["consultingOutdoor", "admin.pdfConvert.consultingOutdoor"]].map(([slot, label]) => (
-              <label key={slot} className="flex flex-col gap-1 text-xs font-medium text-slate-700">
-                <span>{t(label)}{pdfFiles[slot] ? " ✓" : ""}</span>
-                <input type="file" accept="application/pdf,.pdf" onChange={(e) => setPdfFiles((prev) => ({ ...prev, [slot]: e.target.files?.[0] || undefined }))} className="text-xs" />
-              </label>
-            ))}
-          </div>
-          <Button onClick={convertPdfs} disabled={converting} className="mt-3 rounded-2xl">{converting ? t("admin.pdfConvert.working") : t("admin.pdfConvert.button")}</Button>
-        </div>
-
         {localStatus && <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">{localStatus}</div>}
         {localError && <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">{localError}</div>}
 
@@ -5273,8 +5228,9 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
           </div>
         </div>
 
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[340px_1fr]">
-          <div className="rounded-2xl border bg-slate-50 p-3">
+        {/* items-stretch (default): the question-list column matches the item-editor's full height. */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-[340px_1fr]">
+          <div className="flex flex-col rounded-2xl border bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="font-semibold">{authoringDocTitle(t, activeDocMeta)}</div>
@@ -5282,7 +5238,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
               </div>
               <Button onClick={addItem} variant="outline" className="rounded-xl px-3 py-1">{t("admin.authoring.addItem")}</Button>
             </div>
-            <div className="mt-3 max-h-[520px] space-y-2 overflow-auto pr-1">
+            <div className="mt-3 min-h-[520px] flex-1 space-y-2 overflow-auto pr-1">
               {visibleItems.map(({ item, index }) => (
                 <button key={`${item.id}-${index}`} onClick={() => setSelectedIndex(index)} className={`w-full rounded-xl border p-2 text-left text-sm ${selectedIndex === index ? "border-slate-950 bg-white" : "bg-white hover:bg-slate-50"}`}>
                   <div className="font-mono text-xs text-slate-500">{item.id || `#${index + 1}`}</div>
@@ -14030,7 +13986,6 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   // "" | "sending" | "done" — the button is white until a transfer succeeds, then green, and goes
   // back to white on the next change so it always reflects the *current* state, never a stale one.
-  const [candidateSendState, setCandidateSendState] = useState("");
 
   // Offers the simplified mobile report-capture screen to a Consulting candidate who opened their
   // ordinary access link on a small screen - a nudge, not a redirect: same standard QR/link works
@@ -14056,19 +14011,6 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
     loggedCandidate && activeSessionToken && candidateLevel(loggedCandidate) === "Consulting" &&
     viewportWidth < 700 && !mobileFieldBannerDismissed && activeSection === "landing"
   );
-
-  async function sendCandidateDataToServer() {
-    setCandidateSendState("sending");
-    try {
-      const ok = await resendCandidateData?.();
-      setCandidateSendState(ok === false ? "" : "done");
-    } catch {
-      setCandidateSendState("");
-    }
-  }
-
-  // Any change to the candidate's own answers or report invalidates the green confirmation.
-  useEffect(() => { setCandidateSendState(""); }, [testResponses, reportDrafts]);
 
   // Leaving mid-exam (tab close, browser Back) can strand work that has not reached the server yet.
   // The browser only allows a generic confirmation dialog here — the wording is the browser's, not
@@ -14302,7 +14244,7 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
     );
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}<Button onClick={sendCandidateDataToServer} variant="outline" className={`rounded-2xl ${candidateSendState === "done" ? "border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : ""}`}>{candidateSendState === "sending" ? t("candidate.sendToServer.sending") : candidateSendState === "done" ? t("candidate.sendToServer.done") : t("candidate.sendToServer")}</Button></div></div>{showMobileFieldBanner && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm text-emerald-950">{t("consultingField.bannerText")}</p><button type="button" onClick={dismissMobileFieldBanner} aria-label={t("common.close")} className="shrink-0 rounded-full p-1 text-lg leading-none text-emerald-700 hover:bg-emerald-100">×</button></div><div className="mt-3"><Button onClick={() => setShowFieldCaptureOverlay(true)} className="rounded-2xl">{t("consultingField.bannerSwitch")}</Button></div></div>}{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}</div></div>{showMobileFieldBanner && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm text-emerald-950">{t("consultingField.bannerText")}</p><button type="button" onClick={dismissMobileFieldBanner} aria-label={t("common.close")} className="shrink-0 rounded-full p-1 text-lg leading-none text-emerald-700 hover:bg-emerald-100">×</button></div><div className="mt-3"><Button onClick={() => setShowFieldCaptureOverlay(true)} className="rounded-2xl">{t("consultingField.bannerSwitch")}</Button></div></div>}{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},

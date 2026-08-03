@@ -355,7 +355,7 @@ Object.assign(translations.en, {
   "candidate.identity.examLevel": "Exam level",
   "candidate.identity.warning": "Confirm identity before opening exam sections.",
   "candidate.identity.confirmed": "Identity confirmed",
-  "candidate.identity.endExam": "End exam",
+  "candidate.identity.endExam": "Leave",
   "candidate.identity.endExamConfirm": "End this candidate's session on this device? You'll need to scan a QR code to sign in again.",
 
   "candidate.mySchedule.title": "My exam schedule",
@@ -500,7 +500,7 @@ Object.assign(translations.cs, {
   "candidate.identity.examLevel": "Úroveň zkoušky",
   "candidate.identity.warning": "Před otevřením částí zkoušky potvrďte identitu.",
   "candidate.identity.confirmed": "Identita potvrzena",
-  "candidate.identity.endExam": "Ukončit zkoušku",
+  "candidate.identity.endExam": "Odejít",
   "candidate.identity.endExamConfirm": "Ukončit session tohoto kandidáta na tomto zařízení? Pro opětovné přihlášení bude potřeba naskenovat QR kód.",
 
   "candidate.mySchedule.title": "Můj harmonogram zkoušky",
@@ -628,7 +628,7 @@ Object.assign(translations.en, {
   "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registration ID",
   "examiner.identity.confirmed": "Identity confirmed",
-  "examiner.identity.endExam": "End exam",
+  "examiner.identity.endExam": "Leave",
   "examiner.identity.endExamConfirm": "End this examiner's session on this device? You'll need to scan a QR code to sign in again.",
   "examiner.identity.confirm": "Confirm identity",
 
@@ -738,7 +738,7 @@ Object.assign(translations.cs, {
   "examiner.identity.email": "E-mail",
   "examiner.identity.registrationId": "Registrační ID",
   "examiner.identity.confirmed": "Identita potvrzena",
-  "examiner.identity.endExam": "Ukončit zkoušku",
+  "examiner.identity.endExam": "Odejít",
   "examiner.identity.endExamConfirm": "Ukončit session tohoto zkoušejícího na tomto zařízení? Pro opětovné přihlášení bude potřeba naskenovat QR kód.",
   "examiner.identity.confirm": "Potvrdit identitu",
 
