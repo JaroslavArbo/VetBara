@@ -1,62 +1,11 @@
-import crypto from "node:crypto";
+import { envReady, sendJson, supabase } from "../_lib/backend.mjs";
+import { auditAuth, createAdminSession, findAdminProfile, passwordMatches, requestIp } from "../_lib/adminauth.mjs";
 
-// Admin login. Verifies username/password against the single admin_credentials
-// row (bootstrapped to the default Bara / VetBara2026 on first ever login, which
-// the admin then changes) and issues an Admin app_session used to authorize
-// sensitive Admin actions.
-
-const DEFAULT_USERNAME = "Bara";
-const DEFAULT_PASSWORD = "VetBara2026";
-const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8h admin shift
-
-function sendJson(response, status, body) {
-  response.status(status).json(body);
-}
-
-function envReady() {
-  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
-async function supabase(path, options = {}) {
-  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, {
-    ...options,
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-      ...(options.headers ?? {}),
-    },
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return response.status === 204 ? [] : response.json();
-}
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function hashPassword(password, salt) {
-  return crypto.scryptSync(String(password), salt, 64).toString("hex");
-}
-
-function passwordMatches(password, salt, expectedHash) {
-  const actual = Buffer.from(hashPassword(password, salt), "hex");
-  const expected = Buffer.from(String(expectedHash), "hex");
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
-}
-
-async function loadOrBootstrapCredentials() {
-  const rows = await supabase("admin_credentials?id=eq.1&select=*&limit=1");
-  if (rows[0]) return rows[0];
-  // First ever login: seed the default account so Bara / VetBara2026 works once.
-  const salt = crypto.randomBytes(16).toString("hex");
-  const created = await supabase("admin_credentials", {
-    method: "POST",
-    body: JSON.stringify({ id: 1, username: DEFAULT_USERNAME, salt, password_hash: hashPassword(DEFAULT_PASSWORD, salt) }),
-  });
-  return created[0];
-}
+// Admin login against a NAMED identity in user_profiles (Admin_Bara / Admin_Jarek).
+//
+// §2.2: there is deliberately no bootstrap and no default password here any more. An account that
+// has not been activated has no credential material at all and cannot be signed into - the only way
+// in is a one-time activation link (see admin-auth-activate.mjs).
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return sendJson(response, 405, { error: "Method not allowed" });
@@ -65,20 +14,43 @@ export default async function handler(request, response) {
   const { username, password } = request.body ?? {};
   if (!username || !password) return sendJson(response, 400, { error: "Missing username or password" });
 
+  const audit = { actorType: "admin", actorId: String(username).slice(0, 64), ip: requestIp(request), userAgent: request.headers?.["user-agent"] };
+
   try {
-    const creds = await loadOrBootstrapCredentials();
-    const ok = String(username) === creds.username && passwordMatches(password, creds.salt, creds.password_hash);
-    if (!ok) return sendJson(response, 401, { error: "Invalid username or password" });
+    const profile = await findAdminProfile(username);
 
-    const sessionToken = crypto.randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
-    await supabase("app_sessions", {
-      method: "POST",
-      body: JSON.stringify({ token_hash: sha256(sessionToken), role: "Admin", subject_id: creds.username, expires_at: expiresAt }),
+    // One generic message for every failure reason, so the response never reveals whether an
+    // account exists, is pending activation or is suspended.
+    const reject = async (reason) => {
+      await auditAuth({ ...audit, action: "admin_login_password_failed", result: "failure", metadata: { reason } });
+      return sendJson(response, 401, { error: "Invalid credentials" });
+    };
+
+    if (!profile) return reject("unknown_username");
+    if (profile.status === "pending_activation") return reject("pending_activation");
+    if (profile.status !== "active") return reject(`status_${profile.status}`);
+    if (!profile.password_hash || !profile.salt) return reject("no_credentials");
+    if (!passwordMatches(password, profile.salt, profile.password_hash)) return reject("bad_password");
+
+    const session = await createAdminSession(profile);
+    await supabase(`user_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ last_login_at: new Date().toISOString() }),
+    }).catch(() => {});
+    await auditAuth({ ...audit, action: "admin_login_password_success" });
+
+    // NOTE (§3, §8): the second factor (TOTP / passkey) is phase 2-3 of the overhaul. Until it lands
+    // the response reports that no second factor is enrolled, so the client can surface that.
+    return sendJson(response, 200, {
+      ok: true,
+      username: profile.username,
+      role: profile.role,
+      sessionToken: session.sessionToken,
+      expiresAt: session.expiresAt,
+      secondFactor: { enrolled: false, required: false },
     });
-
-    return sendJson(response, 200, { ok: true, sessionToken, username: creds.username, expiresAt });
   } catch (error) {
-    return sendJson(response, 500, { error: error.message || "Login failed" });
+    console.error("Admin login failed", error);
+    return sendJson(response, 500, { error: "Admin login failed" });
   }
 }

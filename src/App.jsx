@@ -5488,10 +5488,101 @@ function useAdminSessionState(t, addAudit) {
     return data;
   }
 
-  return { session, isAuthed, login, logout, changeCredentials };
+  // Activation returns a ready session; adopt it directly instead of asking for the password again.
+  function adoptSession(data) {
+    persist({ sessionToken: data.sessionToken, username: data.username, expiresAt: data.expiresAt });
+    addAudit?.("Admin account activated", data.username, "");
+  }
+
+  return { session, isAuthed, login, logout, changeCredentials, adoptSession };
 }
 
-// Gates the whole Admin area behind a login. First login: Bara / VetBara2026.
+// Gates the whole Admin area behind a login. Accounts are activated via a one-time link
+// (?adminActivate=<token>); there is deliberately no default password.
+
+// Admin first activation (§4.2 / §21.1). Reached by opening the one-time activation link:
+//   ?adminActivate=<token>
+// The link is verified server-side, the admin sets their OWN strong password, and the account moves
+// from pending_activation to active. There is no default password to fall back on.
+function AdminActivationScreen({ token, t, onActivated }) {
+  const [state, setState] = useState({ status: "checking", username: "", error: "" });
+  const [form, setForm] = useState({ password: "", confirm: "" });
+  const [reveal, setReveal] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/admin/auth/activate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "inspect", token }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) setState({ status: "invalid", username: "", error: data.error || t("adminAuth.activation.invalid") });
+        else setState({ status: "ready", username: data.username || "", error: "" });
+      } catch {
+        if (!cancelled) setState({ status: "invalid", username: "", error: t("adminAuth.activation.invalid") });
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/admin/auth/activate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", token, password: form.password, passwordConfirm: form.confirm }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setError(data.error || t("adminAuth.activation.failed")); return; }
+      onActivated?.(data);
+    } catch (err) {
+      setError(err?.message || t("adminAuth.activation.failed"));
+    } finally { setBusy(false); }
+  }
+
+  if (state.status === "checking") {
+    return <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-sm">{t("adminAuth.activation.checking")}</div>;
+  }
+  if (state.status === "invalid") {
+    return (
+      <div className="mx-auto mt-10 max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+        <div className="text-lg font-semibold text-rose-900">{t("adminAuth.activation.invalidTitle")}</div>
+        <p className="mt-2 text-sm text-rose-900">{state.error || t("adminAuth.activation.invalid")}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-2 text-lg font-semibold text-slate-950"><Lock className="h-5 w-5" /> {t("adminAuth.activation.title")}</div>
+      <p className="mt-1 text-sm text-slate-600">{t("adminAuth.activation.helper")}</p>
+      <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm"><span className="text-slate-500">{t("adminAuth.username")}:</span> <span className="font-bold">{state.username}</span></div>
+      <ul className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-slate-600">
+        {["len", "lower", "upper", "digit", "special"].map((rule) => <li key={rule}>{t(`adminAuth.activation.rule.${rule}`)}</li>)}
+      </ul>
+      <form onSubmit={submit} className="mt-4">
+        {/* type toggles rather than a custom masker, so a password manager can paste normally. */}
+        <input value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} type={reveal ? "text" : "password"}
+          placeholder={t("adminAuth.activation.newPassword")} autoComplete="new-password" className="w-full rounded-xl border bg-white p-2 text-sm" />
+        <input value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} type={reveal ? "text" : "password"}
+          placeholder={t("adminAuth.activation.confirmPassword")} autoComplete="new-password" className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" />
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+          <input type="checkbox" checked={reveal} onChange={(e) => setReveal(e.target.checked)} />{t("adminAuth.activation.reveal")}
+        </label>
+        {error && <div className="mt-2 text-sm font-medium text-rose-700">{error}</div>}
+        <Button type="submit" disabled={busy} className="mt-4 w-full rounded-2xl">{busy ? t("adminAuth.activation.activating") : t("adminAuth.activation.activate")}</Button>
+      </form>
+      <p className="mt-3 text-xs text-slate-500">{t("adminAuth.activation.secondFactorNote")}</p>
+    </div>
+  );
+}
+
 export function AdminLoginGate({ t, addAudit, children }) {
   const auth = useAdminSessionState(t, addAudit);
   const [form, setForm] = useState({ username: "", password: "" });
@@ -5514,6 +5605,12 @@ export function AdminLoginGate({ t, addAudit, children }) {
     setChangeMsg("");
     try { await auth.changeCredentials(changeForm); setChangeForm({ currentPassword: "", newUsername: "", newPassword: "" }); setChangeMsg(t("adminAuth.changed")); }
     catch (err) { setChangeMsg(err.message || t("adminAuth.changeFailed")); }
+  }
+
+  // Opening a one-time activation link takes precedence over the login form.
+  const activationToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("adminActivate") : null;
+  if (activationToken && !auth.isAuthed) {
+    return <AdminActivationScreen token={activationToken} t={t} onActivated={(data) => auth.adoptSession(data)} />;
   }
 
   if (!auth.isAuthed) {

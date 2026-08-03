@@ -1,3 +1,4 @@
+import { validateAdminPassword } from "../_lib/adminauth.mjs";
 import crypto from "node:crypto";
 
 // Change the admin username and/or password. Requires a valid Admin session and
@@ -55,7 +56,11 @@ export default async function handler(request, response) {
   const { sessionToken, currentPassword, newUsername, newPassword } = request.body ?? {};
   if (!currentPassword) return sendJson(response, 400, { error: "Missing current password" });
   if (!newUsername && !newPassword) return sendJson(response, 400, { error: "Nothing to change" });
-  if (newPassword && String(newPassword).length < 6) return sendJson(response, 400, { error: "New password must be at least 6 characters" });
+  // §5 - the same strong-password policy the activation flow enforces.
+  if (newPassword) {
+    const policyError = validateAdminPassword(newPassword, newUsername || username);
+    if (policyError) return sendJson(response, 400, { error: policyError });
+  }
 
   try {
     const session = await resolveAdminSession(sessionToken);

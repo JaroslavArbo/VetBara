@@ -3,6 +3,7 @@
 // (underscore dir → not counted as a function by Vercel).
 import login from "./_impl/admin-auth-login.mjs";
 import changePassword from "./_impl/admin-auth-change-password.mjs";
+import activate from "./_impl/admin-auth-activate.mjs";
 import draftsSave from "./_impl/admin-authoring-drafts-save.mjs";
 import draftsList from "./_impl/admin-authoring-drafts-list.mjs";
 import draftsLatest from "./_impl/admin-authoring-drafts-latest.mjs";
@@ -21,6 +22,7 @@ import tpConvert from "./_impl/admin-test-package-convert.mjs";
 const routes = {
   "auth/login": login,
   "auth/change-password": changePassword,
+  "auth/activate": activate,
   "authoring-drafts/save": draftsSave,
   "authoring-drafts/list": draftsList,
   "authoring-drafts/latest": draftsLatest,
