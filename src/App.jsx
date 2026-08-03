@@ -5942,7 +5942,10 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
               <div className="rounded-lg bg-slate-50 p-2 text-sm text-slate-700">{row.en}</div>
               <input
                 defaultValue={row.value}
-                key={`${row.key}-${refreshTick}`}
+                // selectedLang MUST be part of the key: the input is uncontrolled (defaultValue),
+                // so without it React reuses the same element when the target language changes and
+                // keeps showing the previous language's text (only the coverage/badges updated).
+                key={`${selectedLang}-${row.key}-${refreshTick}`}
                 disabled={savingKey === row.key}
                 onBlur={(e) => { if (e.target.value !== row.value) saveTranslation(row.key, e.target.value); }}
                 onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
