@@ -13070,6 +13070,233 @@ function OutdoorSessionEditor({ group, isFirst, hasOverride, parts, outdoorMinut
   );
 }
 
+// Invitation letters (Centre section C, under the schedule). Two editable templates - one for
+// candidates, one for examiners - plus the extra equipment paragraph Consulting candidates get.
+// The bracketed fields are NOT editable: place, date(s), GPS, participant counts and the schedule
+// are filled in from the exam setup, so a letter can never contradict the certification itself.
+const CENTRE_INVITE_DEFAULTS = {
+  candidate: `Dear participants,
+
+We would like to invite you to attend the VetCert certification examination, which will take place from [insert Date] in [insert Location].
+Venue GPS coordinates: [insert GPS coordinates]
+The examination will begin at 8:30 a.m. A detailed schedule is attached to this email.
+Please arrive at the venue sufficiently in advance to allow time for registration and preparation before the examination starts.
+We look forward to welcoming you in [insert Location].
+
+Kind regards,
+Jaroslav Kolařík`,
+  consultingExtra: `Please bring all the equipment you normally use for tree inspection and visual tree assessment. You will also need a laptop or tablet to complete the report.`,
+  examiner: `We would like to invite you as examiner for [insert whether Practical or Consulting] section to attend the VetCert certification examination, which will take place from [insert Date] in [insert Location].
+Venue GPS coordinates: [insert GPS coordinates]
+The examination will begin at 8:30 a.m. A detailed schedule is attached to this email.
+Please arrive at the venue sufficiently in advance to allow time for registration and preparation before the examination starts.
+We look forward to welcoming you in [insert Location].
+
+Kind regards.`,
+};
+
+// The auto-filled (locked) values every letter shares.
+function centreInviteFacts({ place, examDate, settings, candidates, examiners, fieldPrep, t }) {
+  const days = Math.max(1, Number(settings?.days) || 1);
+  const start = new Date(`${examDate || new Date().toISOString().slice(0, 10)}T00:00:00`);
+  const dates = Array.from({ length: days }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    return d.toLocaleDateString();
+  });
+  const centre = fieldPrep?.examCenter;
+  const gps = centre && Number.isFinite(Number(centre.lat)) && Number.isFinite(Number(centre.lng))
+    ? `${Number(centre.lat).toFixed(5)}, ${Number(centre.lng).toFixed(5)}`
+    : t("centre.invite.gpsMissing");
+  return {
+    location: place || t("centre.invite.placeMissing"),
+    dateText: dates.length > 1 ? `${dates[0]} - ${dates[dates.length - 1]}` : dates[0],
+    gps,
+    counts: `${candidates.length} × ${t("role.candidate")}, ${examiners.length} × ${t("role.examiner")}`,
+    startTime: settings?.dayStartTime || "08:30",
+  };
+}
+
+function centreInviteFillTemplate(template, facts, extra = {}) {
+  return String(template || "")
+    .replaceAll("[insert Date]", facts.dateText)
+    .replaceAll("[insert Location]", facts.location)
+    .replaceAll("[insert GPS coordinates]", facts.gps)
+    .replaceAll("[insert whether Practical or Consulting]", extra.area || "");
+}
+
+function CentreInviteLettersPanel({
+  candidates, examiners, settings, setSettings, setCentreSetupDirty,
+  place, examDate, fieldPrep, candidateQrFor, examinerQrFor, assignments, t,
+}) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  const facts = centreInviteFacts({ place, examDate, settings, candidates, examiners, fieldPrep, t });
+  const candidateTemplate = settings?.inviteLetterCandidate ?? CENTRE_INVITE_DEFAULTS.candidate;
+  const consultingExtra = settings?.inviteLetterConsultingExtra ?? CENTRE_INVITE_DEFAULTS.consultingExtra;
+  const examinerTemplate = settings?.inviteLetterExaminer ?? CENTRE_INVITE_DEFAULTS.examiner;
+
+  function update(key, value) {
+    setCentreSetupDirty?.(true);
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  }
+  function resetAll() {
+    if (!window.confirm(t("centre.invite.resetConfirm"))) return;
+    setCentreSetupDirty?.(true);
+    setSettings((prev) => ({
+      ...prev,
+      inviteLetterCandidate: CENTRE_INVITE_DEFAULTS.candidate,
+      inviteLetterConsultingExtra: CENTRE_INVITE_DEFAULTS.consultingExtra,
+      inviteLetterExaminer: CENTRE_INVITE_DEFAULTS.examiner,
+    }));
+  }
+
+  // Which level an examiner examines, for "[insert whether Practical or Consulting]".
+  function examinerArea(examiner) {
+    const levels = new Set(candidates
+      .filter((c) => assignments?.[c.id]?.primary === examiner.id || assignments?.[c.id]?.secondary === examiner.id)
+      .map((c) => candidateLevel(c)));
+    if (levels.size === 1) return [...levels][0] === "Practicing" ? "Practical" : "Consulting";
+    return [...levels].map((l) => (l === "Practicing" ? "Practical" : "Consulting")).join(" / ") || "Practical / Consulting";
+  }
+
+  function buildLetters() {
+    const schedule = buildDefaultHarmonogramSchedule(candidates, examiners, settings);
+    const days = Math.max(1, Number(settings?.days) || 1);
+    const factRows = `<table class="facts"><tbody>
+      <tr><th>${escapeHtml(t("centre.invite.factPlace"))}</th><td>${escapeHtml(facts.location)}</td></tr>
+      <tr><th>${escapeHtml(t("centre.invite.factDate"))}</th><td>${escapeHtml(facts.dateText)}</td></tr>
+      <tr><th>${escapeHtml(t("centre.invite.factGps"))}</th><td>${escapeHtml(facts.gps)}</td></tr>
+      <tr><th>${escapeHtml(t("centre.invite.factCounts"))}</th><td>${escapeHtml(facts.counts)}</td></tr>
+    </tbody></table>`;
+
+    const people = [
+      ...candidates.map((c) => ({
+        kind: "candidate", id: c.id, name: c.name || c.id, level: candidateLevel(c),
+        url: candidateQrFor?.(c.id) || "",
+        body: centreInviteFillTemplate(candidateTemplate, facts)
+          + (candidateLevel(c) === "Consulting" && String(consultingExtra).trim() ? `\n\n${centreInviteFillTemplate(consultingExtra, facts)}` : ""),
+      })),
+      ...examiners.map((ex) => ({
+        kind: "examiner", id: ex.id, name: ex.name || ex.id, level: "",
+        url: examinerQrFor?.(ex.id) || "",
+        body: centreInviteFillTemplate(examinerTemplate, facts, { area: examinerArea(ex) }),
+      })),
+    ];
+    if (!people.length) { window.alert(t("centre.invite.noPeople")); return; }
+
+    const pages = people.map((person) => `<section class="letter">
+      <header>
+        <div class="brand">VETcert</div>
+        <h1>${escapeHtml(t("centre.invite.docTitle"))}</h1>
+      </header>
+      <p class="addressee">${escapeHtml(person.name)}${person.level ? ` · ${escapeHtml(person.level)}` : ""} · ${escapeHtml(person.id)}</p>
+      <div class="body">${person.body.split("\n").map((line) => `<p>${escapeHtml(line) || "&nbsp;"}</p>`).join("")}</div>
+      ${factRows}
+      <div class="access">
+        <div class="qr">${person.url ? renderQrSvgMarkup(person.url, 150) : `<div class="noqr">${escapeHtml(t("qr.missingShort"))}</div>`}</div>
+        <div class="accessText">
+          <div class="accessLabel">${escapeHtml(t("centre.invite.accessLabel"))}</div>
+          <div class="accessUrl">${escapeHtml(person.url || "-")}</div>
+        </div>
+      </div>
+    </section>`).join("");
+
+    // The schedule, appended at the end as its own page(s).
+    const schedulePages = Array.from({ length: days }, (_, day) => {
+      const dayGroups = (schedule.groups || []).filter((g) => g.day === day);
+      if (!dayGroups.length) return "";
+      const tables = dayGroups.map((group) => {
+        const rows = [schedule.welcome, ...group.blocks].map((block) => `<tr style="background:${harmonogramActivityColor(block.activity)}">
+          <td>${harmonogramTimeLabel(block.start)}</td><td>${block.duration ? `${block.duration} min` : ""}</td>
+          <td>${escapeHtml(t(`harmonogram.activity.${block.activity}`))}</td></tr>`).join("");
+        return `<div class="sched"><div class="schedHead">${escapeHtml(group.level)} — ${escapeHtml(group.members.map((m) => m.name || m.id).join(", "))}</div>
+          <table class="schedTable"><thead><tr><th>${escapeHtml(t("harmonogram.time"))}</th><th>${escapeHtml(t("harmonogram.duration"))}</th><th>${escapeHtml(t("harmonogram.activityCol"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      }).join("");
+      return `<section class="letter"><h1>${escapeHtml(t("harmonogram.pdfTitle"))}${days > 1 ? ` · ${escapeHtml(t("harmonogram.dayLabel"))} ${day + 1}` : ""}</h1>${tables}</section>`;
+    }).join("");
+
+    openPrintDocument(`<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(t("centre.invite.docTitle"))}</title><style>
+      @page{size:A4 portrait;margin:16mm}*{box-sizing:border-box}
+      body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:11pt;line-height:1.45}
+      .letter{break-after:page;min-height:255mm}
+      .letter:last-of-type{break-after:auto}
+      header{border-bottom:2px solid #102018;padding-bottom:4mm;margin-bottom:6mm}
+      .brand{font-size:9pt;letter-spacing:.18em;color:#4c6b57;font-weight:700}
+      h1{font-size:15pt;margin:1mm 0 0}
+      .addressee{font-weight:700;font-size:12pt;margin:0 0 4mm}
+      .body p{margin:0 0 2.5mm}
+      table.facts{border-collapse:collapse;margin:6mm 0;font-size:10pt;width:100%}
+      table.facts th{text-align:left;width:45mm;padding:1.5mm 3mm 1.5mm 0;color:#4c6b57;vertical-align:top}
+      table.facts td{padding:1.5mm 0;font-weight:600}
+      .access{display:flex;gap:6mm;align-items:center;border:1px solid #cbd5cf;border-radius:8px;padding:4mm;margin-top:4mm}
+      .access svg{width:38mm;height:38mm}
+      .noqr{width:38mm;height:38mm;border:1px dashed #b9c4bd;display:flex;align-items:center;justify-content:center;font-size:8pt;text-align:center}
+      .accessLabel{font-size:9pt;color:#4c6b57;font-weight:700}
+      .accessUrl{font-family:ui-monospace,monospace;font-size:8.5pt;word-break:break-all}
+      .sched{margin-bottom:6mm;break-inside:avoid}
+      .schedHead{font-weight:700;margin-bottom:2mm}
+      table.schedTable{width:100%;border-collapse:collapse;font-size:9.5pt}
+      table.schedTable th,table.schedTable td{border:1px solid #ccc;padding:1.8mm;text-align:left}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}
+      .actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:#fff}
+      @media print{.actions{display:none}}
+    </style></head><body>
+      <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
+      ${pages}${schedulePages}
+    </body></html>`, () => window.alert(t("harmonogram.printBlocked")));
+  }
+
+  const editor = (label, value, key, rows) => (
+    <label className="block text-sm font-medium">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => update(key, event.target.value)}
+        rows={rows}
+        className="mt-1 w-full rounded-xl border bg-white p-3 font-mono text-xs leading-relaxed text-slate-950"
+      />
+    </label>
+  );
+
+  return (
+    <div className="mt-4 rounded-2xl border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("centre.invite.title")}</h3>
+          <p className="mt-0.5 max-w-3xl text-sm text-slate-600">{t("centre.invite.helper")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={resetAll} variant="outline" className="rounded-2xl text-xs">{t("centre.invite.reset")}</Button>
+          <Button onClick={buildLetters} className="rounded-2xl">{t("centre.invite.build")}</Button>
+        </div>
+      </div>
+
+      {/* The locked, auto-filled part of every letter. */}
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("centre.invite.lockedTitle")}</div>
+        <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+          {[[t("centre.invite.factPlace"), facts.location], [t("centre.invite.factDate"), facts.dateText],
+            [t("centre.invite.factGps"), facts.gps], [t("centre.invite.factCounts"), facts.counts]].map(([label, value]) => (
+            <div key={label} className="flex items-baseline gap-2">
+              <span className="shrink-0 text-xs text-slate-500">{label}:</span>
+              <span className="min-w-0 break-words font-semibold">{value}</span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">{t("centre.invite.lockedHelper")}</p>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        {editor(t("centre.invite.candidateLetter"), candidateTemplate, "inviteLetterCandidate", 14)}
+        {editor(t("centre.invite.examinerLetter"), examinerTemplate, "inviteLetterExaminer", 14)}
+      </div>
+      <div className="mt-3">
+        {editor(t("centre.invite.consultingExtra"), consultingExtra, "inviteLetterConsultingExtra", 3)}
+      </div>
+    </div>
+  );
+}
+
 function CentreScheduleBuilder({ candidates, examiners, settings, setSettings, setCentreSetupDirty, t }) {
   const [welcome, setWelcome] = useState(null);
   const [groups, setGroups] = useState(null);
@@ -13868,6 +14095,20 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
             </div>
 
             <CentreScheduleBuilder candidates={candidates} examiners={examiners} settings={harmonogramSettings} setSettings={setHarmonogramSettings} setCentreSetupDirty={setCentreSetupDirty} t={t} />
+            <CentreInviteLettersPanel
+              candidates={candidates}
+              examiners={examiners}
+              settings={harmonogramSettings}
+              setSettings={setHarmonogramSettings}
+              setCentreSetupDirty={setCentreSetupDirty}
+              place={place}
+              examDate={examDate}
+              fieldPrep={fieldPrep}
+              candidateQrFor={candidateQrForRewritten}
+              examinerQrFor={examinerQrForRewritten}
+              assignments={assignments}
+              t={t}
+            />
           </div>
         </AdminDashboardSection>
 
