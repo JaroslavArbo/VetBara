@@ -21,8 +21,33 @@ export default async function handler(request, response) {
     if (request.method === "POST") {
       if (!(await resolveAdminSession(request.body?.sessionToken))) return sendJson(response, 401, { ok: false, error: "Admin session required" });
       const lang = String(request.body?.lang || "").trim();
+      if (!lang) return sendJson(response, 400, { ok: false, error: "lang is required" });
+
+      // Batch upsert from a CSV import: entries = [{ key, value }]. Empty values are IGNORED here
+      // (not deleted), so re-importing a sheet with blank cells never silently wipes an existing
+      // translation - clearing is done one row at a time in the UI on purpose.
+      if (Array.isArray(request.body?.entries)) {
+        const seen = new Set();
+        const upserts = [];
+        for (const entry of request.body.entries) {
+          const entryKey = String(entry?.key || "").trim();
+          const entryValue = typeof entry?.value === "string" ? entry.value.trim() : "";
+          if (!entryKey || !entryValue || seen.has(entryKey)) continue;
+          seen.add(entryKey);
+          upserts.push({ lang, key: entryKey, value: entryValue, updated_at: new Date().toISOString() });
+        }
+        if (upserts.length) {
+          await supabase("translation_overrides?on_conflict=lang,key", {
+            method: "POST",
+            headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+            body: JSON.stringify(upserts),
+          });
+        }
+        return sendJson(response, 200, { ok: true, upserted: upserts.length, overrides: await readOverrides() });
+      }
+
       const key = String(request.body?.key || "").trim();
-      if (!lang || !key) return sendJson(response, 400, { ok: false, error: "lang and key are required" });
+      if (!key) return sendJson(response, 400, { ok: false, error: "lang and key are required" });
       const value = typeof request.body?.value === "string" ? request.body.value.trim() : "";
       if (value) {
         await supabase("translation_overrides?on_conflict=lang,key", {

@@ -5715,6 +5715,9 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
   const [savingKey, setSavingKey] = useState(null);
   const [savedKey, setSavedKey] = useState(null);
   const savedTimeoutRef = useRef(null);
+  const importInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null); // { ok, message, detail }
 
   const allKeys = useMemo(() => allTranslationKeys(), []);
 
@@ -5756,6 +5759,120 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
     }
   }
 
+  // --- CSV export / import (translate a language outside the app) -----------------------------
+  // Columns: key (the string ID), english (source), <lang> (the local term to fill in). A UTF-8 BOM
+  // is prepended so Excel opens accented text correctly.
+  function csvCell(value) {
+    const text = String(value ?? "");
+    return /[",;\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }
+  function exportCsv() {
+    const header = ["key", "english", selectedLang].map(csvCell).join(",");
+    const lines = rows.map((row) => [row.key, row.en, row.value].map(csvCell).join(","));
+    const csv = `﻿${[header, ...lines].join("\r\n")}`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `vetbara-translations-${selectedLang}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // Tolerant CSV parser: strips a BOM, auto-detects , or ; as the delimiter (Excel in a Czech
+  // locale writes ;), and handles quoted fields with embedded delimiters, quotes and newlines.
+  function parseCsv(text) {
+    const clean = text.replace(/^﻿/, "");
+    // NUL byte / ZIP ("PK", i.e. .xlsx) / OLE (.xls) signatures = a binary spreadsheet, not CSV.
+    if (clean.includes("\u0000") || clean.startsWith("PK") || clean.charCodeAt(0) === 0xd0) {
+      throw new Error("binary");
+    }
+    const firstLine = clean.split(/\r\n|\n|\r/).find((line) => line.trim().length) || "";
+    const delimiter = (firstLine.split(";").length > firstLine.split(",").length) ? ";" : ",";
+    const table = [];
+    let field = "";
+    let record = [];
+    let inQuotes = false;
+    for (let i = 0; i < clean.length; i += 1) {
+      const ch = clean[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (clean[i + 1] === '"') { field += '"'; i += 1; } else { inQuotes = false; }
+        } else { field += ch; }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === delimiter) {
+        record.push(field); field = "";
+      } else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && clean[i + 1] === "\n") i += 1;
+        record.push(field); table.push(record); field = ""; record = [];
+      } else {
+        field += ch;
+      }
+    }
+    if (field.length || record.length) { record.push(field); table.push(record); }
+    return table;
+  }
+
+  async function importCsv(file) {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      let table;
+      try {
+        table = parseCsv(text);
+      } catch {
+        setImportResult({ ok: false, message: t("admin.multilingual.import.errBinary") });
+        return;
+      }
+      if (!table.length) { setImportResult({ ok: false, message: t("admin.multilingual.import.errEmpty") }); return; }
+      // Drop a header row if present (first cell "key"/"id").
+      const firstCell = String(table[0]?.[0] ?? "").trim().toLowerCase();
+      const dataRows = (firstCell === "key" || firstCell === "id") ? table.slice(1) : table;
+      const validKeys = new Set(allKeys);
+      const changed = [];
+      const unknown = [];
+      let malformed = 0;
+      let unchanged = 0;
+      for (const cols of dataRows) {
+        if (!cols || cols.every((cell) => !String(cell).trim())) continue; // blank line
+        if (cols.length < 3) { malformed += 1; continue; }
+        const key = String(cols[0] ?? "").trim();
+        const value = String(cols[2] ?? "").trim();
+        if (!key) { malformed += 1; continue; }
+        if (!validKeys.has(key)) { unknown.push(key); continue; }
+        if (!value) continue; // blank target - leave the existing translation untouched
+        if (value === (translationFor(selectedLang, key) ?? "")) { unchanged += 1; continue; }
+        changed.push({ key, value });
+      }
+      if (changed.length) {
+        const response = await fetch("/api/translations/overrides", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionToken: admin?.sessionToken, lang: selectedLang, entries: changed }),
+        });
+        if (!response.ok) {
+          setImportResult({ ok: false, message: response.status === 401 ? t("admin.multilingual.import.errAuth") : tf("admin.multilingual.import.errGeneric", { lang: selectedLang }) });
+          return;
+        }
+        applyTranslationOverrides({ [selectedLang]: Object.fromEntries(changed.map((entry) => [entry.key, entry.value])) });
+        setRefreshTick((tick) => tick + 1);
+      }
+      setImportResult({
+        ok: true,
+        message: tf("admin.multilingual.import.done", { changed: changed.length, unchanged, unknown: unknown.length, malformed }),
+        detail: unknown.length ? tf("admin.multilingual.import.unknownKeys", { keys: unknown.slice(0, 8).join(", "), more: unknown.length > 8 ? "…" : "" }) : "",
+      });
+    } catch (error) {
+      setImportResult({ ok: false, message: error?.message || tf("admin.multilingual.import.errGeneric", { lang: selectedLang }) });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border bg-white p-4">
       <SectionTitle icon={Languages} title={t("admin.multilingual.title")} subtitle={t("admin.multilingual.subtitle")} />
@@ -5787,6 +5904,29 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
           })}
         </div>
       )}
+
+      {/* Export the selected language to CSV (key · English · local), translate outside the app,
+          then import it back. Import is defensive: header auto-detected, , or ; delimiter, blank
+          target cells left untouched, unknown/malformed rows reported rather than failing. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border bg-slate-50 p-3">
+        <Button onClick={exportCsv} variant="outline" className="rounded-2xl">{t("admin.multilingual.exportCsv")}</Button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          className="hidden"
+          onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) importCsv(file); }}
+        />
+        <Button onClick={() => importInputRef.current?.click()} disabled={importing} variant="outline" className="rounded-2xl">
+          {importing ? t("admin.multilingual.importing") : t("admin.multilingual.importCsv")}
+        </Button>
+        <span className="text-xs text-slate-500">{tf("admin.multilingual.csvHint", { lang: selectedLang })}</span>
+        {importResult && (
+          <span className={`text-xs font-medium ${importResult.ok ? "text-emerald-700" : "text-rose-700"}`}>
+            {importResult.message}{importResult.detail ? ` ${importResult.detail}` : ""}
+          </span>
+        )}
+      </div>
 
       <div className="mt-4 max-h-[600px] space-y-2 overflow-auto pr-1">
         {filteredRows.map((row) => (
