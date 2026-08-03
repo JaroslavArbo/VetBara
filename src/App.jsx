@@ -5798,6 +5798,35 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
     return table;
   }
 
+  // Drops every override for the selected language, restoring the built-in translations. The
+  // recovery path after importing the wrong language over an existing one.
+  async function resetLanguageOverrides() {
+    const label = UI_LANGUAGES.find((lang) => lang.code === selectedLang)?.label || selectedLang;
+    if (!window.confirm(tf("admin.multilingual.resetConfirm", { lang: label }))) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const response = await fetch("/api/translations/overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: admin?.sessionToken, lang: selectedLang, action: "reset" }),
+      });
+      if (!response.ok) {
+        setImportResult({ ok: false, message: response.status === 401 ? t("admin.multilingual.import.errAuth") : t("admin.multilingual.resetFailed") });
+        return;
+      }
+      setImportResult({ ok: true, message: tf("admin.multilingual.resetDone", { lang: label }) });
+      // applyTranslationOverrides can only MERGE into the in-memory dictionary, never remove, so a
+      // deletion cannot be reflected in place - reload so the app re-reads the overrides from the
+      // server and the built-in texts come back.
+      window.setTimeout(() => window.location.reload(), 800);
+    } catch {
+      setImportResult({ ok: false, message: t("admin.multilingual.resetFailed") });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function importCsv(file) {
     setImporting(true);
     setImportResult(null);
@@ -5937,6 +5966,7 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
         <Button onClick={() => importInputRef.current?.click()} disabled={importing} variant="outline" className="rounded-2xl">
           {importing ? t("admin.multilingual.importing") : t("admin.multilingual.importCsv")}
         </Button>
+        <Button onClick={resetLanguageOverrides} disabled={importing} variant="outline" className="rounded-2xl text-rose-700">{t("admin.multilingual.resetLang")}</Button>
         <span className="text-xs text-slate-500">{tf("admin.multilingual.csvHint", { lang: selectedLang })}</span>
         {importResult && (
           <span className={`text-xs font-medium ${importResult.ok ? "text-emerald-700" : "text-rose-700"}`}>

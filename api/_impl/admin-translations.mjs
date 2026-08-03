@@ -23,6 +23,13 @@ export default async function handler(request, response) {
       const lang = String(request.body?.lang || "").trim();
       if (!lang) return sendJson(response, 400, { ok: false, error: "lang is required" });
 
+      // Reset a whole language back to the built-in translations by deleting every override for it.
+      // Used to recover from importing the wrong language over an existing one.
+      if (request.body?.action === "reset") {
+        await supabase(`translation_overrides?lang=eq.${encodeURIComponent(lang)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+        return sendJson(response, 200, { ok: true, reset: lang, overrides: await readOverrides() });
+      }
+
       // Batch upsert from a CSV import: entries = [{ key, value }]. Empty values are IGNORED here
       // (not deleted), so re-importing a sheet with blank cells never silently wipes an existing
       // translation - clearing is done one row at a time in the UI on purpose.
