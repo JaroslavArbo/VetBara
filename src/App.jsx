@@ -7269,6 +7269,120 @@ function normalizeFieldPreparationForCentreMap(preparation) {
 }
 
 
+// Web-Mercator helpers shared by the on-screen Centre map and BOTH print paths (section B's field
+// preparation and section D's info packets). Pure math - no component state.
+function centreLatLngToWorld(latValue, lngValue, zoom = 18) {
+  const lat = Math.max(Math.min(Number(latValue), 85.05112878), -85.05112878);
+  const lng = Number(lngValue);
+  const scale = 256 * 2 ** zoom;
+  const sinLat = Math.sin((lat * Math.PI) / 180);
+  return {
+    x: ((lng + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale,
+  };
+}
+
+function fitZoomAndCenter(points, widthPx, heightPx, minZoom = 13, maxZoom = 19) {
+  if (!points.length) return { zoom: 18, worldX: 0, worldY: 0 };
+  const padding = 90;
+  for (let zoom = maxZoom; zoom >= minZoom; zoom -= 1) {
+    const worldPts = points.map((p) => centreLatLngToWorld(p.lat, p.lng, zoom));
+    const minX = Math.min(...worldPts.map((w) => w.x));
+    const maxX = Math.max(...worldPts.map((w) => w.x));
+    const minY = Math.min(...worldPts.map((w) => w.y));
+    const maxY = Math.max(...worldPts.map((w) => w.y));
+    if ((maxX - minX) + padding * 2 <= widthPx && (maxY - minY) + padding * 2 <= heightPx) {
+      return { zoom, worldX: (minX + maxX) / 2, worldY: (minY + maxY) / 2 };
+    }
+  }
+  const worldPts = points.map((p) => centreLatLngToWorld(p.lat, p.lng, minZoom));
+  return {
+    zoom: minZoom,
+    worldX: worldPts.reduce((sum, w) => sum + w.x, 0) / worldPts.length,
+    worldY: worldPts.reduce((sum, w) => sum + w.y, 0) / worldPts.length,
+  };
+}
+
+// Lifted to module scope so the Centre info-packet builder (section D) can reuse the exact same
+// site-map and Practicing-A tree pages that section B prints.
+function printMapPageHtml(levelLabel, points, layer, prep, centreMapZoom, t) {
+  const widthPx = 680;
+  const heightPx = 900;
+  // Honour the operator's chosen zoom (that is what the on-screen zoom buttons are for);
+  // auto-fit only decides the centre so the whole site stays on the page.
+  const autoFit = fitZoomAndCenter(points, widthPx, heightPx);
+  const centre = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
+  const fit = Number.isFinite(centre.x) && Number.isFinite(centre.y)
+    ? { zoom: centreMapZoom, worldX: centre.x, worldY: centre.y }
+    : autoFit;
+  const centerTileX = Math.floor(fit.worldX / 256);
+  const centerTileY = Math.floor(fit.worldY / 256);
+  const offsetX = fit.worldX - centerTileX * 256;
+  const offsetY = fit.worldY - centerTileY * 256;
+  const tilesXHalf = Math.ceil(widthPx / 256 / 2) + 1;
+  const tilesYHalf = Math.ceil(heightPx / 256 / 2) + 1;
+  const tileHtmlParts = [];
+  for (let dx = -tilesXHalf; dx <= tilesXHalf; dx += 1) {
+    for (let dy = -tilesYHalf; dy <= tilesYHalf; dy += 1) {
+      const x = centerTileX + dx;
+      const y = centerTileY + dy;
+      const left = widthPx / 2 + dx * 256 - offsetX;
+      const top = heightPx / 2 + dy * 256 - offsetY;
+      const src = layer === "osm" ? `https://tile.openstreetmap.org/${fit.zoom}/${x}/${y}.png` : layer === "esri" ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${fit.zoom}/${y}/${x}` : `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${fit.zoom}/${y}/${x}`;
+      tileHtmlParts.push(`<img src="${src}" style="position:absolute;left:${left}px;top:${top}px;width:256px;height:256px" />`);
+    }
+  }
+  const markerHtmlParts = points.map((p) => {
+    const w = centreLatLngToWorld(p.lat, p.lng, fit.zoom);
+    const left = widthPx / 2 + (w.x - fit.worldX);
+    const top = heightPx / 2 + (w.y - fit.worldY);
+    const isCentre = p.kind === "centre";
+    const colour = isCentre ? "#e11d48" : "#020617";
+    const placement = fieldMarkerVisualStyle(p.labelDirection || "n", p.labelOffsetX, p.labelOffsetY);
+    const labelX = parseFloat(placement["--label-x"]) || 0;
+    const labelY = parseFloat(placement["--label-y"]) || 0;
+    const stemLength = parseFloat(placement["--stem-length"]) || 0;
+    const stemAngle = parseFloat(placement["--stem-angle"]) || 0;
+    const dot = `<div style="position:absolute;left:${left}px;top:${top}px;transform:translate(-50%,-50%);z-index:22;width:11px;height:11px;border-radius:999px;background:${colour};box-shadow:0 0 0 3px #fff"></div>`;
+    const stem = stemLength > 0
+      ? `<div style="position:absolute;left:${left}px;top:${top}px;transform:rotate(${stemAngle}deg);transform-origin:0 50%;z-index:20;width:${stemLength}px;height:3px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(2,6,23,.25)"></div>`
+      : "";
+    const label = `<div style="position:absolute;left:${left + labelX}px;top:${top + labelY}px;transform:translate(-50%,-50%);z-index:21;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;background:${colour};box-shadow:0 0 0 3px #fff;white-space:nowrap">${escapeHtml(p.label)}</div>`;
+    return `${stem}${dot}${label}`;
+  }).join("");
+  return `<section class="print-map-page">
+    <h2>${escapeHtml(levelLabel)}</h2>
+    <div class="print-map-canvas" style="width:${widthPx}px;height:${heightPx}px">
+      ${tileHtmlParts.join("")}
+      ${markerHtmlParts}
+    </div>
+    <div class="print-map-attribution">${layer === "osm" ? "© OpenStreetMap contributors" : "© ČÚZK ORTOFOTO"}</div>
+  </section>`;
+}
+
+function printTreeDetailPageHtml(tree, index, t) {
+  const data = tree.practicingTreeAData || createPracticingTreeAData();
+  const interventionsHtml = (data.interventions || []).filter((item) => String(item.technology || item.description || "").trim()).map((item) => `<div class="print-intervention"><strong>${escapeHtml(item.technology || "-")}</strong>${item.description ? `<div>${linesToHtml(item.description)}</div>` : ""}</div>`).join("") || `<div class="print-empty">-</div>`;
+  const photosHtml = (tree.photos || []).length
+    ? `<div class="print-photo-grid">${tree.photos.map((photo) => `<figure><img src="${photo.url}" alt="" onload="this.parentElement.classList.toggle('portrait', this.naturalHeight > this.naturalWidth)" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
+    : `<div class="print-empty">${escapeHtml(t("fieldPrep.printNoPhotos"))}</div>`;
+  return `<section class="print-tree-page">
+    <h2>${escapeHtml(fieldTreeLabels(tree).join(" / ") || `A${index + 1}`)} · ${escapeHtml(tree.name || "")}</h2>
+    <div class="print-meta">${escapeHtml(formatFieldCoordinates(tree.point))}</div>
+    <div class="print-grid">
+      <div><strong>Taxon</strong><div>${escapeHtml(data.taxon || "-")}</div></div>
+      <div><strong>${escapeHtml(t("fieldPrep.heightM"))}</strong><div>${escapeHtml(String(data.heightM ?? "-"))}</div></div>
+      <div><strong>${escapeHtml(t("fieldPrep.stemDiameterCm"))}</strong><div>${escapeHtml(String(data.stemDiameterCm ?? "-"))}</div></div>
+      <div><strong>${escapeHtml(t("fieldPrep.crownSpreadM"))}</strong><div>${escapeHtml(String(data.crownSpreadM ?? "-"))}</div></div>
+    </div>
+    <h3>${escapeHtml(t("fieldPrep.interventionTechnology"))}</h3>
+    ${interventionsHtml}
+    <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
+    ${photosHtml}
+  </section>`;
+}
+
+
 function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, language, sessionToken, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [selectedTreeId, setSelectedTreeId] = useState(() => fieldEnsureArray(prep.trees)[0]?.id || "");
@@ -7764,83 +7878,6 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
     };
   }
 
-  function printMapPageHtml(levelLabel, points, layer) {
-    const widthPx = 680;
-    const heightPx = 900;
-    // Honour the operator's chosen zoom (that is what the on-screen zoom buttons are for);
-    // auto-fit only decides the centre so the whole site stays on the page.
-    const autoFit = fitZoomAndCenter(points, widthPx, heightPx);
-    const centre = centreLatLngToWorld(prep.referenceLatitude, prep.referenceLongitude, centreMapZoom);
-    const fit = Number.isFinite(centre.x) && Number.isFinite(centre.y)
-      ? { zoom: centreMapZoom, worldX: centre.x, worldY: centre.y }
-      : autoFit;
-    const centerTileX = Math.floor(fit.worldX / 256);
-    const centerTileY = Math.floor(fit.worldY / 256);
-    const offsetX = fit.worldX - centerTileX * 256;
-    const offsetY = fit.worldY - centerTileY * 256;
-    const tilesXHalf = Math.ceil(widthPx / 256 / 2) + 1;
-    const tilesYHalf = Math.ceil(heightPx / 256 / 2) + 1;
-    const tileHtmlParts = [];
-    for (let dx = -tilesXHalf; dx <= tilesXHalf; dx += 1) {
-      for (let dy = -tilesYHalf; dy <= tilesYHalf; dy += 1) {
-        const x = centerTileX + dx;
-        const y = centerTileY + dy;
-        const left = widthPx / 2 + dx * 256 - offsetX;
-        const top = heightPx / 2 + dy * 256 - offsetY;
-        const src = layer === "osm" ? `https://tile.openstreetmap.org/${fit.zoom}/${x}/${y}.png` : layer === "esri" ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${fit.zoom}/${y}/${x}` : `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${fit.zoom}/${y}/${x}`;
-        tileHtmlParts.push(`<img src="${src}" style="position:absolute;left:${left}px;top:${top}px;width:256px;height:256px" />`);
-      }
-    }
-    const markerHtmlParts = points.map((p) => {
-      const w = centreLatLngToWorld(p.lat, p.lng, fit.zoom);
-      const left = widthPx / 2 + (w.x - fit.worldX);
-      const top = heightPx / 2 + (w.y - fit.worldY);
-      const isCentre = p.kind === "centre";
-      const colour = isCentre ? "#e11d48" : "#020617";
-      const placement = fieldMarkerVisualStyle(p.labelDirection || "n", p.labelOffsetX, p.labelOffsetY);
-      const labelX = parseFloat(placement["--label-x"]) || 0;
-      const labelY = parseFloat(placement["--label-y"]) || 0;
-      const stemLength = parseFloat(placement["--stem-length"]) || 0;
-      const stemAngle = parseFloat(placement["--stem-angle"]) || 0;
-      const dot = `<div style="position:absolute;left:${left}px;top:${top}px;transform:translate(-50%,-50%);z-index:22;width:11px;height:11px;border-radius:999px;background:${colour};box-shadow:0 0 0 3px #fff"></div>`;
-      const stem = stemLength > 0
-        ? `<div style="position:absolute;left:${left}px;top:${top}px;transform:rotate(${stemAngle}deg);transform-origin:0 50%;z-index:20;width:${stemLength}px;height:3px;border-radius:999px;background:#fff;box-shadow:0 0 0 1px rgba(2,6,23,.25)"></div>`
-        : "";
-      const label = `<div style="position:absolute;left:${left + labelX}px;top:${top + labelY}px;transform:translate(-50%,-50%);z-index:21;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;background:${colour};box-shadow:0 0 0 3px #fff;white-space:nowrap">${escapeHtml(p.label)}</div>`;
-      return `${stem}${dot}${label}`;
-    }).join("");
-    return `<section class="print-map-page">
-      <h2>${escapeHtml(levelLabel)}</h2>
-      <div class="print-map-canvas" style="width:${widthPx}px;height:${heightPx}px">
-        ${tileHtmlParts.join("")}
-        ${markerHtmlParts}
-      </div>
-      <div class="print-map-attribution">${layer === "osm" ? "© OpenStreetMap contributors" : "© ČÚZK ORTOFOTO"}</div>
-    </section>`;
-  }
-
-  function printTreeDetailPageHtml(tree, index) {
-    const data = tree.practicingTreeAData || createPracticingTreeAData();
-    const interventionsHtml = (data.interventions || []).filter((item) => String(item.technology || item.description || "").trim()).map((item) => `<div class="print-intervention"><strong>${escapeHtml(item.technology || "-")}</strong>${item.description ? `<div>${linesToHtml(item.description)}</div>` : ""}</div>`).join("") || `<div class="print-empty">-</div>`;
-    const photosHtml = (tree.photos || []).length
-      ? `<div class="print-photo-grid">${tree.photos.map((photo) => `<figure><img src="${photo.url}" alt="" onload="this.parentElement.classList.toggle('portrait', this.naturalHeight > this.naturalWidth)" />${photo.caption ? `<figcaption>${escapeHtml(photo.caption)}</figcaption>` : ""}</figure>`).join("")}</div>`
-      : `<div class="print-empty">${escapeHtml(t("fieldPrep.printNoPhotos"))}</div>`;
-    return `<section class="print-tree-page">
-      <h2>${escapeHtml(fieldTreeLabels(tree).join(" / ") || `A${index + 1}`)} · ${escapeHtml(tree.name || "")}</h2>
-      <div class="print-meta">${escapeHtml(formatFieldCoordinates(tree.point))}</div>
-      <div class="print-grid">
-        <div><strong>Taxon</strong><div>${escapeHtml(data.taxon || "-")}</div></div>
-        <div><strong>${escapeHtml(t("fieldPrep.heightM"))}</strong><div>${escapeHtml(String(data.heightM ?? "-"))}</div></div>
-        <div><strong>${escapeHtml(t("fieldPrep.stemDiameterCm"))}</strong><div>${escapeHtml(String(data.stemDiameterCm ?? "-"))}</div></div>
-        <div><strong>${escapeHtml(t("fieldPrep.crownSpreadM"))}</strong><div>${escapeHtml(String(data.crownSpreadM ?? "-"))}</div></div>
-      </div>
-      <h3>${escapeHtml(t("fieldPrep.interventionTechnology"))}</h3>
-      ${interventionsHtml}
-      <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
-      ${photosHtml}
-    </section>`;
-  }
-
   function printFieldPreparationPdf() {
     const centreLabel = t("fieldPrep.centre");
     const centerPoint = prep.examCenter?.point;
@@ -7873,11 +7910,11 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
           })),
       ];
       if (!points.length) return "";
-      return printMapPageHtml(level, points, mapLayer);
+      return printMapPageHtml(level, points, mapLayer, prep, centreMapZoom, t);
     }).join("");
 
     const practicingATrees = centreFieldTrees.filter((tree) => fieldEnsureArray(tree.assignments).some((a) => a.level === "Practicing" && a.code === "A"));
-    const treePages = practicingATrees.map((tree, index) => printTreeDetailPageHtml(tree, index)).join("");
+    const treePages = practicingATrees.map((tree, index) => printTreeDetailPageHtml(tree, index, t)).join("");
 
     const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(prep.siteName || "")}</title><style>
       @page{size:A4 portrait;margin:12mm}
@@ -13125,6 +13162,238 @@ function centreInviteFillTemplate(template, facts, extra = {}) {
     .replaceAll("[insert whether Practical or Consulting]", extra.area || "");
 }
 
+// Per-person information packet (Centre section D). Builds ONE printable document for a candidate
+// or examiner, every page under their own header: the schedule days that concern them, their wifi +
+// personal access QR, the correct site map for their level, and then the level-specific material -
+// the written test for printed-mode candidates, the report-preparation template for Consulting, and
+// the Practicing A1/A2 tree pages (with all proposed intervention technologies) for Practicing.
+function centreWifiQrPayload(wifi) {
+  const ssid = String(wifi?.ssid || "").trim();
+  if (!ssid) return "";
+  const esc = (value) => String(value || "").replace(/([\;,:"])/g, "\\$1");
+  const password = String(wifi?.password || "").trim();
+  return `WIFI:S:${esc(ssid)};T:${password ? "WPA" : "nopass"};P:${esc(password)};;`;
+}
+
+// The report-preparation template handed to Consulting candidates: the real marking structure
+// (7 sections and their sub-items with the marks available) plus room to write, so what they
+// prepare in the field lines up with how the report is actually marked.
+function reportPrepTemplateHtml(t) {
+  const sections = REPORT_MARKING_SECTIONS.map((section) => {
+    const items = (section.items || []).map((item) => `<tr><td>${escapeHtml(item.title)}</td><td class="marks">/ ${item.max}</td><td class="write"></td></tr>`).join("");
+    return `<div class="prep-section">
+      <h3>${escapeHtml(section.title)} <span class="cap">${escapeHtml(t("centre.packet.perTree"))}: ${section.perTreeMax}</span></h3>
+      ${items ? `<table class="prep-table"><thead><tr><th>${escapeHtml(t("centre.packet.item"))}</th><th>${escapeHtml(t("centre.packet.marks"))}</th><th>${escapeHtml(t("centre.packet.notes"))}</th></tr></thead><tbody>${items}</tbody></table>` : ""}
+    </div>`;
+  }).join("");
+  return `<section class="packet-page">
+    <h2>${escapeHtml(t("centre.packet.reportTemplateTitle"))}</h2>
+    <p class="hint">${escapeHtml(t("centre.packet.reportTemplateHelper"))}</p>
+    ${sections}
+  </section>`;
+}
+
+function CentreInfoPacketsPanel({
+  candidates, examiners, assignments, fieldPrep, harmonogramSettings,
+  candidateQrFor, examinerQrFor, candidateTestSectionHtml, centreMapZoom, mapLayer, t,
+}) {
+  const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+  // Printed vs tablet, per person: printed candidates get the paper test in their packet.
+  const [modes, setModes] = useState({});
+  const modeOf = (id) => modes[id] || "print";
+
+  const trees = fieldEnsureArray(fieldPrep?.trees);
+  const centrePoint = fieldPrep?.examCenter?.point;
+
+  function mapPointsFor(level) {
+    const centreEntry = Number.isFinite(Number(centrePoint?.lat)) && Number.isFinite(Number(centrePoint?.lng))
+      ? [{ lat: Number(centrePoint.lat), lng: Number(centrePoint.lng), label: t("fieldPrep.centre"), kind: "centre",
+           labelDirection: fieldPrep?.examCenter?.labelDirection || "n",
+           labelOffsetX: Number(fieldPrep?.examCenter?.labelOffsetX || 0),
+           labelOffsetY: Number(fieldPrep?.examCenter?.labelOffsetY || 0) }]
+      : [];
+    const levelTrees = trees.filter((tree) => fieldEnsureArray(tree.assignments).some((a) => a.level === level));
+    return [
+      ...centreEntry,
+      ...levelTrees.filter((tree) => Number.isFinite(Number(tree.point?.lat)) && Number.isFinite(Number(tree.point?.lng)))
+        .map((tree) => ({ lat: Number(tree.point.lat), lng: Number(tree.point.lng), label: fieldTreeDisplayName(tree), kind: "tree",
+                          labelDirection: tree.labelDirection || "n",
+                          labelOffsetX: Number(tree.labelOffsetX || 0), labelOffsetY: Number(tree.labelOffsetY || 0) })),
+    ];
+  }
+
+  // Only the schedule days this person actually takes part in.
+  function scheduleHtmlFor(person) {
+    const schedule = buildDefaultHarmonogramSchedule(candidates, examiners, harmonogramSettings);
+    const groups = (schedule.groups || []).filter((group) => (
+      person.kind === "candidate"
+        ? group.members.some((m) => m.id === person.id)
+        : group.members.some((m) => assignments?.[m.id]?.primary === person.id || assignments?.[m.id]?.secondary === person.id)
+    ));
+    const relevant = groups.length ? groups : (schedule.groups || []);
+    const days = Array.from(new Set(relevant.map((g) => g.day))).sort((a, b) => a - b);
+    return days.map((day) => {
+      const tables = relevant.filter((g) => g.day === day).map((group) => {
+        const rows = [schedule.welcome, ...group.blocks].map((block) => `<tr style="background:${harmonogramActivityColor(block.activity)}">
+          <td>${harmonogramTimeLabel(block.start)}</td><td>${block.duration ? `${block.duration} min` : ""}</td>
+          <td>${escapeHtml(t(`harmonogram.activity.${block.activity}`))}</td></tr>`).join("");
+        return `<div class="sched"><div class="schedHead">${escapeHtml(group.level)} — ${escapeHtml(group.members.map((m) => m.name || m.id).join(", "))}</div>
+          <table class="schedTable"><thead><tr><th>${escapeHtml(t("harmonogram.time"))}</th><th>${escapeHtml(t("harmonogram.duration"))}</th><th>${escapeHtml(t("harmonogram.activityCol"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      }).join("");
+      return `<section class="packet-page"><h2>${escapeHtml(t("harmonogram.pdfTitle"))}${days.length > 1 ? ` · ${escapeHtml(t("harmonogram.dayLabel"))} ${day + 1}` : ""}</h2>${tables}</section>`;
+    }).join("");
+  }
+
+  function accessPageHtml(person) {
+    const wifi = readCentreWifiAccess();
+    const wifiPayload = centreWifiQrPayload(wifi);
+    return `<section class="packet-page">
+      <h2>${escapeHtml(t("centre.packet.accessTitle"))}</h2>
+      <div class="access-grid">
+        <div class="access-card">
+          <h3>${escapeHtml(t("centre.packet.wifiTitle"))}</h3>
+          ${wifiPayload ? `<div class="qr">${renderQrSvgMarkup(wifiPayload, 170)}</div>` : `<div class="noqr">${escapeHtml(t("centre.packet.wifiMissing"))}</div>`}
+          <table class="kv"><tbody>
+            <tr><th>${escapeHtml(t("centre.wifi.ssid"))}</th><td>${escapeHtml(wifi?.ssid || "-")}</td></tr>
+            <tr><th>${escapeHtml(t("centre.wifi.password"))}</th><td>${escapeHtml(wifi?.password || "-")}</td></tr>
+          </tbody></table>
+        </div>
+        <div class="access-card">
+          <h3>${escapeHtml(t("centre.packet.personalQrTitle"))}</h3>
+          ${person.url ? `<div class="qr">${renderQrSvgMarkup(person.url, 170)}</div>` : `<div class="noqr">${escapeHtml(t("qr.missingShort"))}</div>`}
+          <div class="url">${escapeHtml(person.url || "-")}</div>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  function buildPacket(person) {
+    const level = person.level;
+    const mapPoints = mapPointsFor(level);
+    const mapPage = mapPoints.length ? printMapPageHtml(`${t("centre.packet.mapTitle")} — ${level}`, mapPoints, mapLayer || "osm", fieldPrep, centreMapZoom || 17, t) : "";
+
+    let material = "";
+    if (person.kind === "candidate" && level === "Consulting") {
+      material = reportPrepTemplateHtml(t);
+    } else if (person.kind === "candidate" && modeOf(person.id) === "print") {
+      // Printed-mode candidates carry the written test on paper.
+      material = candidateTestSectionHtml ? candidateTestSectionHtml(person.record) : "";
+    }
+    if (level === "Practicing") {
+      const aTrees = trees.filter((tree) => fieldEnsureArray(tree.assignments).some((a) => a.level === "Practicing" && a.code === "A"));
+      material += aTrees.map((tree, index) => printTreeDetailPageHtml(tree, index, t)).join("");
+    }
+
+    const header = `<div class="packet-header"><div class="brand">VETcert · ${escapeHtml(t("centre.packet.title"))}</div>
+      <div class="who">${escapeHtml(person.name)} · ${escapeHtml(person.id)}${level ? ` · ${escapeHtml(level)}` : ""}</div></div>`;
+
+    openPrintDocument(`<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(person.name)} — InfoBalicek</title><style>
+      @page{size:A4 portrait;margin:12mm}*{box-sizing:border-box}
+      body{margin:0;font-family:Arial,sans-serif;color:#102018;font-size:10.5pt}
+      section.packet-page,section.print-map-page,section.print-tree-page,section.exam-page{break-after:page}
+      .packet-header{position:running(hdr)}
+      .packet-header{border-bottom:2px solid #102018;padding-bottom:3mm;margin-bottom:5mm}
+      .brand{font-size:8.5pt;letter-spacing:.16em;color:#4c6b57;font-weight:700}
+      .who{font-size:13pt;font-weight:800;margin-top:1mm}
+      h2{font-size:14pt;margin:0 0 4mm}h3{font-size:11pt;margin:4mm 0 2mm}
+      .hint{font-size:9pt;color:#516158;margin:0 0 4mm}
+      .access-grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
+      .access-card{border:1px solid #cbd5cf;border-radius:8px;padding:4mm;text-align:center}
+      .access-card svg{width:45mm;height:45mm}
+      .noqr{height:45mm;display:flex;align-items:center;justify-content:center;border:1px dashed #b9c4bd;font-size:9pt}
+      .url{font-family:ui-monospace,monospace;font-size:8pt;word-break:break-all;margin-top:2mm}
+      table.kv{width:100%;border-collapse:collapse;font-size:10pt;margin-top:3mm}
+      table.kv th{text-align:left;color:#4c6b57;padding:1mm 2mm 1mm 0;width:35%}
+      table.kv td{font-weight:700}
+      .sched{margin-bottom:5mm;break-inside:avoid}.schedHead{font-weight:700;margin-bottom:2mm}
+      table.schedTable{width:100%;border-collapse:collapse;font-size:9.5pt}
+      table.schedTable th,table.schedTable td{border:1px solid #ccc;padding:1.6mm;text-align:left}
+      .prep-section{margin-bottom:5mm;break-inside:avoid}
+      .cap{font-size:9pt;font-weight:400;color:#516158}
+      table.prep-table{width:100%;border-collapse:collapse;font-size:9pt}
+      table.prep-table th,table.prep-table td{border:1px solid #cbd5cf;padding:1.6mm;text-align:left;vertical-align:top}
+      table.prep-table td.marks{width:16mm;text-align:right;white-space:nowrap;font-weight:700}
+      table.prep-table td.write{height:11mm}
+      .print-map-canvas{position:relative;overflow:hidden;border:1px solid #cbd5e1;border-radius:4px;background:#e2e8f0}
+      .print-map-attribution{margin-top:2mm;font-size:8pt;color:#64748b}
+      .print-meta{font-family:ui-monospace,monospace;font-size:9pt;color:#516158;margin-bottom:3mm}
+      .print-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;font-size:10pt}
+      .print-grid strong{display:block;font-size:8pt;text-transform:uppercase;color:#64748b;margin-bottom:1mm}
+      .print-intervention{border:1px solid #dbe3dd;border-radius:6px;padding:2mm 3mm;margin-bottom:2mm;font-size:10pt}
+      .print-note{border:1px solid #dbe3dd;border-radius:6px;padding:2mm 3mm;font-size:10pt;min-height:8mm}
+      .print-empty{color:#94a3b8;font-style:italic}
+      .print-photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm}
+      .print-photo-grid figure{margin:0}
+      .print-photo-grid img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;border:1px solid #dbe3dd}
+      .print-photo-grid figcaption{font-size:8pt;color:#64748b;margin-top:1mm}
+      .actions{position:fixed;top:8px;right:10px;z-index:20}
+      .actions button{border:0;border-radius:999px;padding:8px 12px;font-weight:700;background:#0f3d2e;color:#fff}
+      @media print{.actions{display:none}}
+    </style></head><body>
+      <div class="actions"><button onclick="window.print()">${escapeHtml(t("fieldPrep.printPdf"))}</button></div>
+      ${header}
+      ${scheduleHtmlFor(person)}
+      ${accessPageHtml(person)}
+      ${mapPage}
+      ${material}
+    </body></html>`, () => window.alert(t("harmonogram.printBlocked")));
+  }
+
+  const people = [
+    ...candidates.map((c) => ({ kind: "candidate", id: c.id, name: c.name || c.id, level: candidateLevel(c), url: candidateQrFor?.(c.id) || "", record: c })),
+    ...examiners.map((ex) => {
+      const levels = new Set(candidates
+        .filter((c) => assignments?.[c.id]?.primary === ex.id || assignments?.[c.id]?.secondary === ex.id)
+        .map((c) => candidateLevel(c)));
+      return { kind: "examiner", id: ex.id, name: ex.name || ex.id, level: levels.size === 1 ? [...levels][0] : (levels.size ? "Practicing" : "Practicing"), url: examinerQrFor?.(ex.id) || "", record: ex };
+    }),
+  ];
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <h3 className="font-semibold">{t("centre.packet.title")}</h3>
+      <p className="mt-0.5 max-w-3xl text-sm text-slate-600">{t("centre.packet.helper")}</p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead>
+            <tr className="border-b text-left text-slate-500">
+              <th className="py-2 pr-3">{t("centre.packet.person")}</th>
+              <th className="py-2 pr-3">{t("centre.packet.delivery")}</th>
+              <th className="py-2 pr-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((person) => (
+              <tr key={`${person.kind}-${person.id}`} className="border-b align-middle">
+                <td className="py-2 pr-3">
+                  <div className="font-medium">{person.name}</div>
+                  <div className="text-xs text-slate-500">{person.id} · {person.kind === "candidate" ? t("role.candidate") : t("role.examiner")}{person.level ? ` · ${person.level}` : ""}</div>
+                </td>
+                <td className="py-2 pr-3">
+                  {person.kind === "candidate" ? (
+                    <div className="inline-flex rounded-2xl border bg-slate-50 p-0.5 text-xs font-semibold">
+                      {["print", "tablet"].map((mode) => (
+                        <button key={mode} type="button" onClick={() => setModes((prev) => ({ ...prev, [person.id]: mode }))}
+                          className={`rounded-2xl px-3 py-1 ${modeOf(person.id) === mode ? "bg-white shadow-sm" : "text-slate-500"}`}>
+                          {mode === "print" ? t("qr.delivery.print") : t("qr.delivery.tablet")}
+                        </button>
+                      ))}
+                    </div>
+                  ) : <span className="text-xs text-slate-400">—</span>}
+                </td>
+                <td className="py-2 pr-3">
+                  <Button onClick={() => buildPacket(person)} variant="outline" className="rounded-xl px-3 py-1 text-xs">InfoBalíček.pdf</Button>
+                </td>
+              </tr>
+            ))}
+            {!people.length && <tr><td colSpan={3} className="py-3 text-sm text-slate-500">{t("centre.invite.noPeople")}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function CentreInviteLettersPanel({
   candidates, examiners, settings, setSettings, setCentreSetupDirty,
   place, examDate, fieldPrep, candidateQrFor, examinerQrFor, assignments, t,
@@ -14153,6 +14422,19 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
               <StatusPill>{peopleMeta}</StatusPill>
             </div>
             <CentreQrAccessPack candidates={candidates} examiners={examiners} candidateQrUrl={candidateQrUrl} examinerQrUrl={examinerQrUrl} candidateQrFor={candidateQrForRewritten} examinerQrFor={examinerQrForRewritten} copiedQr={copiedQr} copyQrLink={copyQrLink} QrCodeIcon={QrCodeIcon} SectionTitle={SectionTitle} StatusPill={StatusPill} Button={Button} RealQr={RealQr} t={t} onPrintAllQr={printAllQrCodes} onPrintAllTests={printAllCandidateTests} onPrintCandidateTest={printCandidateTest} activeSessionToken={activeSessionToken} addAudit={addAudit} />
+            <CentreInfoPacketsPanel
+              candidates={candidates}
+              examiners={examiners}
+              assignments={assignments}
+              fieldPrep={fieldPrep}
+              harmonogramSettings={harmonogramSettings}
+              candidateQrFor={candidateQrForRewritten}
+              examinerQrFor={examinerQrForRewritten}
+              candidateTestSectionHtml={candidateTestSectionHtml}
+              mapLayer="osm"
+              centreMapZoom={17}
+              t={t}
+            />
           </div>
         </AdminDashboardSection>
 
