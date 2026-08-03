@@ -5811,9 +5811,12 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
         return;
       }
       if (!table.length) { setImportResult({ ok: false, message: t("admin.multilingual.import.errEmpty") }); return; }
-      // Drop a header row if present (first cell "key"/"id").
+      // Drop a header row if present (first cell "key"/"id"). The export writes the language code
+      // as the third header cell, which is the most reliable "which language is this?" signal.
       const firstCell = String(table[0]?.[0] ?? "").trim().toLowerCase();
-      const dataRows = (firstCell === "key" || firstCell === "id") ? table.slice(1) : table;
+      const hasHeader = firstCell === "key" || firstCell === "id";
+      const headerLang = hasHeader ? String(table[0]?.[2] ?? "").trim().toLowerCase() : "";
+      const dataRows = hasHeader ? table.slice(1) : table;
       const validKeys = new Set(allKeys);
       const changed = [];
       const unknown = [];
@@ -5830,6 +5833,38 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
         if (value === (translationFor(selectedLang, key) ?? "")) { unchanged += 1; continue; }
         changed.push({ key, value });
       }
+      // GUARD: make sure this file is not a different language than the one being imported into.
+      // Overwriting e.g. the Czech UI with a German translation is silent and painful to undo, so a
+      // suspected mismatch has to be confirmed explicitly.
+      // Layer 1 - the exported header carries the language code.
+      // Layer 2 - score the incoming values against EVERY dictionary we ship: if they match another
+      //           language's known strings far better than the selected one, the file is that language.
+      if (changed.length) {
+        const known = UI_LANGUAGES.map((lang) => lang.code);
+        const sample = changed.slice(0, 200);
+        const scoreFor = (code) => sample.reduce((hits, entry) => (
+          hits + (String(translationFor(code, entry.key) ?? "").trim() === entry.value ? 1 : 0)
+        ), 0);
+        const scores = known.map((code) => ({ code, score: scoreFor(code) }));
+        const selectedScore = scores.find((row) => row.code === selectedLang)?.score ?? 0;
+        const best = scores.reduce((top, row) => (row.score > top.score ? row : top), { code: selectedLang, score: -1 });
+        const contentMismatch = best.code !== selectedLang
+          && best.score >= Math.max(3, Math.ceil(sample.length * 0.3))
+          && best.score > selectedScore * 2;
+        const headerMismatch = Boolean(headerLang) && headerLang !== selectedLang && known.includes(headerLang);
+        if (headerMismatch || contentMismatch) {
+          const suspected = headerMismatch ? headerLang : best.code;
+          const labelOf = (code) => UI_LANGUAGES.find((lang) => lang.code === code)?.label || code;
+          const proceed = window.confirm(tf("admin.multilingual.import.langMismatch", {
+            suspected: labelOf(suspected), target: labelOf(selectedLang),
+          }));
+          if (!proceed) {
+            setImportResult({ ok: false, message: tf("admin.multilingual.import.langAborted", { target: labelOf(selectedLang) }) });
+            return;
+          }
+        }
+      }
+
       if (changed.length) {
         const response = await fetch("/api/translations/overrides", {
           method: "POST",
