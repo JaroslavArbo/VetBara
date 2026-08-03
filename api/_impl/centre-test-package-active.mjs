@@ -1,4 +1,4 @@
-import { envReady, supabase, sendJson } from "../../_lib/backend.mjs";
+import { envReady, supabase, sendJson } from "../_lib/backend.mjs";
 
 // The active (approved) package that Centre/Candidate/Examiner load. Public read
 // (candidates have no Admin session); mutations are gated elsewhere.
