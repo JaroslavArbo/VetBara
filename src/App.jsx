@@ -16204,6 +16204,13 @@ function ExaminerView({
                   activeSessionToken={activeSessionToken}
                   t={t}
                 />
+              ) : activePage === "orientation" ? (
+                <ExaminerOrientationSection
+                  examiner={loggedExaminer}
+                  assignedCandidates={assignedCandidates}
+                  setActivePage={setActivePage}
+                  t={t}
+                />
               ) : activePage === "writtenReview" ? (
                 <ExaminerWrittenReview
                   selectedCandidate={selectedCandidate}
@@ -18131,6 +18138,54 @@ function CentreCandidateResultsOverview({ candidates, assignments, examiners, va
   );
 }
 
+// Orientation (site map) for an examiner. Reuses the candidate orientation view by handing it a
+// candidate-shaped subject: the map/tree layout it renders depends only on the LEVEL, and an
+// examiner's level is the one they examine (taken from the candidates assigned to them).
+function ExaminerOrientationSection({ examiner, assignedCandidates, setActivePage, t }) {
+  const level = candidateLevel(assignedCandidates?.[0] || { level: "Practicing" });
+  const subject = { id: examiner?.id || "examiner", name: examiner?.name || "", level };
+  const storageKey = candidateFieldPackageStorageKey(subject);
+  const [fieldPackage, setFieldPackage] = useState(() => readJsonLocalStorage(storageKey, null));
+  const [fieldStatus, setFieldStatus] = useState("loading");
+  const [fieldError, setFieldError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await fetchCandidateFieldPackage(subject);
+        if (cancelled) return;
+        if (result?.packageData) {
+          setFieldPackage(result.packageData);
+          setFieldStatus("ready");
+          writeJsonLocalStorage(storageKey, result.packageData);
+        } else {
+          setFieldStatus(fieldPackage ? "ready" : "error");
+          if (!fieldPackage) setFieldError(t("fieldPrep.loadFailed"));
+        }
+      } catch {
+        if (cancelled) return;
+        setFieldStatus(fieldPackage ? "ready" : "error");
+        if (!fieldPackage) setFieldError(t("fieldPrep.loadFailed"));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject.id, level]);
+
+  return (
+    <CandidateFieldResourcesSection
+      candidate={subject}
+      fieldPackage={fieldPackage}
+      fieldStatus={fieldStatus}
+      fieldError={fieldError}
+      setActiveSection={() => setActivePage("landing")}
+      mode="orientation"
+      t={t}
+    />
+  );
+}
+
 function ExaminerLanding({
   examiner,
   confirmed,
@@ -18198,7 +18253,26 @@ function ExaminerLanding({
         </Button>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4 lg:col-span-2">
+      <div className="lg:col-span-2">
+      {/* Orientation comes first: an examiner needs the site layout before anything else. Available
+          as soon as their identity is confirmed, and not gated by the exam-start switch. */}
+      <button
+        type="button"
+        onClick={() => setActivePage("orientation")}
+        disabled={!confirmed}
+        className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border-2 p-4 text-left ${confirmed ? "border-emerald-300 bg-emerald-50 hover:bg-emerald-100" : "border-slate-200 bg-slate-50 opacity-60"}`}
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <MapPin className="h-5 w-5 shrink-0 text-emerald-700" />
+          <span className="min-w-0">
+            <span className="block font-semibold">{t("candidateSections.orientation.title")}</span>
+            <span className="block text-sm text-slate-600">{t("candidateSections.orientation.description")}</span>
+          </span>
+        </span>
+        <span className="shrink-0 text-sm font-semibold text-emerald-800">{t("common.open")}</span>
+      </button>
+
+      <div className="rounded-2xl border bg-white p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <h3 className="font-semibold">{t("examiner.worklist.title")}</h3>
@@ -18245,6 +18319,7 @@ function ExaminerLanding({
             })}
           </div>
         )}
+      </div>
       </div>
 
       <ExaminerLocalMediaPanel sessionToken={activeSessionToken} t={t} />
