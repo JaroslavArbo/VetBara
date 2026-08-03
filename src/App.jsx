@@ -5632,16 +5632,28 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
                   <th className="py-2 pr-3">{t("admin.centreAccess.columnDate")}</th>
                   <th className="py-2 pr-3">{t("admin.centreAccess.columnPlace")}</th>
                   <th className="py-2 pr-3">CC</th>
+                  <th className="py-2 pr-3">{t("admin.centreAccess.columnState")}</th>
                   <th className="py-2 pr-3">{t("admin.centreAccess.columnLink")}</th>
                   <th className="py-2 pr-3" />
                 </tr>
               </thead>
               <tbody>
-                {links.map((link) => (
-                  <tr key={link.id + link.createdAt} className="border-b align-top">
+                {links.map((link) => {
+                  // Lifecycle tint: white = only generated, green = already opened (activated),
+                  // orange = the exam behind it was closed and archived.
+                  const state = link.closedAt ? "closed" : link.activatedAt ? "open" : "new";
+                  const rowClass = state === "closed" ? "bg-amber-50" : state === "open" ? "bg-emerald-50" : "bg-white";
+                  const chip = state === "closed"
+                    ? <StatusPill tone="warn">{t("admin.centreAccess.stateClosed")}</StatusPill>
+                    : state === "open"
+                      ? <StatusPill tone="good">{t("admin.centreAccess.stateOpened")}</StatusPill>
+                      : <StatusPill>{t("admin.centreAccess.stateGenerated")}</StatusPill>;
+                  return (
+                  <tr key={link.id + link.createdAt} className={`border-b align-top ${rowClass}`}>
                     <td className="py-2 pr-3 whitespace-nowrap">{link.examDate || "-"}</td>
                     <td className="py-2 pr-3">{link.place || "-"}</td>
                     <td className="py-2 pr-3">{link.centre || "-"}</td>
+                    <td className="py-2 pr-3">{chip}</td>
                     <td className="py-2 pr-3 break-all font-mono text-xs text-slate-600">{link.url}</td>
                     <td className="py-2 pr-3">
                       <div className="flex flex-wrap gap-2">
@@ -5650,7 +5662,8 @@ export function AdminExamOpeningPanel({ centre, setCentre, examDate, setExamDate
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -13203,6 +13216,15 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
   function markExamClosed() {
     try { window.localStorage.setItem(examCloseKey, "1"); } catch { /* ignore storage errors */ }
     setExamClosed(true);
+    // Tell the Admin link history this certification is finished, so its link shows as closed
+    // (orange) there. Best-effort: closing the exam locally must not depend on the network.
+    if (activeSessionToken) {
+      fetch("/api/admin/centre-links/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: activeSessionToken, state: "closed" }),
+      }).catch(() => {});
+    }
   }
   function openUnlockDialog() { setUnlockValue(""); setUnlockError(false); setUnlockOpen(true); }
   function submitUnlock() {

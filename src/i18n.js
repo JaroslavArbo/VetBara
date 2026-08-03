@@ -1669,6 +1669,10 @@ Object.assign(translations.en, {
   "admin.centreAccess.historyEmpty": "No links generated yet.",
   "admin.centreAccess.columnDate": "Date",
   "admin.centreAccess.columnPlace": "Place",
+  "admin.centreAccess.columnState": "State",
+  "admin.centreAccess.stateGenerated": "Generated",
+  "admin.centreAccess.stateOpened": "Opened",
+  "admin.centreAccess.stateClosed": "Closed",
   "admin.centreAccess.columnLink": "Link",
   "admin.centreAccess.copyLink": "Copy",
 
@@ -1785,6 +1789,10 @@ Object.assign(translations.cs, {
   "admin.centreAccess.historyEmpty": "Zatím nejsou vygenerované žádné linky.",
   "admin.centreAccess.columnDate": "Datum",
   "admin.centreAccess.columnPlace": "Lokalita",
+  "admin.centreAccess.columnState": "Stav",
+  "admin.centreAccess.stateGenerated": "Vygenerováno",
+  "admin.centreAccess.stateOpened": "Otevřeno",
+  "admin.centreAccess.stateClosed": "Uzavřeno",
   "admin.centreAccess.columnLink": "Link",
   "admin.centreAccess.copyLink": "Kopírovat",
 

@@ -12,6 +12,9 @@ import crypto from "node:crypto";
 // Requires a valid Admin session (see api/admin/auth/*) and only mints
 // role=Centre tokens (guarded by the CENTRE- token prefix).
 
+// A Centre link must be activated (opened at least once) within this many days of being generated.
+export const CENTRE_LINK_ACTIVATION_DAYS = 21;
+
 function sendJson(response, status, body) {
   response.status(status).json(body);
 }
@@ -61,6 +64,11 @@ export default async function handler(request, response) {
     const admin = await resolveAdminSession(sessionToken);
     if (!admin) return sendJson(response, 401, { error: "Admin session required" });
 
+    // A freshly minted Centre link is only valid for three weeks UNTIL it is first opened. Opening
+    // it clears expires_at (see qr/resolve.js), so a certification that has actually started never
+    // expires mid-exam; an invitation that was never used simply stops working.
+    const activationDeadline = new Date(Date.now() + CENTRE_LINK_ACTIVATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
     await supabase("qr_tokens?on_conflict=token_hash", {
       method: "POST",
       body: JSON.stringify([
@@ -69,6 +77,7 @@ export default async function handler(request, response) {
           role: "Centre",
           subject_id: String(id),
           label: `Centre ${centre || place || id}${examDate ? ` ${examDate}` : ""}`,
+          expires_at: activationDeadline,
         },
       ]),
     });

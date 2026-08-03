@@ -88,6 +88,25 @@ async function createSession(access, deviceId) {
   return { sessionToken, expiresAt };
 }
 
+// Clears a Centre token's activation deadline and records the activation in the Admin link history.
+// Every step is individually tolerant: the columns are new (20260803 migration) and a deployment
+// that has not run it yet must still log in normally.
+async function markCentreLinkActivated(access) {
+  try {
+    await supabase(`qr_tokens?id=eq.${encodeURIComponent(access.qrTokenId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ expires_at: null }),
+    });
+  } catch { /* deadline stays; the link still works until it lapses */ }
+  try {
+    const now = new Date().toISOString();
+    await supabase(`centre_links?subject_id=eq.${encodeURIComponent(access.subjectId)}&activated_at=is.null`, {
+      method: "PATCH",
+      body: JSON.stringify({ activated_at: now }),
+    });
+  } catch { /* history stays "generated"; not worth failing a login over */ }
+}
+
 // Device-bound QR access for Candidate/Examiner links (see the 20260802 migration). Every branch
 // below is wrapped so that ANY failure - a missing table/column because the migration has not run,
 // an unexpected error, a malformed row - resolves to { outcome: "allow" }. A bug in this brand-new
@@ -198,6 +217,13 @@ export default async function handler(request, response) {
       if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: "This device needs the PIN for this QR code", requiresPin: true });
       if (deviceGate.outcome === "wrong-pin") return sendJson(response, 401, { error: "Incorrect PIN", requiresPin: true, wrongPin: true });
       if (deviceGate.outcome === "device-limit") return sendJson(response, 429, { error: "This QR code is already open on 3 devices at once", deviceLimitReached: true });
+    }
+
+    // First successful open of a Centre link "activates" it: drop the 3-week activation deadline
+    // (an exam that has started must never expire mid-run) and stamp the Admin link history so the
+    // Admin list can show it as opened. Best-effort only - a failure here must not block the login.
+    if (envReady() && access.role === "Centre" && access.qrTokenId) {
+      markCentreLinkActivated(access).catch(() => {});
     }
 
     const session = await createSession(access, deviceId);

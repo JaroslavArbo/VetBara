@@ -28,6 +28,8 @@ const routes = {
   "centre-links/list": centreLinks,
   "centre-links/save": centreLinks,
   "centre-links/delete": centreLinks,
+  // Called by a CENTRE session (not Admin) to report that its exam was closed/archived.
+  "centre-links/mark": centreLinks,
   "test-package/authoring/save": tpAuthoringSave,
   "test-package/convert": tpConvert,
   "test-package/approve": tpApprove,
