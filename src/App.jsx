@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
-import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, fetchCentreAudit, setQrPin, resetQrPin, downloadBase64File, loadCentreSetup } from "./lib/api";
+import { bootstrapSession, resolveQrToken, syncBatch, fetchCandidateEvaluation, exportCentreAuditPackage, fetchCentreAudit, setQrPin, resetQrPin, verifyExaminerPin, downloadBase64File, loadCentreSetup } from "./lib/api";
 import { CandidateQuickHelp, ExaminerQuickHelp } from "./components/PilotInfoPanels";
 import { AuditSyncView, translateAuditAction } from "./components/AuditSyncView";
 import { CentreQrAccessPack } from "./components/CentreQrAccessPack";
@@ -1434,6 +1434,8 @@ function VetBaraPrototype() {
   // the freshly-issued session token while the FIRST device on a token is being asked to choose one.
   const [qrPinChallenge, setQrPinChallenge] = useState(null);
   const [qrSetPinPrompt, setQrSetPinPrompt] = useState(null);
+  // Session that scanned a brand-new QR and must still choose a PIN (asked at identity confirmation).
+  const pendingPinSessionRef = useRef(null);
   const [activeSessionToken, setActiveSessionToken] = useState(null);
   const [reopenRequest, setReopenRequest] = useState(null);
   const [centreSetupLoading, setCentreSetupLoading] = useState(false);
@@ -2138,7 +2140,10 @@ function VetBaraPrototype() {
       try {
         const resolved = await resolveQrToken(token, { deviceId, pin });
         const session = await bootstrapSession(resolved.sessionToken);
-        if (resolved.promptSetPin) setQrSetPinPrompt({ sessionToken: resolved.sessionToken });
+        // The PIN is created at "identity confirmed", not here: the candidate/examiner has only just
+        // scanned and may not even be the right person yet. Remember that this session still owes
+        // us a PIN and ask for it in confirmCandidate/confirmExaminer.
+        if (resolved.promptSetPin) pendingPinSessionRef.current = resolved.sessionToken;
         return { ...resolved, ...session, sessionToken: resolved.sessionToken };
       } catch (error) {
         if (error?.body?.requiresPin) {
@@ -3088,7 +3093,22 @@ function VetBaraPrototype() {
   }
 
   function loginCandidate(id) { setLoggedCandidateId(id); setSelectedCandidateId(id); setActiveCandidateSection("landing"); addAudit("Candidate logged in", candidates.find((c) => c.id === id)?.name ?? id, "QR accepted"); }
-  function confirmCandidate() { if (!loggedCandidate) return; setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true })); addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`); }
+  function confirmCandidate() {
+    if (!loggedCandidate) return;
+    setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: true }));
+    addAudit("Candidate identity confirmed", loggedCandidate.name, `${loggedCandidate.birthDate} / ${loggedCandidate.documentId}`);
+    maybeAskForPin();
+  }
+
+  // First time this QR is used anywhere: the person picks a 3-digit PIN right after confirming
+  // their identity. It is then required on every further device and for examiner
+  // self-identification in Centre.
+  function maybeAskForPin() {
+    const sessionToken = pendingPinSessionRef.current;
+    if (!sessionToken) return;
+    pendingPinSessionRef.current = null;
+    setQrSetPinPrompt({ sessionToken });
+  }
   function unconfirmCandidate() {
     if (!loggedCandidate) return;
     setCandidateConfirmed((prev) => ({ ...prev, [loggedCandidate.id]: false }));
@@ -3660,7 +3680,12 @@ function VetBaraPrototype() {
     else startVoiceRecording();
   }
   function loginExaminer(id) { setLoggedExaminerId(id); setActiveExaminerPage("landing"); const first = candidates.find((c) => [assignments[c.id]?.primary, assignments[c.id]?.secondary].includes(id)); if (first) setSelectedCandidateId(first.id); addAudit("Examiner logged in", examiners.find((e) => e.id === id)?.name ?? id, "QR accepted"); }
-  function confirmExaminer() { if (!loggedExaminer) return; setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true })); addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId); }
+  function confirmExaminer() {
+    if (!loggedExaminer) return;
+    setExaminerConfirmed((prev) => ({ ...prev, [loggedExaminer.id]: true }));
+    addAudit("Examiner identity confirmed", loggedExaminer.name, loggedExaminer.registrationId);
+    maybeAskForPin();
+  }
   function setPrimary(candidateId, examinerId, primary) { setAssignments((prev) => { const current = prev[candidateId] ?? {}; return { ...prev, [candidateId]: primary ? { primary: examinerId, secondary: current.primary && current.primary !== examinerId ? current.primary : current.secondary } : { ...current, secondary: examinerId, primary: current.primary === examinerId ? current.secondary : current.primary } }; }); }
   async function openOutdoor(candidateId) {
     if (examStartBlocks("outdoor")) { setStatus(t("exam.notStartedYet")); return; }
@@ -4029,6 +4054,10 @@ function VetBaraPrototype() {
 // Two roles, one dialog: "enter" is shown to a device the token doesn't recognise yet (once a PIN
 // is set), "set" is shown once, right after the very FIRST device ever resolves a token. onSubmit
 // resolving is what unblocks resolveAccessWithFallback's retry loop for "enter" mode.
+// The exam PIN is exactly 3 digits: it is a quick "is this really you" check typed on a tablet in
+// the field, not a password (the QR token itself is the secret).
+const QR_PIN_LENGTH = 3;
+
 function QrPinModal({ mode, wrongPin, onSubmit, onCancel, t }) {
   const [value, setValue] = useState("");
   const isSet = mode === "set";
@@ -4042,18 +4071,17 @@ function QrPinModal({ mode, wrongPin, onSubmit, onCancel, t }) {
           autoFocus
           inputMode="numeric"
           pattern="[0-9]*"
-          maxLength={8}
+          maxLength={QR_PIN_LENGTH}
           value={value}
-          onChange={(event) => setValue(event.target.value.replace(/\D/g, "").slice(0, 8))}
+          onChange={(event) => setValue(event.target.value.replace(/\D/g, "").slice(0, QR_PIN_LENGTH))}
           placeholder={isSet ? t("qr.pin.setPlaceholder") : t("qr.pin.enterPlaceholder")}
           className="mt-4 w-full rounded-xl border p-3 text-center text-2xl font-bold tracking-[0.3em]"
         />
         <div className="mt-4 flex flex-wrap gap-2">
-          {isSet && <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("qr.pin.setSkip")}</Button>}
           {!isSet && <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>}
           <Button
             onClick={() => onSubmit(value)}
-            disabled={isSet ? value.length < 4 : !value}
+            disabled={value.length !== QR_PIN_LENGTH}
             className="rounded-2xl"
           >
             {isSet ? t("qr.pin.setConfirm") : t("qr.pin.enterConfirm")}
@@ -11325,10 +11353,45 @@ function CentreReviewCell({ status, sectionKey, onClick, locked = false, lockedT
   );
 }
 
+// 3-digit PIN prompt used when an examiner self-identifies in Centre section E.
+function IdentifyPinDialog({ examinerName, error, busy, onSubmit, onCancel, t }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5">
+        <h3 className="text-lg font-bold">{t("qr.pin.enterTitle")}</h3>
+        <p className="mt-1 text-sm text-slate-600">{examinerName}</p>
+        <p className="mt-1 text-sm text-slate-600">{t("centre.review.identifyPinHelper")}</p>
+        {error && <p className="mt-2 text-sm font-semibold text-rose-700">{error}</p>}
+        <input
+          autoFocus
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={QR_PIN_LENGTH}
+          value={value}
+          onChange={(event) => setValue(event.target.value.replace(/\D/g, "").slice(0, QR_PIN_LENGTH))}
+          onKeyDown={(event) => { if (event.key === "Enter" && value.length === QR_PIN_LENGTH) onSubmit(value); }}
+          className="mt-4 w-full rounded-xl border p-3 text-center text-2xl font-bold tracking-[0.3em]"
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={onCancel} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
+          <Button onClick={() => onSubmit(value)} disabled={busy || value.length !== QR_PIN_LENGTH} className="rounded-2xl">
+            {busy ? "…" : t("qr.pin.enterConfirm")}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CentreReviewSection({ candidates, examiners, variants, testBank, testResponses, setTestResponses, reportDrafts, outdoor, outdoorByExaminer, assignments, outdoorItemsByLevel, candidateStatus, onOutdoorCorrection, onScanGradingSaved, writtenScoresByExaminer, reportMarksByExaminer, onWrittenCorrection, onReportCorrection, activeSessionToken, centreExamId, centreCode, examDate, place, onExamClosed, examClosed, addAudit, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [identifiedExaminerId, setIdentifiedExaminerId] = useState("");
   const [pendingIdentify, setPendingIdentify] = useState(false);
+  // Examiner id waiting for its PIN before self-identification is accepted.
+  const [identifyPinFor, setIdentifyPinFor] = useState(null);
+  const [identifyPinError, setIdentifyPinError] = useState("");
+  const [identifyPinBusy, setIdentifyPinBusy] = useState(false);
   const [correctionStatus, setCorrectionStatus] = useState({});
   // scans[candidateId] holds every scanned page for that candidate's written test, in capture
   // order — each page carries its own already-computed mark-detection results (see
@@ -11816,7 +11879,28 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
 
   function requireIdentify() { setPendingIdentify(true); }
 
+  // Self-identifying in Centre lets an examiner change marks, so it is PIN-protected: the same
+  // 3-digit PIN they chose when confirming their identity on their own device. An examiner who has
+  // never set one (hasPin:false) is let through - the gate must not lock a real examiner out.
   function confirmIdentify(examinerId) {
+    setIdentifyPinFor(examinerId);
+  }
+
+  async function submitIdentifyPin(examinerId, pin) {
+    setIdentifyPinError("");
+    setIdentifyPinBusy(true);
+    try {
+      const result = await verifyExaminerPin(activeSessionToken, examinerId, pin);
+      if (result?.hasPin && !result?.valid) {
+        setIdentifyPinError(t("qr.pin.wrong"));
+        return;
+      }
+    } catch {
+      // Backend unreachable: fall through rather than block a correction mid-exam.
+    } finally {
+      setIdentifyPinBusy(false);
+    }
+    setIdentifyPinFor(null);
     setIdentifiedExaminerId(examinerId);
     setPendingIdentify(false);
     const examiner = examiners.find((item) => item.id === examinerId);
@@ -11876,6 +11960,18 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
             </div>
           </div>
         </div>
+      )}
+
+      {/* PIN check for the examiner who just picked themselves above. */}
+      {identifyPinFor && (
+        <IdentifyPinDialog
+          examinerName={examiners.find((item) => item.id === identifyPinFor)?.name || identifyPinFor}
+          error={identifyPinError}
+          busy={identifyPinBusy}
+          onSubmit={(pin) => submitIdentifyPin(identifyPinFor, pin)}
+          onCancel={() => { setIdentifyPinFor(null); setIdentifyPinError(""); }}
+          t={t}
+        />
       )}
 
       <div className="overflow-x-auto rounded-2xl border bg-white p-4">

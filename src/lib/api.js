@@ -53,6 +53,15 @@ export function setQrPin(sessionToken, pin) {
   });
 }
 
+// Checks a PIN for an examiner who is self-identifying in Centre section E. Returns
+// { ok, hasPin, valid } - hasPin:false means that examiner has not chosen a PIN yet.
+export function verifyExaminerPin(sessionToken, subjectId, pin) {
+  return requestJson("/api/qr/set-pin", {
+    method: "POST",
+    body: JSON.stringify({ sessionToken, action: "verify", subjectId, pin }),
+  });
+}
+
 export function resetQrPin(sessionToken, role, subjectId) {
   return requestJson("/api/centre/reset-qr-pin", {
     method: "POST",

@@ -46,14 +46,30 @@ export default async function handler(request, response) {
   if (!envReady()) return sendJson(response, 200, { ok: true, stored: false });
 
   try {
-    const { sessionToken, pin } = request.body ?? {};
+    const { sessionToken, pin, action, subjectId } = request.body ?? {};
     const session = await resolveSession(sessionToken);
     if (!session) return sendJson(response, 401, { error: "Invalid or expired session" });
+
+    // VERIFY: the Centre asks whether a PIN matches the examiner who is self-identifying in
+    // section E (that examiner is not the one holding this session, so it is checked by subject id).
+    // An examiner who has never set a PIN yet reports hasPin:false, and the caller lets them
+    // through - the PIN gate must never lock a real examiner out of correcting their own marks.
+    if (action === "verify") {
+      const wanted = String(subjectId ?? "").trim();
+      if (!wanted) return sendJson(response, 400, { error: "subjectId is required" });
+      if (session.role !== "Centre" && session.role !== "Examiner") return sendJson(response, 403, { error: "Not allowed to verify a PIN" });
+      const rows = await supabase(`qr_tokens?role=eq.Examiner&subject_id=eq.${encodeURIComponent(wanted)}&revoked_at=is.null&select=pin_hash&order=created_at.desc&limit=1`);
+      const pinHash = rows[0]?.pin_hash ?? null;
+      if (!pinHash) return sendJson(response, 200, { ok: true, hasPin: false, valid: true });
+      const digits = String(pin ?? "").trim();
+      return sendJson(response, 200, { ok: true, hasPin: true, valid: hash(digits) === pinHash });
+    }
+
     if (session.role !== "Candidate" && session.role !== "Examiner") return sendJson(response, 403, { error: "PIN is only used for Candidate/Examiner QR links" });
     if (!session.qr_token_id) return sendJson(response, 200, { ok: true, stored: false });
 
     const digits = String(pin ?? "").trim();
-    if (!/^\d{4,8}$/.test(digits)) return sendJson(response, 400, { error: "PIN must be 4-8 digits" });
+    if (!/^\d{3}$/.test(digits)) return sendJson(response, 400, { error: "PIN must be 3 digits" });
 
     // Only ever set once per token - a device that already knows the old PIN could otherwise
     // silently change it. Regenerating the QR link (a fresh token) is the intended way to reset it.
