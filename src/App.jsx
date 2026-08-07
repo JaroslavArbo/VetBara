@@ -15,7 +15,8 @@ import { uploadExamMedia, listExamMedia } from "./lib/api";
 import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder";
 import { OUTDOOR_AI_DRAFT_NOTES } from "./lib/outdoorAiDraftNotes";
 import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
-import { adminSignInWithPassword, adminAccessToken, adminSignOut, adminEnrollTotp, adminVerifyTotp, adminListFactors, supabaseAuthConfigured } from "./lib/supabaseAuth";
+import { adminSignInWithPassword, adminAccessToken, adminSignOut, adminEnrollTotp, adminVerifyTotp, adminListFactors, supabaseAuthConfigured,
+  passkeysAvailable, adminRegisterPasskey, adminSignInWithPasskey } from "./lib/supabaseAuth";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -5532,6 +5533,19 @@ function AdminSecondFactorStep({ mode, onSatisfied, t }) {
     } finally { setBusy(false); }
   }
 
+  // §7.3 - a passkey can be registered instead of scanning a TOTP code. It is offered only when the
+  // feature flag is on AND the browser supports WebAuthn; failure here never blocks TOTP (§7.2).
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  async function registerPasskey() {
+    setPasskeyBusy(true); setError("");
+    try {
+      await adminRegisterPasskey("VetBara admin");
+      await onSatisfied();
+    } catch (err) {
+      setError(err?.message || t("adminAuth.passkey.registerFailed"));
+    } finally { setPasskeyBusy(false); }
+  }
+
   return (
     <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 shadow-sm">
       <div className="flex items-center gap-2 text-lg font-semibold text-slate-950"><Lock className="h-5 w-5" /> {t(mode === "enroll" ? "adminAuth.totp.enrollTitle" : "adminAuth.totp.challengeTitle")}</div>
@@ -5561,6 +5575,15 @@ function AdminSecondFactorStep({ mode, onSatisfied, t }) {
           {busy ? t("adminAuth.totp.verifying") : t("adminAuth.totp.verify")}
         </Button>
       </form>
+
+      {mode === "enroll" && passkeysAvailable() && (
+        <div className="mt-4 border-t pt-4 text-center">
+          <div className="text-xs text-slate-500">{t("adminAuth.passkey.orRegister")}</div>
+          <Button onClick={registerPasskey} disabled={passkeyBusy} variant="outline" className="mt-2 w-full rounded-2xl">
+            {passkeyBusy ? t("adminAuth.passkey.registering") : t("adminAuth.passkey.register")}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -5576,6 +5599,18 @@ export function AdminLoginGate({ t, addAudit, children }) {
 
   // null | "enroll" | "challenge" - which second-factor step the sign-in still needs.
   const [secondFactor, setSecondFactor] = useState(null);
+
+  async function signInWithPasskey() {
+    setBusy(true); setError("");
+    try {
+      await adminSignInWithPasskey();
+      // A passkey satisfies both factors at once, so this normally returns a full session.
+      const result = await auth.exchangeSupabaseSession();
+      if (result?.needsSecondFactor) setSecondFactor(result.hasVerifiedFactor ? "challenge" : "enroll");
+    } catch (err) {
+      setError(err?.message || t("adminAuth.passkey.signInFailed"));
+    } finally { setBusy(false); }
+  }
 
   async function submitLogin(event) {
     event.preventDefault();
@@ -5631,6 +5666,16 @@ export function AdminLoginGate({ t, addAudit, children }) {
           {error && <div className="mt-2 text-sm font-medium text-rose-700">{error}</div>}
           <Button type="submit" disabled={busy} className="mt-4 w-full rounded-2xl">{busy ? t("adminAuth.loggingIn") : t("adminAuth.login")}</Button>
         </form>
+        {/* §7.4 - discoverable credential: the authenticator picks the account, so nothing is typed
+            first. Shown only when the flag is on and the browser can do WebAuthn; a failure here
+            leaves the password + TOTP path untouched above. */}
+        {passkeysAvailable() && (
+          <div className="mt-4 border-t pt-4">
+            <Button onClick={signInWithPasskey} disabled={busy} variant="outline" className="w-full rounded-2xl">
+              {t("adminAuth.passkey.signIn")}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }

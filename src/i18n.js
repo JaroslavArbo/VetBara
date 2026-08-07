@@ -3113,6 +3113,12 @@ export function translationFor(language, key) {
 }
 
 Object.assign(translations.en, {
+  "adminAuth.passkey.signIn": "Sign in with a passkey",
+  "adminAuth.passkey.signInFailed": "Passkey sign-in did not complete. You can still sign in with your password.",
+  "adminAuth.passkey.orRegister": "Prefer Face ID, Touch ID or a security key?",
+  "adminAuth.passkey.register": "Create a passkey instead",
+  "adminAuth.passkey.registering": "Waiting for your device…",
+  "adminAuth.passkey.registerFailed": "The passkey could not be created. Use the authenticator app code above instead.",
   "adminAuth.totp.enrollTitle": "Set up your authenticator app",
   "adminAuth.totp.enrollHelper": "Scan this code with an authenticator app (Google Authenticator, 1Password, Authy…), then enter the six-digit code it shows.",
   "adminAuth.totp.challengeTitle": "Two-factor verification",
@@ -3164,6 +3170,12 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.cs, {
+  "adminAuth.passkey.signIn": "Přihlásit pomocí passkey",
+  "adminAuth.passkey.signInFailed": "Přihlášení pomocí passkey se nedokončilo. Stále se můžete přihlásit heslem.",
+  "adminAuth.passkey.orRegister": "Preferujete Face ID, Touch ID nebo bezpečnostní klíč?",
+  "adminAuth.passkey.register": "Vytvořit passkey místo toho",
+  "adminAuth.passkey.registering": "Čekám na vaše zařízení…",
+  "adminAuth.passkey.registerFailed": "Passkey se nepodařilo vytvořit. Použijte kód z autentizační aplikace výše.",
   "adminAuth.totp.enrollTitle": "Nastavení autentizační aplikace",
   "adminAuth.totp.enrollHelper": "Naskenujte kód autentizační aplikací (Google Authenticator, 1Password, Authy…) a zadejte šestimístný kód, který zobrazí.",
   "adminAuth.totp.challengeTitle": "Dvoufaktorové ověření",
