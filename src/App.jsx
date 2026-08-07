@@ -1726,7 +1726,8 @@ function VetBaraPrototype() {
       }
     }
     hydrateCentreResults();
-    const intervalId = window.setInterval(hydrateCentreResults, 12000);
+    // Paused while the tab is hidden - see usePollWhenVisible for why this matters for egress.
+    const intervalId = window.setInterval(() => { if (!document.hidden) hydrateCentreResults(); }, 12000);
     return () => { cancelled = true; window.clearInterval(intervalId); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, activeSessionToken]);
@@ -1748,7 +1749,7 @@ function VetBaraPrototype() {
       }
     }
     hydrateCentreAudit();
-    const intervalId = window.setInterval(hydrateCentreAudit, 15000);
+    const intervalId = window.setInterval(() => { if (!document.hidden) hydrateCentreAudit(); }, 15000);
     return () => { cancelled = true; window.clearInterval(intervalId); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, activeSessionToken]);
@@ -3388,7 +3389,7 @@ function VetBaraPrototype() {
     retryPendingMediaUploads();
     const onOnline = () => retryPendingMediaUploads();
     window.addEventListener("online", onOnline);
-    const id = window.setInterval(() => retryPendingMediaUploads(), 60000);
+    const id = window.setInterval(() => { if (!document.hidden) retryPendingMediaUploads(); }, 60000);
     return () => { window.removeEventListener("online", onOnline); window.clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionToken]);
@@ -5302,6 +5303,26 @@ function centreAccessLinkFor(place, examDate, centre) {
 
 // Shared admin session used by the login gate and by panels that mint tokens.
 export const AdminSessionContext = React.createContext({ sessionToken: null, username: null, logout: () => {} });
+
+
+// Background pollers must not run in a tab nobody is looking at. A Centre workspace left open
+// overnight used to keep polling every 4-15 seconds per candidate, which is what pushed the Supabase
+// project over its monthly egress quota - not the stored data, which is tiny. Polling now pauses
+// while the tab is hidden and refreshes once as soon as it comes back to the foreground.
+function usePollWhenVisible(callback, intervalMs, enabled = true) {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const hidden = () => typeof document !== "undefined" && document.hidden;
+    const tick = () => { if (!hidden()) callbackRef.current?.(); };
+    if (!hidden()) callbackRef.current?.();
+    const id = window.setInterval(tick, intervalMs);
+    const onVisible = () => { if (!hidden()) callbackRef.current?.(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, [intervalMs, enabled]);
+}
 
 function useAdminSessionState(t, addAudit) {
   const [session, setSession] = useState(() => {
@@ -11564,7 +11585,9 @@ function CentreReviewSection({ candidates, examiners, variants, testBank, testRe
   }
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => { pollScanInbox(); }, 4000);
+    // 4s was far too aggressive for a poll that runs for the whole session; 15s is still well
+    // inside what an operator notices when feeding scanned pages in.
+    const intervalId = window.setInterval(() => { if (!document.hidden) pollScanInbox(); }, 15000);
     return () => window.clearInterval(intervalId);
   }, [candidates, variants, testBank]);
 
