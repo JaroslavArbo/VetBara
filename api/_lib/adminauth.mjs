@@ -119,3 +119,77 @@ export async function createAdminSession(profile) {
   });
   return { sessionToken, expiresAt };
 }
+
+// --- Supabase Auth bridge (phase 2) -----------------------------------------------------------
+// Admin identities live in Supabase Auth so we get its native MFA. Supabase owns the credentials
+// and the factors; this app still owns its own app_sessions, which every admin endpoint already
+// authorises against. The bridge below turns a Supabase session that has satisfied a second factor
+// (AAL2) into one of our Admin sessions.
+
+// Admins sign in with an address, not a username. These are synthetic and deliberately not real
+// mailboxes: §20 makes account recovery the other administrator's job, so adding an email-reset
+// channel would only weaken the account. Override per account by setting user_profiles.auth_email.
+export function adminEmailForUsername(username) {
+  return `${String(username).trim().toLowerCase()}@vetbara.internal`;
+}
+
+function authBase() {
+  return `${process.env.SUPABASE_URL}/auth/v1`;
+}
+
+function serviceHeaders() {
+  return {
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+// Creates the Supabase Auth user for an admin, or resets its password if it already exists.
+// email_confirm is set so no confirmation mail is ever sent (the addresses are not real).
+export async function upsertAdminAuthUser(email, password) {
+  const create = await fetch(`${authBase()}/admin/users`, {
+    method: "POST",
+    headers: serviceHeaders(),
+    body: JSON.stringify({ email, password, email_confirm: true }),
+  });
+  if (create.ok) return (await create.json())?.id ?? null;
+
+  // Already exists - find it and set the new password instead.
+  const listed = await fetch(`${authBase()}/admin/users?per_page=200`, { headers: serviceHeaders() });
+  if (!listed.ok) throw new Error(`Could not look up the admin auth user (${listed.status})`);
+  const users = (await listed.json())?.users ?? [];
+  const existing = users.find((user) => String(user.email).toLowerCase() === String(email).toLowerCase());
+  if (!existing) throw new Error(await create.text());
+  const updated = await fetch(`${authBase()}/admin/users/${existing.id}`, {
+    method: "PUT",
+    headers: serviceHeaders(),
+    body: JSON.stringify({ password, email_confirm: true }),
+  });
+  if (!updated.ok) throw new Error(`Could not update the admin auth user (${updated.status})`);
+  return existing.id;
+}
+
+// Validates a Supabase access token against Supabase itself (never by trusting the client), then
+// reads the assurance level out of the now-known-good token payload.
+export async function verifySupabaseAccessToken(accessToken) {
+  if (!accessToken) return null;
+  const response = await fetch(`${authBase()}/user`, {
+    headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return null;
+  const user = await response.json();
+  let aal = null;
+  try {
+    const payload = JSON.parse(Buffer.from(String(accessToken).split(".")[1], "base64url").toString("utf8"));
+    aal = payload?.aal ?? null;
+  } catch { /* claim is optional; treated as not-AAL2 below */ }
+  return { id: user?.id ?? null, email: user?.email ?? null, aal };
+}
+
+export async function listAdminAuthFactors(authUserId) {
+  const response = await fetch(`${authBase()}/admin/users/${authUserId}`, { headers: serviceHeaders() });
+  if (!response.ok) return [];
+  const user = await response.json();
+  return (user?.factors ?? []).filter((factor) => factor.status === "verified");
+}

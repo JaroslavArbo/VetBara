@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { Html5QrcodeScanner } from "html5-qrcode";
@@ -15,6 +15,7 @@ import { uploadExamMedia, listExamMedia } from "./lib/api";
 import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder";
 import { OUTDOOR_AI_DRAFT_NOTES } from "./lib/outdoorAiDraftNotes";
 import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
+import { adminSignInWithPassword, adminAccessToken, adminSignOut, adminEnrollTotp, adminVerifyTotp, adminListFactors, supabaseAuthConfigured } from "./lib/supabaseAuth";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -132,16 +133,15 @@ function Info({ className }) { return <IconBase className={className}><circle cx
 function AlertTriangle({ className }) { return <IconBase className={className}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></IconBase>; }
 function Camera({ className }) { return <IconBase className={className}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></IconBase>; }
 function MapPin({ className }) { return <IconBase className={className}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" /></IconBase>; }
-function Relocate({ className }) { return <IconBase className={className}><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /><circle cx="12" cy="12" r="3" /></IconBase>; }
 function ChevronDown({ className }) { return <IconBase className={className}><path d="M6 9l6 6 6-6" /></IconBase>; }
 function Check({ className }) { return <IconBase className={className}><path d="M20 6L9 17l-5-5" /></IconBase>; }
 function X({ className }) { return <IconBase className={className}><path d="M18 6L6 18" /><path d="M6 6l12 12" /></IconBase>; }
-function Maximize({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 function Wifi({ className }) { return <IconBase className={className}><path d="M5 12.5a11 11 0 0 1 14 0" /><path d="M8.5 16a6 6 0 0 1 7 0" /><path d="M12 19.5h.01" /></IconBase>; }
 function Search({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></IconBase>; }
 function ZoomIn({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M11 8v6" /><path d="M8 11h6" /></IconBase>; }
 function ZoomOut({ className }) { return <IconBase className={className}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /><path d="M8 11h6" /></IconBase>; }
 function Layers({ className }) { return <IconBase className={className}><path d="M12 2l9 5-9 5-9-5 9-5z" /><path d="M3 12l9 5 9-5" /><path d="M3 17l9 5 9-5" /></IconBase>; }
+function Maximize({ className }) { return <IconBase className={className}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M21 8V5a2 2 0 0 0-2-2h-3" /><path d="M3 16v3a2 2 0 0 0 2 2h3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></IconBase>; }
 function Minimize({ className }) { return <IconBase className={className}><path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" /></IconBase>; }
 function RefreshCw({ className }) { return <IconBase className={className}><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" /><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8" /><path d="M3 16v4h4" /><path d="M21 8V4h-4" /></IconBase>; }
 function Eraser({ className }) { return <IconBase className={className}><path d="M7 21H4a1 1 0 0 1-.7-1.7l10-10a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L15 21" /><path d="M22 21H7" /><path d="m5 12 5 5" /></IconBase>; }
@@ -221,9 +221,8 @@ const DEMO_QR_TOKENS = {
   Examiner: "VETBARA-EXAMINER-E-001-2026",
 };
 // The roster is always the real one loaded from the Centre setup — there is deliberately no seed
-// roster. Placeholder people ("Candidate 1", "Examiner 2", EX-DEMO-00x) used to be the initial
-// state and were indistinguishable from real entries, so a failed setup load left the operator
-// issuing QR links for candidates who do not exist.
+// roster. Placeholder people were indistinguishable from real entries, so a failed setup load left
+// the operator issuing QR links for candidates who do not exist.
 const EXAMINERS = [];
 const START_CANDIDATES = [];
 const START_ASSIGNMENTS = {};
@@ -913,52 +912,6 @@ function parseTestPackage(text, fileName = "", mimeType = "") {
   return { ...imported, questionCount };
 }
 
-// Maps a readVetPackage() failure to a localized, actionable message. The technical detail is
-// kept so a genuinely malformed file stays debuggable. The most common cause is an unreadable
-// file (a OneDrive/iCloud "online-only" copy handed to the browser empty), not a bad package.
-function vetReadErrorMessage(error, t) {
-  const byCode = {
-    empty: t("vet.readError.empty"),
-    unreadable: t("vet.readError.unreadable"),
-    badzip: t("vet.readError.badzip"),
-    badjson: t("vet.readError.badjson"),
-    nopackage: t("vet.readError.nopackage"),
-  };
-  const base = error?.code && byCode[error.code];
-  if (base) return error?.message ? `${base} (${error.message})` : base;
-  return error?.message || t("vet.readError.generic");
-}
-
-// Written question text imported from PDFs mixes two kinds of line breaks: genuine structure
-// (bulleted sub-items, numbered/lettered lists, a list intro ending in a colon, blank-line
-// paragraph breaks) and accidental ones (the source PDF wrapped a sentence across lines). This
-// keeps the genuine breaks and rejoins the accidental mid-sentence wraps, so questions read as
-// clean paragraphs while real lists still stack. Shared by the candidate test and the examiner
-// review so both show the same thing. Pair with `whitespace-pre-wrap` in the markup.
-function cleanQuestionText(text) {
-  const raw = String(text ?? "");
-  if (!raw.includes("\n")) return raw.trim();
-  const lines = raw.split(/\r?\n/).map((line) => line.trim());
-  // A line that begins a list item: •/‣/◦/▪/·, or "- "/"* " (dash/star + space), or an
-  // enumerator like "1." "2)" "a)" "(i)" — i.e. a real, intentional new line.
-  const listStart = /^(?:[•‣◦▪·]|[-–*]\s|\(?[0-9]{1,3}[.)]\s|\(?[a-z][.)]\s|\(?[ivxlcdm]{1,4}[.)]\s)/i;
-  // A previous line that legitimately ends a line: sentence punctuation or a list-intro colon.
-  const keepBreakAfter = /[.!?:;]$/;
-  const out = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (i === 0) { out.push(line); continue; }
-    const prev = out.length ? out[out.length - 1] : "";
-    if (line === "" || prev === "" || listStart.test(line) || keepBreakAfter.test(prev)) {
-      out.push(line);
-    } else {
-      // Accidental mid-sentence wrap → rejoin with the previous line.
-      out[out.length - 1] = `${prev} ${line}`.replace(/\s{2,}/g, " ").trim();
-    }
-  }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
 function nowStamp() { return new Date().toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 // Session-integrity sync events → the exact audit actions the supervision console keys off
 // (AuditSyncView's ALERT_ACTIONS and its live "away" state), so an alert raised on a candidate's
@@ -1025,71 +978,6 @@ function isBackendPersistenceUnavailable(error) {
   return error?.status === 503 || /503/.test(message) || /Backend persistence is not configured/i.test(message);
 }
 
-function approxDataUrlBytes(dataUrl) {
-  const comma = String(dataUrl).indexOf(",");
-  const b64 = comma >= 0 ? String(dataUrl).slice(comma + 1) : String(dataUrl);
-  return Math.ceil((b64.length * 3) / 4);
-}
-
-// Downscale + recompress any captured image (a File or a data URL) so it stays well under ~1 MB
-// before it is stored/uploaded — modern phone/tablet cameras produce 3–8 MB JPEGs that bloat the
-// draft, the sync payload and Supabase Storage. Long edge is capped and JPEG quality is stepped
-// down until the byte budget is met. Used by every photo capture path (report, field tablet,
-// examiner archive, handwriting export).
-async function compressImageToDataUrl(source, { maxBytes = 1_000_000, maxDim = 2000 } = {}) {
-  const sourceDataUrl = typeof source === "string"
-    ? source
-    : await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(source);
-      });
-  let img;
-  try {
-    img = await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = sourceDataUrl;
-    });
-  } catch {
-    return sourceDataUrl; // not a decodable image (or HEIC without support) — keep original
-  }
-  const naturalW = img.naturalWidth || img.width;
-  const naturalH = img.naturalHeight || img.height;
-  if (!naturalW || !naturalH) return sourceDataUrl;
-  const draw = (scale) => {
-    const w = Math.max(1, Math.round(naturalW * scale));
-    const h = Math.max(1, Math.round(naturalH * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-    return canvas;
-  };
-  let scale = Math.min(1, maxDim / Math.max(naturalW, naturalH));
-  let canvas = draw(scale);
-  let quality = 0.85;
-  let out = canvas.toDataURL("image/jpeg", quality);
-  // First lower quality, then shrink dimensions, until under budget (bounded loop).
-  for (let i = 0; i < 6 && approxDataUrlBytes(out) > maxBytes; i += 1) {
-    if (quality > 0.45) {
-      quality -= 0.12;
-    } else {
-      scale *= 0.75;
-      canvas = draw(scale);
-      quality = 0.7;
-    }
-    out = canvas.toDataURL("image/jpeg", quality);
-  }
-  // Only use the recompressed version if it is actually smaller than the source.
-  return approxDataUrlBytes(out) < approxDataUrlBytes(sourceDataUrl) ? out : sourceDataUrl;
-}
-
 // Synchronously renders a QR code to a standalone <svg>...</svg> markup string, for embedding
 // into print windows built via document.write (a separate document, so React components/props
 // can't be handed to it directly — only raw HTML/markup).
@@ -1148,56 +1036,6 @@ function parseOfflineCandidatePackage(payload) {
 
 function QrScannerPanel({ title, onScan, onClose, t }) {
   const [manualPayload, setManualPayload] = useState("");
-  const [cameraError, setCameraError] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const videoRef = useRef(null);
-  const scannedRef = useRef(false);
-
-  // Live camera QR scanning (HTTPS secure context is verified in production, so getUserMedia is
-  // available). Falls back to manual paste only if the camera can't be opened.
-  useEffect(() => {
-    let stream = null;
-    let raf = 0;
-    let cancelled = false;
-    const canvas = document.createElement("canvas");
-
-    async function start() {
-      if (!navigator.mediaDevices?.getUserMedia) { setCameraError(t("qrScanner.cameraUnavailable")); return; }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-        if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play().catch(() => {});
-        setScanning(true);
-        const tick = () => {
-          if (cancelled || scannedRef.current) return;
-          const v = videoRef.current;
-          if (v && v.videoWidth) {
-            canvas.width = v.videoWidth;
-            canvas.height = v.videoHeight;
-            canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
-            try {
-              const data = decodeAllQrCodes(canvas, 1)?.[0]?.data;
-              if (data) { scannedRef.current = true; onScan(String(data)); return; }
-            } catch { /* keep scanning */ }
-          }
-          raf = requestAnimationFrame(tick);
-        };
-        raf = requestAnimationFrame(tick);
-      } catch {
-        setCameraError(t("qrScanner.cameraError"));
-      }
-    }
-    start();
-    return () => {
-      cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
-      if (stream) stream.getTracks().forEach((track) => track.stop());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function submitManualPayload() {
     const value = manualPayload.trim();
@@ -1205,6 +1043,7 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
       window.alert(t("qrScanner.enterPayloadAlert"));
       return;
     }
+
     onScan(value);
   }
 
@@ -1214,23 +1053,27 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold">{title}</h3>
-            <p className="text-sm text-slate-600">{t("qrScanner.helper")}</p>
+            <p className="text-sm text-slate-600">
+              {t("qrScanner.cameraDisabledHelper")}
+            </p>
           </div>
           <Button onClick={onClose} variant="outline" className="rounded-2xl">
             <X className="mr-1 h-4 w-4" />{t("common.close")}
           </Button>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border bg-slate-950">
-          <video ref={videoRef} playsInline muted className="h-72 w-full bg-black object-cover" />
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="font-semibold">{t("qrScanner.fallbackModeTitle")}</div>
+          <p className="mt-1">
+            {t("qrScanner.fallbackModeHelper")}
+          </p>
         </div>
-        {cameraError
-          ? <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{cameraError}</div>
-          : <p className="mt-2 text-center text-xs text-slate-500">{scanning ? t("qrScanner.scanning") : t("qrScanner.starting")}</p>}
 
-        <details className="mt-4 rounded-2xl border bg-white p-4" open={Boolean(cameraError)}>
-          <summary className="cursor-pointer font-semibold">{t("qrScanner.manualPayloadTitle")}</summary>
-          <p className="mt-1 text-sm text-slate-600">{t("qrScanner.manualPayloadHelper")}</p>
+        <div className="mt-4 rounded-2xl border bg-white p-4">
+          <h4 className="font-semibold">{t("qrScanner.manualPayloadTitle")}</h4>
+          <p className="mt-1 text-sm text-slate-600">
+            {t("qrScanner.manualPayloadHelper")}
+          </p>
           <textarea
             value={manualPayload}
             onChange={(e) => setManualPayload(e.target.value)}
@@ -1241,10 +1084,14 @@ function QrScannerPanel({ title, onScan, onClose, t }) {
             spellCheck="false"
           />
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={submitManualPayload} className="rounded-2xl">{t("qrScanner.loadPayload")}</Button>
-            <Button onClick={() => setManualPayload("")} variant="outline" className="rounded-2xl">{t("qrScanner.clearPayload")}</Button>
+            <Button onClick={submitManualPayload} className="rounded-2xl">
+              {t("qrScanner.loadPayload")}
+            </Button>
+            <Button onClick={() => setManualPayload("")} variant="outline" className="rounded-2xl">
+              {t("qrScanner.clearPayload")}
+            </Button>
           </div>
-        </details>
+        </div>
       </div>
     </div>
   );
@@ -1385,9 +1232,7 @@ function VetBaraPrototype() {
   // candidatePreparations[candidateId][treeKey] = { note, sketch } — what the candidate wrote and
   // drew for each tree before the outdoor exam, pulled back from the server for the Centre.
   const [candidatePreparations, setCandidatePreparations] = useState({});
-  // outdoorByExaminer[candidateId][examinerId] = { mode, scores, notes, noteDrawings, examSummary,
-  // submittedAt }. The flat `outdoor` state merges every examiner together, which is fine for a
-  // total but loses who scored what — section E needs the primary and secondary side by side.
+  // outdoorByExaminer[candidateId][examinerId] = { mode, scores, notes, noteDrawings, examSummary }.
   const [outdoorByExaminer, setOutdoorByExaminer] = useState({});
   // Section E corrections to a CLOSED written test / Consulting report, keyed the same way as
   // outdoorByExaminer: writtenScoresByExaminer[candidateId][examinerId] = { scores: {questionId:
@@ -1756,6 +1601,19 @@ function VetBaraPrototype() {
             setOutdoorByExaminer((prev) => ({ ...prev, [candidate.id]: perExaminer }));
           }
 
+          // What the candidate prepared per tree before going out (notes + sketch).
+          const preparationRows = Array.isArray(result.preparations) ? result.preparations : [];
+          if (preparationRows.length) {
+            setCandidatePreparations((prev) => ({
+              ...prev,
+              [candidate.id]: preparationRows.reduce((next, row) => {
+                const treeKey = row.tree_key ?? row.treeKey;
+                if (!treeKey) return next;
+                return { ...next, [treeKey]: { note: row.note ?? "", sketch: row.sketch ?? "" } };
+              }, {}),
+            }));
+          }
+
           // Per-item Outdoor scores (also covers in-progress, pre-submit editing).
           const scoreRows = Array.isArray(result.outdoorScores) ? result.outdoorScores : [];
           if (scoreRows.length) {
@@ -1781,19 +1639,6 @@ function VetBaraPrototype() {
               }, { ...(prev[candidate.id] ?? {}) }),
             }));
           }
-          // What the candidate prepared per tree before going out (notes + sketch).
-          const preparationRows = Array.isArray(result.preparations) ? result.preparations : [];
-          if (preparationRows.length) {
-            setCandidatePreparations((prev) => ({
-              ...prev,
-              [candidate.id]: preparationRows.reduce((next, row) => {
-                const treeKey = row.tree_key ?? row.treeKey;
-                if (!treeKey) return next;
-                return { ...next, [treeKey]: { note: row.note ?? "", sketch: row.sketch ?? "" } };
-              }, {}),
-            }));
-          }
-
           // Report draft → the Consulting report column.
           if (result.reportDraft && typeof result.reportDraft === "object") {
             setReportDrafts((prev) => ({
@@ -2323,6 +2168,14 @@ function VetBaraPrototype() {
   // by comparing the token to the single hardcoded CENTRE_ACCESS_TOKEN client-side.
 
   async function handleQrScan(text) {
+    const offlinePackage = parseOfflineCandidatePackage(text);
+
+    if (offlinePackage) {
+      importOfflineCandidatePackage(offlinePackage);
+      setScannerMode(null);
+      return;
+    }
+
     const p = { ...parseQrPayload(text), raw: text };
     const access = await resolveAccessWithFallback(p, "QR accepted");
     if (access) applyResolvedAccess(access, "QR accepted");
@@ -2518,18 +2371,18 @@ function VetBaraPrototype() {
         }));
       }
 
-      const assessment = restoredAssessments.find((row) => (row.section_key ?? row.sectionKey) === "outdoor") ?? restoredAssessments[0];
-      const restoredDrawings = assessment?.payload?.noteDrawings;
-      if (restoredDrawings && typeof restoredDrawings === "object") {
-        setOutdoorNoteDrawings((prev) => ({
+      if (restoredScores.length > 0) {
+        setOutdoorNotes((prev) => ({
           ...prev,
-          [candidateId]: { ...(prev[candidateId] ?? {}), ...restoredDrawings },
+          [candidateId]: restoredScores.reduce((next, score) => {
+            const itemId = score.item_id ?? score.itemId;
+            const note = score.note ?? score.payload?.note ?? score.payload?.comment ?? "";
+            return itemId ? { ...next, [itemId]: note } : next;
+          }, { ...(prev[candidateId] ?? {}) }),
         }));
       }
-      const restoredSummary = assessment?.payload?.examSummary;
-      if (typeof restoredSummary === "string" && restoredSummary) {
-        setOutdoorExamSummaries((prev) => ({ ...prev, [candidateId]: restoredSummary }));
-      }
+
+      const assessment = restoredAssessments.find((row) => (row.section_key ?? row.sectionKey) === "outdoor") ?? restoredAssessments[0];
       if (assessment) {
         setExaminerTimes((prev) => ({
           ...prev,
@@ -3809,8 +3662,8 @@ function VetBaraPrototype() {
   // synced the same way a score or note already was: immediately, per item.
   async function updateOutdoorNoteDrawing(itemId, dataUrl) {
     if (!loggedExaminer || selectedMode === "unassigned") return;
-    // Compress on the way in, so both localStorage and the submit payload stay small. Clearing a
-    // sketch passes an empty string, which must not be run through the compressor.
+    // Compress on the way in: a raw sketch is a ~530 KB PNG data URL and a full set would blow past
+    // the platform's request cap on submit. Clearing passes "", which must skip the compressor.
     const stored = dataUrl ? await compressImageToDataUrl(dataUrl, { maxBytes: 150_000, maxDim: 1400 }) : dataUrl;
     setOutdoorNoteDrawings((prev) => ({
       ...prev,
@@ -3846,9 +3699,7 @@ function VetBaraPrototype() {
     });
   }
 
-  // Even compressed, a full set of sketches can exceed the request cap, and a 413 loses the whole
-  // assessment. Shrink them further in steps until the encoded body fits, so the submission always
-  // gets through — degraded sketches beat a failed submit.
+  // Shrink sketches in steps until the encoded body fits: a 413 would lose the whole assessment.
   async function boundedOutdoorSubmitPayload(basePayload) {
     const budgets = [null, 90_000, 45_000, 20_000];
     let last = basePayload;
@@ -3912,7 +3763,6 @@ function VetBaraPrototype() {
       max,
       scores: values,
       notes: outdoorNotes[selectedCandidate.id] ?? {},
-      noteDrawings: outdoorNoteDrawings[selectedCandidate.id] ?? {},
       examSummary: outdoorExamSummaries[selectedCandidate.id] ?? "",
       submittedAt,
       closedAt,
@@ -3935,18 +3785,21 @@ function VetBaraPrototype() {
     if (!loggedExaminer || selectedCandidate.level !== "Practicing") return;
     const fileList = Array.from(files ?? []);
     if (!fileList.length) return;
-    fileList.forEach(async (file) => {
-      const dataUrl = await compressImageToDataUrl(file);
-      setPracticingArchive((prev) => ({
-        ...prev,
-        [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), {
-          id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`,
-          capturedBy: loggedExaminer.name,
-          capturedAt: new Date().toISOString(),
-          name: file.name || `management-plan-${Date.now()}.jpg`,
-          dataUrl,
-        }],
-      }));
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPracticingArchive((prev) => ({
+          ...prev,
+          [selectedCandidate.id]: [...(prev[selectedCandidate.id] ?? []), {
+            id: `MP-${(prev[selectedCandidate.id] ?? []).length + 1}`,
+            capturedBy: loggedExaminer.name,
+            capturedAt: new Date().toISOString(),
+            name: file.name || `management-plan-${Date.now()}.jpg`,
+            dataUrl: reader.result,
+          }],
+        }));
+      };
+      reader.readAsDataURL(file);
     });
   }
   function updateScore(field, value, options = {}) {
@@ -4976,7 +4829,7 @@ export function AdminStructuredPackagePanel({ adminPdfPackageLatest, setAdminPdf
       loadFromPackage(data);
       setLocalStatus(tf("admin.authoring.loadedFromFile", { fileName: file.name, packageId: data.packageId || t("admin.authoring.packageNoId") }));
     } catch (error) {
-      setLocalError(vetReadErrorMessage(error, t));
+      setLocalError(error.message || t("admin.authoring.fileLoadFailed"));
       setLocalStatus("");
     }
   }
@@ -5464,17 +5317,34 @@ function useAdminSessionState(t, addAudit) {
     } catch { /* ignore storage errors */ }
   }
 
+  // First factor is verified by Supabase Auth in the browser; the resulting Supabase session is
+  // then exchanged for one of this app's Admin sessions - but only once a second factor has been
+  // satisfied (the server enforces AAL2). Returns what the caller still has to do.
   async function login(username, password) {
-    const response = await fetch("/api/admin/auth/login", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || t("adminAuth.loginFailed"));
-    persist({ sessionToken: data.sessionToken, username: data.username, expiresAt: data.expiresAt });
-    addAudit?.("Admin logged in", data.username, "");
+    const email = String(username).includes("@") ? String(username).trim() : `${String(username).trim().toLowerCase()}@vetbara.internal`;
+    await adminSignInWithPassword(email, password);
+    return exchangeSupabaseSession();
   }
 
-  function logout() { persist(null); }
+  // Turns the current Supabase session into an Admin session. If the second factor has not been
+  // satisfied yet the server says so, and the caller shows either the TOTP prompt or enrolment.
+  async function exchangeSupabaseSession() {
+    const accessToken = await adminAccessToken();
+    if (!accessToken) throw new Error(t("adminAuth.loginFailed"));
+    const response = await fetch("/api/admin/auth/session", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accessToken }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 403 && data.secondFactorRequired) {
+      return { needsSecondFactor: true, hasVerifiedFactor: Boolean(data.hasVerifiedFactor) };
+    }
+    if (!response.ok) throw new Error(data.error || t("adminAuth.loginFailed"));
+    persist({ sessionToken: data.sessionToken, username: data.username, expiresAt: data.expiresAt });
+    addAudit?.(data.activated ? "Admin account activated" : "Admin logged in", data.username, "");
+    return { ok: true, username: data.username };
+  }
+
+  function logout() { adminSignOut(); persist(null); }
 
   async function changeCredentials({ currentPassword, newUsername, newPassword }) {
     const response = await fetch("/api/admin/auth/change-password", {
@@ -5494,7 +5364,7 @@ function useAdminSessionState(t, addAudit) {
     addAudit?.("Admin account activated", data.username, "");
   }
 
-  return { session, isAuthed, login, logout, changeCredentials, adoptSession };
+  return { session, isAuthed, login, logout, changeCredentials, adoptSession, exchangeSupabaseSession };
 }
 
 // Gates the whole Admin area behind a login. Accounts are activated via a one-time link
@@ -5541,6 +5411,9 @@ function AdminActivationScreen({ token, t, onActivated }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { setError(data.error || t("adminAuth.activation.failed")); return; }
+      // The password now lives in Supabase Auth - sign in with it so the next step (enrolling the
+      // second factor) has a Supabase session to attach the factor to.
+      await adminSignInWithPassword(data.email, form.password);
       onActivated?.(data);
     } catch (err) {
       setError(err?.message || t("adminAuth.activation.failed"));
@@ -5583,6 +5456,91 @@ function AdminActivationScreen({ token, t, onActivated }) {
   );
 }
 
+
+// Second factor for admins (§6). One component covers both cases because Supabase treats them the
+// same way: an account with no verified factor enrols one (QR + manual secret + confirm a code),
+// an account that already has one just answers a challenge. Reaching AAL2 is what finally issues
+// the Admin session - see /api/admin/auth/session.
+function AdminSecondFactorStep({ mode, onSatisfied, t }) {
+  const [enrolment, setEnrolment] = useState(null); // { factorId, qrUri, secret }
+  const [factorId, setFactorId] = useState(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
+  // React invokes effects twice in development. Two concurrent enrolments would race and one would
+  // fail on Supabase's unique factor-name constraint, surfacing as a bogus error.
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    // No "cancelled" flag here on purpose: React's development remount would run the cleanup between
+    // the two invocations and throw away the result of the enrolment that actually succeeded, while
+    // the ref above blocks the retry - leaving the step with no factor at all.
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      try {
+        if (mode === "enroll") {
+          const started = await adminEnrollTotp("VetBara admin");
+          setEnrolment(started);
+          setFactorId(started.factorId);
+        } else {
+          const factors = await adminListFactors();
+          setFactorId(factors[0]?.id ?? null);
+        }
+      } catch (err) {
+        setError(err?.message || t("adminAuth.totp.failed"));
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!factorId) { setError(t("adminAuth.totp.failed")); return; }
+    setBusy(true); setError("");
+    try {
+      await adminVerifyTotp(factorId, code);
+      await onSatisfied();
+    } catch (err) {
+      setError(err?.message || t("adminAuth.totp.badCode"));
+      setCode("");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-2 text-lg font-semibold text-slate-950"><Lock className="h-5 w-5" /> {t(mode === "enroll" ? "adminAuth.totp.enrollTitle" : "adminAuth.totp.challengeTitle")}</div>
+      <p className="mt-1 text-sm text-slate-600">{t(mode === "enroll" ? "adminAuth.totp.enrollHelper" : "adminAuth.totp.challengeHelper")}</p>
+
+      {mode === "enroll" && enrolment && (
+        <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-center">
+          <div className="flex justify-center"><RealQr value={enrolment.qrUri} size={190} /></div>
+          <button type="button" onClick={() => setShowSecret((v) => !v)} className="mt-2 text-xs font-semibold text-slate-600 underline">
+            {t("adminAuth.totp.manualEntry")}
+          </button>
+          {showSecret && <div className="mt-1 break-all font-mono text-xs text-slate-700">{enrolment.secret}</div>}
+        </div>
+      )}
+
+      <form onSubmit={submit} className="mt-4">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder={t("adminAuth.totp.codePlaceholder")}
+          className="w-full rounded-xl border bg-white p-2 text-center font-mono text-lg tracking-[0.3em]"
+        />
+        {error && <div className="mt-2 text-sm font-medium text-rose-700">{error}</div>}
+        <Button type="submit" disabled={busy || code.length !== 6} className="mt-4 w-full rounded-2xl">
+          {busy ? t("adminAuth.totp.verifying") : t("adminAuth.totp.verify")}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 export function AdminLoginGate({ t, addAudit, children }) {
   const auth = useAdminSessionState(t, addAudit);
   const [form, setForm] = useState({ username: "", password: "" });
@@ -5592,10 +5550,17 @@ export function AdminLoginGate({ t, addAudit, children }) {
   const [changeForm, setChangeForm] = useState({ currentPassword: "", newUsername: "", newPassword: "" });
   const [changeMsg, setChangeMsg] = useState("");
 
+  // null | "enroll" | "challenge" - which second-factor step the sign-in still needs.
+  const [secondFactor, setSecondFactor] = useState(null);
+
   async function submitLogin(event) {
     event.preventDefault();
     setBusy(true); setError("");
-    try { await auth.login(form.username, form.password); setForm({ username: "", password: "" }); }
+    try {
+      const result = await auth.login(form.username, form.password);
+      setForm({ username: "", password: "" });
+      if (result?.needsSecondFactor) setSecondFactor(result.hasVerifiedFactor ? "challenge" : "enroll");
+    }
     catch (err) { setError(err.message || t("adminAuth.loginFailed")); }
     finally { setBusy(false); }
   }
@@ -5609,8 +5574,26 @@ export function AdminLoginGate({ t, addAudit, children }) {
 
   // Opening a one-time activation link takes precedence over the login form.
   const activationToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("adminActivate") : null;
-  if (activationToken && !auth.isAuthed) {
-    return <AdminActivationScreen token={activationToken} t={t} onActivated={(data) => auth.adoptSession(data)} />;
+  if (activationToken && !auth.isAuthed && !secondFactor) {
+    return (
+      <AdminActivationScreen
+        token={activationToken}
+        t={t}
+        // Activation now only sets the Supabase Auth password; the account is not usable until a
+        // second factor is enrolled, so hand straight over to enrolment (§8).
+        onActivated={() => setSecondFactor("enroll")}
+      />
+    );
+  }
+
+  if (secondFactor && !auth.isAuthed) {
+    return (
+      <AdminSecondFactorStep
+        mode={secondFactor}
+        t={t}
+        onSatisfied={async () => { await auth.exchangeSupabaseSession(); setSecondFactor(null); }}
+      />
+    );
   }
 
   if (!auth.isAuthed) {
@@ -5892,7 +5875,6 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
   // locale writes ;), and handles quoted fields with embedded delimiters, quotes and newlines.
   function parseCsv(text) {
     const clean = text.replace(/^﻿/, "");
-    // NUL byte / ZIP ("PK", i.e. .xlsx) / OLE (.xls) signatures = a binary spreadsheet, not CSV.
     if (clean.includes("\u0000") || clean.startsWith("PK") || clean.charCodeAt(0) === 0xd0) {
       throw new Error("binary");
     }
@@ -6636,33 +6618,10 @@ function formatHalfPointScore(value) {
   return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
 }
 
-// Fixed running order for the outdoor session, regardless of the order sections happen to sit
-// in the imported package: general oral questions first, then any numbered "Part/Část N"
-// (incl. plain "Exercise N"), then the per-tree sections A → B → C → D, then anything else, with
-// the catch-all "generic" bucket last. Ties keep their original order (e.g. two Tree B parts).
-function outdoorSectionRank(section) {
-  const s = String(section || "").toLowerCase();
-  if (/oral/.test(s)) return 0;
-  const tree = s.match(/(?:^|[^\p{L}])(?:tree|strom)\s*([a-d])(?![\p{L}])/u);
-  if (tree) return 200 + (tree[1].charCodeAt(0) - 97);
-  // Word-start prefix instead of \b: \b does not work before non-ASCII words like "část".
-  const part = s.match(/(?:^|[^\p{L}])(?:part|část|cast|čast|exercise|cvičení|cviceni|úkol|ukol)\s*(\d+)/u);
-  if (part) return 100 + Number(part[1]);
-  if (s === "generic") return 900;
-  return 500;
-}
-
-function sortOutdoorSections(sections) {
-  return sections
-    .map((section, index) => ({ section, index, rank: outdoorSectionRank(section) }))
-    .sort((a, b) => a.rank - b.rank || a.index - b.index)
-    .map((entry) => entry.section);
-}
-
 function effectiveOutdoorSectionsForLevel(activeOutdoorItems, level) {
   const levelItems = effectiveOutdoorItemsForLevel(activeOutdoorItems, level);
   const sections = Object.keys(levelItems);
-  return sections.length ? sortOutdoorSections(sections) : OUTDOOR_SECTIONS[level] ?? [];
+  return sections.length ? sections : OUTDOOR_SECTIONS[level] ?? [];
 }
 
 function outdoorSectionTitle(section) {
@@ -6714,9 +6673,7 @@ const FIELD_REQUIRED_ASSIGNMENTS = FIELD_LEVELS.flatMap((level) => FIELD_TREE_CO
 // Trees A and B can optionally get a second instance (A2/B2) per level — e.g. two candidates
 // working the same exercise on separate trees. Toggled per exam in the tablet's "Přehled stromů"
 // section; off by default so nothing changes unless the field team opts in.
-// Consulting no longer offers second trees; only Practicing A/B can be doubled. A draft saved
-// while the Consulting toggles still existed simply stops producing those extra trees, because
-// both the toggle list and `extraFieldTrees` are derived from this one array.
+// Consulting no longer offers second trees; only Practicing A/B can be doubled.
 const FIELD_EXTRA_TREE_TOGGLE_KEYS = ["Practicing-A2", "Practicing-B2"];
 
 // Management data (taxon/dimensions/interventions) is only meaningful for the trees the exam
@@ -6729,19 +6686,13 @@ function fieldTreeShowsManagementData(level, code) {
   return normalizedCode === "A" || normalizedCode === "B";
 }
 
-// --- Map tile memory cache -------------------------------------------------------------------
-// Tiles used to be fetched again every time a pan pushed them out of the rendered window or a zoom
-// change rebuilt the whole set, which is what made the field map stutter and flash blank. Holding a
-// decoded Image per URL keeps the bytes in the browser's memory cache, so re-creating an <img> for
-// that URL paints immediately instead of hitting the network.
+// --- Map tile memory cache ---------------------------------------------------------------------
+// Holding a decoded Image per tile URL keeps the bytes in the browser's memory cache, so a pan or
+// zoom that re-creates the <img> paints immediately instead of re-fetching and flashing blank.
 const FIELD_TILE_CACHE = new Map();
-// ~3 zoom levels of a 9x7 window plus room for whatever the operator pans over.
 const FIELD_TILE_CACHE_LIMIT = 900;
-// The window kept warm around the exam centre, matching the rendered tile window.
-const FIELD_TILE_HALF_X = 4;
+const FIELD_TILE_HALF_X = 3;
 const FIELD_TILE_HALF_Y = 3;
-// The deepest zoom the tablet allows and the two above it — the band the examiner works in when
-// walking between trees, and where re-fetching hurts most (each level has 4x the tiles).
 const FIELD_PREFETCH_ZOOMS = [21, 20, 19];
 
 function retainFieldTile(url) {
@@ -6753,14 +6704,11 @@ function retainFieldTile(url) {
   image.src = url;
   FIELD_TILE_CACHE.set(url, image);
   while (FIELD_TILE_CACHE.size > FIELD_TILE_CACHE_LIMIT) {
-    const oldest = FIELD_TILE_CACHE.keys().next().value;
-    FIELD_TILE_CACHE.delete(oldest);
+    FIELD_TILE_CACHE.delete(FIELD_TILE_CACHE.keys().next().value);
   }
   return image;
 }
 
-// Warm the cache a few tiles at a time: firing ~190 requests at once would saturate the tablet's
-// connection pool and stall the tiles the operator is actually looking at.
 async function prefetchFieldTiles(urls, { concurrency = 6, control } = {}) {
   const queue = urls.filter((url) => !FIELD_TILE_CACHE.has(url));
   let index = 0;
@@ -6771,9 +6719,7 @@ async function prefetchFieldTiles(urls, { concurrency = 6, control } = {}) {
       await new Promise((resolve) => {
         const image = retainFieldTile(url);
         if (!image || image.complete) { resolve(); return; }
-        // A tile request that neither loads nor errors (a throttling tile server, a flaky field
-        // connection) would otherwise pin one of the few workers forever and stall the whole
-        // warm-up — observed as the prefetch stopping part-way through a zoom level.
+        // A request that neither loads nor errors would pin a worker forever.
         const timer = window.setTimeout(finish, 10000);
         function finish() { window.clearTimeout(timer); resolve(); }
         image.addEventListener("load", finish, { once: true });
@@ -6950,31 +6896,6 @@ function findMissingFieldAssignment(prep) {
   return FIELD_REQUIRED_ASSIGNMENTS.find(({ level, code }) => !trees.some((tree) => fieldEnsureArray(tree.assignments).some((assignment) => assignment.level === level && assignment.code === code))) || null;
 }
 
-// Standard row layout of the 8 required trees around the exam centre (degrees). Used for
-// placeholder trees and as the recovery layout in "Move all trees here" when a tree's stored
-// coordinates are corrupt or absurdly far from the centre.
-const FIELD_STANDARD_TREE_OFFSETS = {
-  "Practicing-A": { lat: 0.00025, lng: 0.00025 },
-  "Practicing-B": { lat: 0.00045, lng: 0.00055 },
-  "Practicing-C": { lat: 0.00015, lng: 0.00078 },
-  "Practicing-D": { lat: -0.00018, lng: 0.00055 },
-  "Consulting-A": { lat: 0.00005, lng: -0.00025 },
-  "Consulting-B": { lat: 0.00033, lng: -0.00048 },
-  "Consulting-C": { lat: -0.00012, lng: -0.00062 },
-  "Consulting-D": { lat: -0.00038, lng: -0.00028 },
-};
-
-// Fallback offset for any tree key, including second-tree instances ("Practicing-A2" → the base
-// "Practicing-A" offset nudged slightly aside so the two don't overlap).
-function fieldStandardOffsetForKey(key) {
-  const direct = FIELD_STANDARD_TREE_OFFSETS[key];
-  if (direct) return direct;
-  const match = String(key || "").match(/^(Practicing|Consulting)-([A-D])\d*$/);
-  const base = match ? FIELD_STANDARD_TREE_OFFSETS[`${match[1]}-${match[2]}`] : null;
-  if (base) return { lat: base.lat + 0.00007, lng: base.lng + 0.00007 };
-  return { lat: 0.0002, lng: 0.0002 };
-}
-
 function limitFieldTreesToRequiredCodes(trees, level = "Practicing", center = {}) {
   const source = fieldEnsureArray(trees);
   const includeAll = String(level || "").toLowerCase() === "all";
@@ -6983,7 +6904,16 @@ function limitFieldTreesToRequiredCodes(trees, level = "Practicing", center = {}
   const centerLng = Number(center?.longitude ?? center?.lng);
   const baseLat = Number.isFinite(centerLat) ? centerLat : 49.405888;
   const baseLng = Number.isFinite(centerLng) ? centerLng : 15.128912;
-  const offsets = FIELD_STANDARD_TREE_OFFSETS;
+  const offsets = {
+    "Practicing-A": { lat: 0.00025, lng: 0.00025 },
+    "Practicing-B": { lat: 0.00045, lng: 0.00055 },
+    "Practicing-C": { lat: 0.00015, lng: 0.00078 },
+    "Practicing-D": { lat: -0.00018, lng: 0.00055 },
+    "Consulting-A": { lat: 0.00005, lng: -0.00025 },
+    "Consulting-B": { lat: 0.00033, lng: -0.00048 },
+    "Consulting-C": { lat: -0.00012, lng: -0.00062 },
+    "Consulting-D": { lat: -0.00038, lng: -0.00028 },
+  };
   return levels.flatMap((requiredLevel) => FIELD_TREE_CODES.map((code) => {
     const key = fieldTreeKey(requiredLevel, code);
     const existing = source.find((tree) => fieldTreeKey(tree) === key || (String(tree.code || "").toUpperCase() === code && normalizeFieldLevel(tree.level || requiredLevel) === requiredLevel));
@@ -7474,6 +7404,8 @@ function printTreeDetailPageHtml(tree, index, t) {
     </div>
     <h3>${escapeHtml(t("fieldPrep.interventionTechnology"))}</h3>
     ${interventionsHtml}
+    <h3>${escapeHtml(t("fieldPrep.candidateNote"))}</h3>
+    <div class="print-note">${tree.candidateNote ? linesToHtml(tree.candidateNote) : `<span class="print-empty">-</span>`}</div>
     <h3>${escapeHtml(t("fieldPrep.photos"))}</h3>
     ${photosHtml}
   </section>`;
@@ -8110,17 +8042,11 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                 <div className="rounded-full bg-white/90 px-2 py-0.5 text-center text-[10px] font-semibold text-slate-500 shadow-sm">{centreMapZoom}</div>
               </div>
               <div className="absolute bottom-2 right-3 z-20 rounded-full bg-white/90 px-2 py-1 text-[11px] text-slate-500 shadow-sm">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
-              <span aria-hidden="true" style={markerForPoint(prep.examCenter?.point)} className="pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 ring-2 ring-white" />
-              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-full bg-rose-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
+              <button type="button" onPointerDown={(event) => startCentreDrag("center", "__center__", event)} onClick={() => setSelectedTreeId("__center__")} style={markerForPoint(prep.examCenter?.point)} className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-600 px-3 py-2 text-xs font-bold text-white shadow-lg ring-4 ring-white">{t("fieldPrep.centre")}</button>
               {fieldEnsureArray(prep.trees).map((tree) => {
                 const selected = tree.id === selectedTreeId;
                 const labels = fieldTreeLabels(tree);
-                return <span key={`${tree.id}-dot`} aria-hidden="true" style={markerForPoint(tree.point)} className={`pointer-events-none absolute z-20 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white ${selected ? "bg-slate-950" : "bg-slate-700"}`} />;
-              })}
-              {fieldEnsureArray(prep.trees).map((tree) => {
-                const selected = tree.id === selectedTreeId;
-                const labels = fieldTreeLabels(tree);
-                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-[150%] rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
+                return <button type="button" key={tree.id} onPointerDown={(event) => startCentreDrag("tree", tree.id, event)} onClick={() => setSelectedTreeId(tree.id)} style={markerForPoint(tree.point)} className={`absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-2 py-1 text-xs font-bold shadow-lg ring-4 ring-white ${selected ? "bg-slate-950 text-white" : "bg-white text-slate-950"}`}>{labels.length ? labels.join(" / ") : t("fieldPrep.tree")}</button>;
               })}
             </div>
             <div className="mt-3 flex flex-wrap justify-between gap-2">
@@ -8131,17 +8057,6 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                 <Printer className="mr-1 h-4 w-4" />{t("fieldPrep.printPdf")}
               </Button>
             </div>
-            {selectedTree && Array.isArray(selectedTree.photos) && selectedTree.photos.length > 0 && (
-              <div className="mt-3 rounded-2xl border bg-white p-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("fieldPrep.treePhotos")} · {fieldTreeDisplayName(selectedTree)}</div>
-                <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {selectedTree.photos.map((photo, index) => {
-                    const src = photo.url || photo.dataUrl;
-                    return src ? <a key={photo.id || index} href={src} target="_blank" rel="noreferrer" className="block"><img src={src} alt={photo.caption || photo.fileName || ""} className="h-20 w-full rounded-lg border object-cover" /></a> : null;
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -8155,6 +8070,7 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                 <label className="text-sm font-medium">Longitude<input type="number" value={prep.examCenter?.point?.lng ?? ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, point: { ...prep.examCenter.point, lng: Number(event.target.value) } } })} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               </div>
               <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={prep.examCenter?.candidateNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, candidateNote: event.target.value } })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={prep.examCenter?.internalNote || ""} onChange={(event) => updatePrep({ examCenter: { ...prep.examCenter, internalNote: event.target.value } })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
             </div>
           ) : selectedTree ? (
             <div className="rounded-2xl border bg-white p-4">
@@ -8170,6 +8086,8 @@ function CentreFieldPreparationModule({ prep, setPrep, autoLoadRef, centreCode, 
                   <Button onClick={() => removeAssignment(selectedTree.id, assignment.id)} variant="outline" className="rounded-xl">{t("fieldPrep.remove")}</Button>
                 </div>)}
               </div>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.candidateNote")}<textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTree(selectedTree.id, { candidateNote: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
+              <label className="mt-3 block text-sm font-medium">{t("fieldPrep.internalNote")}<textarea value={selectedTree.internalNote || ""} onChange={(event) => updateTree(selectedTree.id, { internalNote: event.target.value })} rows={2} className="mt-1 w-full rounded-xl border bg-white p-2" /></label>
               {(selectedTree.assignments || []).some((assignment) => fieldTreeShowsManagementData(assignment.level, assignment.code)) && (
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
                   <h4 className="font-semibold text-emerald-950">{t("fieldPrep.managementData")}</h4>
@@ -8291,10 +8209,8 @@ function FieldTabletPage() {
   const draftKey = fieldTabletStorageKey("draft", examId, normalizedLevel);
   const [fieldPackage, setFieldPackage] = useState(() => readJsonLocalStorage(packageKey, null));
   const [draft, setDraft] = useState(() => readJsonLocalStorage(draftKey, null));
-  // Photo compression takes seconds on a tablet, and `draft` inside a closure is frozen at the
-  // moment the async work started. Committing against that stale snapshot is what silently dropped
-  // photos. Every read-modify-write goes through this ref instead, which is advanced synchronously
-  // by updateDraft (so two updates in one tick are also safe) and re-synced after every render.
+  // Photo compression takes seconds; `draft` captured in a closure before the await is stale by the
+  // time the write lands, which silently dropped photos. All read-modify-writes go through this ref.
   const draftRef = useRef(draft);
   useEffect(() => { draftRef.current = draft; }, [draft]);
   const [selectedTreeCode, setSelectedTreeCode] = useState(() => firstFieldTabletTreeCode(readJsonLocalStorage(packageKey, null), normalizedLevel));
@@ -8316,15 +8232,12 @@ function FieldTabletPage() {
   const [mapCenterOverride, setMapCenterOverride] = useState(null);
   const [gpsPosition, setGpsPosition] = useState(null);
   // GPS is a toggle: on = a live watchPosition feed (dot follows the operator, blue circle shows the
-  // reported accuracy), off = the feed is stopped and the dot is hidden. Only the first fix recentres
-  // the map, so tracking never fights the operator panning to look somewhere else.
+  // reported accuracy), off = the feed is stopped and the dot hidden. Only the first fix recentres.
   const [gpsTracking, setGpsTracking] = useState(false);
   const gpsWatchIdRef = useRef(null);
   const gpsFirstFixRef = useRef(false);
-  const [moveConfirm, setMoveConfirm] = useState(null);
-  const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18, panDelta: null });
+  const mapGestureRef = useRef({ pointers: new Map(), startCenterWorld: null, startPointer: null, startDistance: 0, startZoom: 18 });
   const treeDragRef = useRef(null);
-  const panLayerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(() => Boolean(document.fullscreenElement || document.webkitFullscreenElement));
   const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
 
@@ -8347,8 +8260,8 @@ function FieldTabletPage() {
     requestTabletFullscreen();
     // iPad Safari (and any browser reached by scanning a QR rather than by window.open) has no
     // user activation on load, so the call above is silently rejected there. Retry it on the
-    // operator's FIRST touch — the earliest moment the browser will allow it — then stop
-    // listening, so it never fights a deliberate exit later on.
+    // operator's FIRST touch — the earliest moment the browser allows it — then stop listening,
+    // so it never fights a deliberate exit later on.
     const enterOnFirstGesture = () => {
       if (!document.fullscreenElement && !document.webkitFullscreenElement) requestTabletFullscreen();
       removeGestureListeners();
@@ -8382,13 +8295,6 @@ function FieldTabletPage() {
     };
   }, []);
 
-  // Auto-load the field package on open so the map is populated and "Poslat data do Centra" works
-  // without a separate offline-download step. Runs once; offline it keeps any local copy.
-  useEffect(() => {
-    if (!fieldPackage) downloadForOffline();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // A send that failed in the field parks its intent in the sync queue — replay it automatically
   // once the tablet is online again by re-sending the CURRENT snapshot (which supersedes every
   // queued payload; success clears the queue). The queue used to only ever grow, so an operator
@@ -8400,7 +8306,7 @@ function FieldTabletPage() {
     if (queueFlushAttemptsRef.current >= 3) return undefined;
     const timer = window.setTimeout(() => {
       queueFlushAttemptsRef.current += 1;
-      sendDataToCentre();
+      syncBack();
     }, 1500);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -8421,6 +8327,12 @@ function FieldTabletPage() {
       writeJsonLocalStorage(draftKey, initialDraft);
     }
   }, [fieldPackage, draft, draftKey, examId, normalizedLevel]);
+
+  // Auto-load the field package on open so the map is populated without a manual download step.
+  useEffect(() => {
+    if (!fieldPackage) downloadForOffline();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function downloadForOffline() {
     setError("");
@@ -8533,12 +8445,11 @@ function FieldTabletPage() {
     const list = Array.from(files || []);
     if (!list.length) return;
     setStatus(`Processing ${list.length} photo(s)…`);
-    // allSettled, not all: a single unreadable file (a HEIC the reader chokes on) used to reject the
-    // whole batch, so every photo in that capture was lost with nothing shown to the operator.
+    // allSettled, not all: one unreadable file used to reject the batch and lose every photo in it.
     const results = await Promise.allSettled(list.map(async (file) => ({
       id: vetbaraUid("field-photo"),
       fileName: file.name,
-      url: await compressImageToDataUrl(file),
+      url: await readFileAsDataUrl(file),
       caption: "",
       uploadedAt: new Date().toISOString(),
     })));
@@ -8598,7 +8509,6 @@ function FieldTabletPage() {
         labelOffsetY: Number(local.labelOffsetY ?? tree.labelOffsetY ?? 0),
         practicingTreeAData: data,
         managementData: data,
-        photos: (local.photos ?? tree.photos ?? []).map((photo) => ({ id: photo.id, fileName: photo.fileName || photo.name, url: photo.url || photo.dataUrl, caption: photo.caption || "" })).filter((photo) => photo.url),
         checked: Boolean(local.visited),
       };
     });
@@ -8621,18 +8531,10 @@ function FieldTabletPage() {
     };
   }
 
-  // "Poslat data do Centra" — a single, always-available push of the current field-prep state to
-  // the Centre. Unlike the old sync it does not require the offline-download step first (it loads
-  // the package on demand) and it is not gated behind "all trees checked" — station prep must be
-  // sendable at any point.
-  // Photos are base64 data URLs embedded in JSON, and they used to be serialised THREE times per
-  // send (once in packageSnapshot, once in draft.treeNotes, once in fieldPreparationSnapshot).
-  // With ~1 MB photos that blew past Vercel's ~4.5 MB request-body limit and the send died with a
-  // 413 "FUNCTION_PAYLOAD_TOO_LARGE" after a couple of seconds — which on the tablet just looked
-  // like "Sending…" flicking back to "Send data to Centre" with nothing arriving in the Centre.
-  // The server rebuilds the preparation from fieldPreparationSnapshot, so that is the ONE copy
-  // that has to carry the image data; everywhere else we keep the photo metadata but drop the
-  // bytes.
+  // Photos are base64 data URLs embedded in JSON and used to be serialised THREE times per send
+  // (packageSnapshot + draft.treeNotes + fieldPreparationSnapshot), which pushed the body past
+  // the hosting request-size limit and made the send fail with 413. The server rebuilds the
+  // preparation from fieldPreparationSnapshot, so only that copy carries the image bytes.
   function stripPhotoBytes(value) {
     if (Array.isArray(value)) return value.map(stripPhotoBytes);
     if (!value || typeof value !== "object") return value;
@@ -8651,14 +8553,13 @@ function FieldTabletPage() {
     return next;
   }
 
-  // Even with a single copy, enough tree photos still exceed the limit, so shrink them further
-  // (and only for the transfer — the tablet keeps its originals) until the whole body fits.
   async function buildBoundedSyncPayload() {
-    const budgets = [null, 400_000, 220_000, 120_000, 60_000];
+    const canRecompress = typeof compressImageToDataUrl === "function";
+    const budgets = canRecompress ? [null, 400_000, 220_000, 120_000, 60_000] : [null];
     let lastPayload = null;
     for (const maxBytes of budgets) {
       const snapshot = buildFieldPreparationSnapshotForSync();
-      if (maxBytes) {
+      if (maxBytes && canRecompress) {
         snapshot.trees = await Promise.all((snapshot.trees || []).map(async (tree) => ({
           ...tree,
           photos: await Promise.all((tree.photos || []).map(async (photo) => (
@@ -8677,17 +8578,18 @@ function FieldTabletPage() {
         fieldPreparationSnapshot: snapshot,
       };
       lastPayload = payload;
-      // 3.5 MB keeps headroom under the platform's ~4.5 MB cap for headers/encoding overhead.
       if (new Blob([JSON.stringify(payload)]).size <= 3_500_000) return payload;
     }
     return lastPayload;
   }
 
-  async function sendDataToCentre() {
-    if (syncing) return;
+  async function syncBack() {
     if (!fieldPackage || !draft) {
-      await downloadForOffline();
-      setStatus(tt("packageLoadedNowSend"));
+      setError("Download the field package and store local data first.");
+      return;
+    }
+    if (!allRequiredChecked) {
+      setError("Sync is enabled only after all required trees are checked.");
       return;
     }
     setSyncing(true);
@@ -8838,28 +8740,6 @@ function FieldTabletPage() {
     return () => window.cancelAnimationFrame(raf);
   }, [mapCenter.lat, mapCenter.lng, mapZoom, activeTabletLevel, visibleFieldTrees.length]);
 
-  // Once the exam centre is placed, quietly pull the whole map window for the three working zoom
-  // levels into memory. From then on panning and zooming inside the stanoviste is served from cache,
-  // so the map stops re-downloading the same orthophoto every time the operator moves.
-  useEffect(() => {
-    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) return undefined;
-    const control = { aborted: false };
-    const urls = [];
-    for (const zoom of FIELD_PREFETCH_ZOOMS) {
-      const world = latLngToWorld(centerLat, centerLng, zoom);
-      const tileX = Math.floor(world.x / 256);
-      const tileY = Math.floor(world.y / 256);
-      for (let dx = -FIELD_TILE_HALF_X; dx <= FIELD_TILE_HALF_X; dx += 1) {
-        for (let dy = -FIELD_TILE_HALF_Y; dy <= FIELD_TILE_HALF_Y; dy += 1) {
-          urls.push(tileUrl(tileX + dx, tileY + dy, zoom));
-        }
-      }
-    }
-    prefetchFieldTiles(urls, { control });
-    return () => { control.aborted = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerLat, centerLng, mapLayer]);
-
   function clampMapZoom(value) {
     const zoom = Math.round(Number(value));
     if (!Number.isFinite(zoom)) return 18;
@@ -8893,31 +8773,47 @@ function FieldTabletPage() {
     return `https://ags.cuzk.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/${z}/${y}/${x}`;
   }
 
-  // Memoized so a pan/typing re-render doesn't rebuild the whole tile array; the visible
-  // window is intentionally wider than the map so a single drag gesture (which pans via a
-  // CSS transform without re-rendering — see handleMapPointer*) rarely reaches the buffer edge.
-  const mapTiles = useMemo(() => {
-    const centerWorld = latLngToWorld(mapCenter.lat, mapCenter.lng, mapZoom);
+  // Once the exam centre is placed, warm the whole map window for the three working zoom levels so
+  // panning and zooming around the stanoviste stops re-downloading the same orthophoto.
+  useEffect(() => {
+    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) return undefined;
+    const control = { aborted: false };
+    const urls = [];
+    for (const zoom of FIELD_PREFETCH_ZOOMS) {
+      const world = latLngToWorld(centerLat, centerLng, zoom);
+      const tileX = Math.floor(world.x / 256);
+      const tileY = Math.floor(world.y / 256);
+      for (let dx = -FIELD_TILE_HALF_X; dx <= FIELD_TILE_HALF_X; dx += 1) {
+        for (let dy = -FIELD_TILE_HALF_Y; dy <= FIELD_TILE_HALF_Y; dy += 1) {
+          urls.push(tileUrl(tileX + dx, tileY + dy, zoom));
+        }
+      }
+    }
+    prefetchFieldTiles(urls, { control });
+    return () => { control.aborted = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerLat, centerLng, mapLayer]);
+
+  function mapTiles() {
+    const centerWorld = latLngToWorld(mapCenter.lat, mapCenter.lng);
     const centerTileX = Math.floor(centerWorld.x / 256);
     const centerTileY = Math.floor(centerWorld.y / 256);
     const offsetX = centerWorld.x - centerTileX * 256;
     const offsetY = centerWorld.y - centerTileY * 256;
     const tiles = [];
-    for (let dx = -FIELD_TILE_HALF_X; dx <= FIELD_TILE_HALF_X; dx += 1) {
-      for (let dy = -FIELD_TILE_HALF_Y; dy <= FIELD_TILE_HALF_Y; dy += 1) {
+    for (let dx = -3; dx <= 3; dx += 1) {
+      for (let dy = -2; dy <= 2; dy += 1) {
         const x = centerTileX + dx;
         const y = centerTileY + dy;
-        const src = tileUrl(x, y, mapZoom);
         tiles.push({
           key: `${mapLayer}-${mapZoom}-${x}-${y}`,
-          src,
+          src: tileUrl(x, y, mapZoom),
           style: { left: `calc(50% + ${dx * 256 - offsetX}px)`, top: `calc(50% + ${dy * 256 - offsetY}px)` },
         });
       }
     }
     return tiles;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapLayer, mapZoom, mapCenter.lat, mapCenter.lng]);
+  }
 
   function mapPoint(latValue, lngValue) {
     const lat = Number(latValue);
@@ -8938,7 +8834,7 @@ function FieldTabletPage() {
   }
 
   function handleMapPointerDown(event) {
-    if (treeDragRef.current || event.target?.closest?.(".field-map-marker") || event.target?.closest?.(".field-map-toolbar") || event.target?.closest?.(".field-map-overlay-controls")) return;
+    if (treeDragRef.current || event.target?.closest?.(".field-map-marker") || event.target?.closest?.(".field-map-toolbar")) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const pointers = mapGestureRef.current.pointers;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -8946,14 +8842,8 @@ function FieldTabletPage() {
     mapGestureRef.current.startPointer = { x: event.clientX, y: event.clientY };
     mapGestureRef.current.startDistance = pointerDistance(pointers);
     mapGestureRef.current.startZoom = mapZoom;
-    mapGestureRef.current.panDelta = null;
   }
 
-  // Panning moves a CSS transform on the tile+marker layer instead of committing map state
-  // on every pointermove. That keeps a drag on the compositor (zero React re-renders of this
-  // very large component), which is the main fix for the slow redraw. The new centre is
-  // committed once on pointer-up; the stale transform is cleared in a layout effect the moment
-  // the re-render with the new centre commits, so there is no visible jump.
   function handleMapPointerMove(event) {
     if (treeDragRef.current) return;
     const gesture = mapGestureRef.current;
@@ -8969,26 +8859,17 @@ function FieldTabletPage() {
     if (!gesture.startCenterWorld || !gesture.startPointer) return;
     const dx = event.clientX - gesture.startPointer.x;
     const dy = event.clientY - gesture.startPointer.y;
-    gesture.panDelta = { dx, dy };
-    if (panLayerRef.current) panLayerRef.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+    setMapCenterOverride(worldToLatLng(gesture.startCenterWorld.x - dx, gesture.startCenterWorld.y - dy, mapZoom));
   }
 
   function handleMapPointerEnd(event) {
     if (treeDragRef.current) return;
-    const gesture = mapGestureRef.current;
-    gesture.pointers.delete(event.pointerId);
-    if (gesture.pointers.size > 0) return;
-    const delta = gesture.panDelta;
-    const startCenterWorld = gesture.startCenterWorld;
-    gesture.startCenterWorld = null;
-    gesture.startPointer = null;
-    gesture.startDistance = 0;
-    gesture.startZoom = mapZoom;
-    gesture.panDelta = null;
-    if (delta && startCenterWorld && (delta.dx !== 0 || delta.dy !== 0)) {
-      setMapCenterOverride(worldToLatLng(startCenterWorld.x - delta.dx, startCenterWorld.y - delta.dy, mapZoom));
-    } else if (panLayerRef.current) {
-      panLayerRef.current.style.transform = "";
+    mapGestureRef.current.pointers.delete(event.pointerId);
+    if (mapGestureRef.current.pointers.size === 0) {
+      mapGestureRef.current.startCenterWorld = null;
+      mapGestureRef.current.startPointer = null;
+      mapGestureRef.current.startDistance = 0;
+      mapGestureRef.current.startZoom = mapZoom;
     }
   }
 
@@ -9001,12 +8882,6 @@ function FieldTabletPage() {
   function stopMapControlEvent(event) {
     event.stopPropagation();
   }
-
-  // Once a committed centre change has been painted, drop the drag transform in the same frame
-  // (runs before paint, so tiles/markers are already at the new centre → no flash back to old).
-  useLayoutEffect(() => {
-    if (panLayerRef.current) panLayerRef.current.style.transform = "";
-  }, [mapCenter.lat, mapCenter.lng]);
 
   function shouldDragMarkerPosition(event) {
     return Boolean(event.target?.closest?.(".field-marker-dot"));
@@ -9140,21 +9015,8 @@ function FieldTabletPage() {
     }
   }
 
-  function requestGpsPosition() {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) { reject(new Error("GPS is not available in this browser.")); return; }
-      navigator.geolocation.getCurrentPosition(
-        (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy }),
-        (err) => reject(err),
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 }
-      );
-    });
-  }
-
   function stopGpsTracking() {
-    if (gpsWatchIdRef.current !== null && navigator.geolocation) {
-      navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-    }
+    if (gpsWatchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatchIdRef.current);
     gpsWatchIdRef.current = null;
     gpsFirstFixRef.current = false;
     setGpsTracking(false);
@@ -9180,10 +9042,7 @@ function FieldTabletPage() {
         }
         setStatus(`GPS tracking${Number.isFinite(next.accuracy) ? ` · accuracy approx. ${Math.round(next.accuracy)} m` : ""}.`);
       },
-      (err) => {
-        setError(`GPS could not be loaded: ${err?.message || "permission was denied"}.`);
-        stopGpsTracking();
-      },
+      (err) => { setError(`GPS could not be loaded: ${err?.message || "permission was denied"}.`); stopGpsTracking(); },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 2000 }
     );
   }
@@ -9193,6 +9052,10 @@ function FieldTabletPage() {
     startGpsTracking();
   }
 
+  useEffect(() => () => {
+    if (gpsWatchIdRef.current !== null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatchIdRef.current);
+  }, []);
+
   // Web Mercator ground resolution, used to draw the reported accuracy at true scale on the map.
   function gpsAccuracyRadiusPx(position) {
     const accuracy = Number(position?.accuracy);
@@ -9200,87 +9063,6 @@ function FieldTabletPage() {
     const metresPerPixel = (156543.03392 * Math.cos((Number(position.lat) * Math.PI) / 180)) / 2 ** mapZoom;
     if (!Number.isFinite(metresPerPixel) || metresPerPixel <= 0) return 0;
     return Math.min(accuracy / metresPerPixel, 4000);
-  }
-
-  // Rigidly translates the whole standard setup — exam centre + every tree in the row — so the
-  // centre lands on the given point while all relative offsets (the row geometry) are kept.
-  function applyMoveEntireSetup(targetLat, targetLng) {
-    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
-      setError(tt("moveAllNoCentre"));
-      return;
-    }
-    const treesSnapshot = fieldTrees.map((tree) => ({
-      key: fieldTreeKey(tree),
-      lat: Number(tree.latitude),
-      lng: Number(tree.longitude),
-    }));
-    updateDraft((current) => {
-      const treeNotes = { ...(current.treeNotes || {}) };
-      treesSnapshot.forEach(({ key, lat, lng }) => {
-        // Keep each tree's offset from the current centre — unless it is invalid or absurdly far
-        // (stale/corrupted preps have held trees thousands of km from the centre, e.g. parked in
-        // the Atlantic; shifting those by the same delta kept them invisible and made Move-all
-        // look like it "only moved the centre"). Anything beyond ~2 km falls back to the standard
-        // row layout so every tree ALWAYS lands next to the target.
-        let offsetLat = lat - centerLat;
-        let offsetLng = lng - centerLng;
-        if (!Number.isFinite(offsetLat) || !Number.isFinite(offsetLng) || Math.abs(offsetLat) > 0.02 || Math.abs(offsetLng) > 0.03) {
-          const standard = fieldStandardOffsetForKey(key);
-          offsetLat = standard.lat;
-          offsetLng = standard.lng;
-        }
-        treeNotes[key] = {
-          ...(treeNotes[key] || {}),
-          latitude: Number((targetLat + offsetLat).toFixed(8)),
-          longitude: Number((targetLng + offsetLng).toFixed(8)),
-        };
-      });
-      return {
-        ...current,
-        examCenter: {
-          ...(fieldPackage?.examCenter || {}),
-          ...(current.examCenter || {}),
-          latitude: Number(targetLat.toFixed(8)),
-          longitude: Number(targetLng.toFixed(8)),
-        },
-        treeNotes,
-      };
-    });
-    setMapCenterOverride({ lat: targetLat, lng: targetLng });
-    setStatus(tt("moveAllDone"));
-  }
-
-  // "Move all trees here" — always works. Prefer a fresh GPS fix; if GPS is denied/unavailable
-  // (common on tablets), fall back to the current map centre so the operator can pan the map to
-  // the real spot and still relocate the whole setup. Confirmation is an in-app modal (native
-  // window.confirm is silently suppressed in some tablet browsers, which made this look dead).
-  async function moveEntireSetupToGps() {
-    if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng)) {
-      setError(tt("moveAllNoCentre"));
-      return;
-    }
-    setError("");
-    setStatus(tt("moveAllLocating"));
-    let target;
-    try {
-      const pos = await requestGpsPosition();
-      setGpsPosition(pos);
-      target = { lat: Number(pos.lat), lng: Number(pos.lng), source: "gps" };
-    } catch {
-      target = { lat: Number(mapCenter.lat), lng: Number(mapCenter.lng), source: "map" };
-    }
-    if (!Number.isFinite(target.lat) || !Number.isFinite(target.lng)) {
-      setError(tt("moveAllNoGps"));
-      return;
-    }
-    setStatus("");
-    setMoveConfirm(target);
-  }
-
-  function confirmMoveEntireSetup() {
-    const target = moveConfirm;
-    setMoveConfirm(null);
-    if (target) applyMoveEntireSetup(Number(target.lat), Number(target.lng));
   }
 
   function updateSelectedManagementData(patch) {
@@ -9363,6 +9145,7 @@ function FieldTabletPage() {
     const interventions = Array.isArray(data.interventions) ? data.interventions : [];
     const label = overviewTreeLabel(tree, extraTreeToggles);
     const name = local.treeName || tree.name || label;
+    const note = local.candidateNote ?? tree.candidateNote ?? "";
     return `<section class="pdf-tree-detail">
       <h2>${escapeHtml(label)} · ${escapeHtml(name)}</h2>
       <p class="pdf-tree-coords">${escapeHtml(formatCoord(tree.latitude))}, ${escapeHtml(formatCoord(tree.longitude))}</p>
@@ -9372,6 +9155,7 @@ function FieldTabletPage() {
         <div><strong>${escapeHtml(tt("stemDiameterCm"))}</strong><span>${escapeHtml(String(data.stemDiameterCm ?? "") || "-")}</span></div>
         <div><strong>${escapeHtml(tt("crownSpreadM"))}</strong><span>${escapeHtml(String(data.crownSpreadM ?? "") || "-")}</span></div>
       </div>
+      ${note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("candidateNote"))}</strong><p>${escapeHtml(note)}</p></div>` : ""}
       ${data.note ? `<div class="pdf-tree-note"><strong>${escapeHtml(tt("managementNote"))}</strong><p>${escapeHtml(data.note)}</p></div>` : ""}
       <div class="pdf-tree-interventions">
         <strong>${escapeHtml(tt("interventions"))}</strong>
@@ -9403,20 +9187,6 @@ function FieldTabletPage() {
 
   return (
     <main className="field-tablet-shell">
-      {moveConfirm && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">{tt("moveAllHere")}</h3>
-            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-              {(moveConfirm.source === "gps" ? tt("moveAllConfirm") : tt("moveAllConfirmMap")).replace("{count}", String(fieldTrees.length))}
-            </div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={() => setMoveConfirm(null)} className="field-ghost-button">{tt("cancel")}</button>
-              <button type="button" onClick={confirmMoveEntireSetup} className="field-primary-button">{tt("moveAllHere")}</button>
-            </div>
-          </div>
-        </div>
-      )}
       <section className="field-tablet-workspace">
         {!fieldPackage ? (
           <section className="field-empty-package">
@@ -9440,8 +9210,11 @@ function FieldTabletPage() {
                       <button type="button" className={activeTabletLevel === "Both" ? "active" : ""} onClick={() => switchTabletLevel("Both")}>{tt("both")}</button>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("mapControls")}>
+                      <button type="button" className="field-icon-button" onClick={() => setMapCenterOverride(defaultMapCenter)} title={tt("find")} aria-label={tt("find")}><Search className="h-4 w-4" /></button>
+                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
+                      <button type="button" className="field-icon-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
+                      <button type="button" className={`field-icon-button ${gpsTracking ? "active" : ""}`} onClick={locateTablet} aria-pressed={gpsTracking} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
                       <button type="button" className={`field-icon-button ${manualCoordsOpen ? "active" : ""}`} onClick={() => setManualCoordsOpen((current) => !current)} title={tt("manualCoordsTitle")} aria-label={tt("manualCoordsTitle")}><Pencil className="h-4 w-4" /></button>
-                      <button type="button" className="field-move-all-button" onClick={moveEntireSetupToGps} title={tt("moveAllHere")}><Relocate className="h-3.5 w-3.5" />{tt("moveAllHere")}</button>
                       <select value={mapLayer} onChange={(event) => { mapLayerManualRef.current = true; setMapLayer(event.target.value); }} title={tt("mapControls")} className="rounded-xl border bg-white px-2 py-1.5 text-sm font-semibold text-slate-700">
                         <option value="cuzk">{fieldT("map.layer.cuzk")}</option>
                         <option value="esri">{fieldT("map.layer.esri")}</option>
@@ -9449,55 +9222,46 @@ function FieldTabletPage() {
                       </select>
                     </div>
                     <div className="field-toolbar-group" role="group" aria-label={tt("primaryActions")}>
-                      <button type="button" onClick={sendDataToCentre} disabled={syncing} className={`field-primary-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("sending") : tt("sendToCentre")}</button>
-                      <button type="button" onClick={openFieldMapsPdf} className="field-ghost-button"><FileSpreadsheet className="h-4 w-4" />{tt("pdf")}</button>
+                      <button type="button" onClick={downloadForOffline} className="field-primary-button"><CloudOff className="h-4 w-4" />{tt("downloadOffline")}</button>
+                      <button type="button" onClick={openFieldMapsPdf} disabled={!readyOffline} className="field-ghost-button"><FileSpreadsheet className="h-4 w-4" />{tt("pdf")}</button>
+                      <button type="button" onClick={syncBack} disabled={syncing || !readyOffline || !allRequiredChecked} title={!allRequiredChecked ? tt("syncDisabledUntilChecked") : (lastSyncOk ? "Last sync succeeded." : "")} className={`field-ghost-button ${lastSyncOk ? "field-sync-ok" : ""}`}><RefreshCw className="h-4 w-4" />{syncing ? tt("syncing") : tt("sync")}</button>
                     </div>
                     <div className="field-toolbar-group field-toolbar-lang" role="group" aria-label={tt("language")}>
                       <button type="button" className="field-icon-button" onClick={isFullscreen ? exitTabletFullscreen : requestTabletFullscreen} title={tt(isFullscreen ? "exitFullscreen" : "fullscreen")} aria-label={tt(isFullscreen ? "exitFullscreen" : "fullscreen")}>{isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}</button>
                       <button type="button" className={fieldTabletLocale === "en" ? "active" : ""} onClick={() => changeFieldTabletLocale("en")}>EN</button>
                       <button type="button" className={fieldTabletLocale === "cs" ? "active" : ""} onClick={() => changeFieldTabletLocale("cs")}>CS</button>
                     </div>
+                    <span className={`field-connectivity-pill ${online ? "online" : "warn"}`}>
+                      {online ? <Wifi className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
+                      {online ? tt("online") : tt("offline")}
+                    </span>
                   </div>
                 <div className="field-real-map" onPointerDown={handleMapPointerDown} onPointerMove={handleMapPointerMove} onPointerUp={handleMapPointerEnd} onPointerCancel={handleMapPointerEnd} onWheel={handleMapWheel}>
                   {error && <div className="field-map-message error"><AlertTriangle className="h-4 w-4" />{error}</div>}
-                  <div className="field-pan-layer" ref={panLayerRef}>
-                    <div className="field-tile-layer" aria-hidden="true">
-                      {mapTiles.map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="eager" decoding="async" draggable={false} onLoad={(event) => retainFieldTile(event.currentTarget.src)} alt="" />)}
-                    </div>
-                    {/* Markers live in their own layer that remounts (via key) whenever the map
-                        recenters/zooms — iOS Safari otherwise keeps the composited tile+marker
-                        layer's cached texture and leaves repositioned markers unpainted (trees
-                        "vanish" right after Move-all). The key does NOT change during a transform
-                        pan, so dragging stays smooth. */}
-                    <div className="field-marker-layer" ref={markerLayerRef} key={`${mapCenter.lat}:${mapCenter.lng}:${mapZoom}:${activeTabletLevel}:${visibleFieldTrees.length}`}>
-                    {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
-                      const p = mapPoint(centerLat, centerLng);
-                      return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle(center.labelDirection || "n", center.labelOffsetX, center.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
-                    })()}
-                    {gpsPosition && (() => {
-                      const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
-                      const radius = gpsAccuracyRadiusPx(gpsPosition);
-                      return <>
-                        {radius > 0 && <div className="field-map-gps-accuracy" style={{ ...p, width: `${radius * 2}px`, height: `${radius * 2}px` }} />}
-                        <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>
-                      </>;
-                    })()}
-                    {visibleFieldTrees.map((tree) => {
-                      const p = mapPoint(tree.latitude, tree.longitude);
-                      const key = fieldTreeKey(tree);
-                      const selected = fieldTreeKey(selectedTree || {}) === key;
-                      const visited = Boolean(draft?.treeNotes?.[key]?.visited);
-                      const direction = draft?.treeNotes?.[key]?.labelDirection || tree.labelDirection || "n";
-                      return <div key={key} className={`field-map-marker tree ${selected ? "selected" : ""} ${visited ? "visited" : ""}`} style={{ ...p, ...fieldMarkerVisualStyle(direction, tree.labelOffsetX, tree.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={(event) => startTreeMarkerDrag(key, event)} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>{fieldTreeLabel(tree.level, tree.code)}</button></div>;
-                    })}
-                    </div>
-                  </div>
-                  <div className="field-map-overlay-controls" onPointerDown={stopMapControlEvent} onPointerMove={stopMapControlEvent} onPointerUp={stopMapControlEvent} onPointerCancel={stopMapControlEvent} onWheel={stopMapControlEvent} onClick={stopMapControlEvent}>
-                    <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current + 1))} title={tt("zoomIn")} aria-label={tt("zoomIn")}><ZoomIn className="h-4 w-4" /></button>
-                    <button type="button" className="field-map-overlay-button" onClick={() => setMapZoom((current) => clampMapZoom(current - 1))} title={tt("zoomOut")} aria-label={tt("zoomOut")}><ZoomOut className="h-4 w-4" /></button>
-                    <button type="button" className={`field-map-overlay-button ${gpsTracking ? "active" : ""}`} onClick={locateTablet} aria-pressed={gpsTracking} title={tt("gps")} aria-label={tt("gps")}><MapPin className="h-4 w-4" /></button>
+                  <div className="field-tile-layer" aria-hidden="true">
+                    {mapTiles().map((tile) => <img key={tile.key} src={tile.src} style={tile.style} loading="eager" decoding="async" draggable={false} onLoad={(event) => retainFieldTile(event.currentTarget.src)} alt="" />)}
                   </div>
                   <div className="field-map-attribution">{mapLayer === "cuzk" ? "© ČÚZK ortofoto" : mapLayer === "esri" ? "© Esri, Maxar, Earthstar Geographics" : "© OpenStreetMap contributors"}</div>
+                  {Number.isFinite(centerLat) && Number.isFinite(centerLng) && (() => {
+                    const p = mapPoint(centerLat, centerLng);
+                    return <div className="field-map-marker center" style={{ ...p, ...fieldMarkerVisualStyle(center.labelDirection || "n", center.labelOffsetX, center.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={startCenterMarkerDrag} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>{tt("examCenter")}</button></div>;
+                  })()}
+                  {gpsPosition && (() => {
+                    const p = mapPoint(gpsPosition.lat, gpsPosition.lng);
+                    const gpsRadius = gpsAccuracyRadiusPx(gpsPosition);
+                    return <>
+                      {gpsRadius > 0 && <div className="field-map-gps-accuracy" style={{ ...p, width: `${gpsRadius * 2}px`, height: `${gpsRadius * 2}px` }} />}
+                      <div className="field-map-marker gps" style={{ ...p, ...fieldMarkerVisualStyle("n", 0, 0) }} onPointerDown={(event) => event.stopPropagation()}><span className="field-marker-dot" /><span className="field-marker-label">{tt("gps")}</span></div>
+                    </>;
+                  })()}
+                  {visibleFieldTrees.map((tree) => {
+                    const p = mapPoint(tree.latitude, tree.longitude);
+                    const key = fieldTreeKey(tree);
+                    const selected = fieldTreeKey(selectedTree || {}) === key;
+                    const visited = Boolean(draft?.treeNotes?.[key]?.visited);
+                    const direction = draft?.treeNotes?.[key]?.labelDirection || tree.labelDirection || "n";
+                    return <div key={key} className={`field-map-marker tree ${selected ? "selected" : ""} ${visited ? "visited" : ""}`} style={{ ...p, ...fieldMarkerVisualStyle(direction, tree.labelOffsetX, tree.labelOffsetY) }}><span className="field-marker-stem" /><span className="field-marker-dot" title="Drag the dot to move the exact position" onPointerDown={(event) => startTreeMarkerDrag(key, event)} /><button type="button" className="field-marker-label" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedTreeCode(key); if (activeTabletLevel !== "Both") setActiveTabletLevel(normalizeFieldLevel(tree.level)); }}>{fieldTreeLabel(tree.level, tree.code)}</button></div>;
+                  })}
                 </div>
               </div>
             </div>
@@ -9617,6 +9381,10 @@ function FieldTabletPage() {
                       <label><span>{tt("tree")}</span><select value={selectedTree.code} onChange={(event) => setSelectedTreeCode(fieldTreeKey(selectedTree.level, event.target.value))}>{FIELD_TREE_CODES.map((code) => <option key={code}>{code}</option>)}</select></label>
                     </div>
                   </FieldCollapsibleSection>
+                  <label className="field-detail-field">
+                    <span>{tt("candidateNote")}</span>
+                    <textarea value={selectedTree.candidateNote || ""} onChange={(event) => updateTreeDraft(fieldTreeKey(selectedTree), { candidateNote: event.target.value })} rows={3} />
+                  </label>
                   <div className="field-detail-field">
                     <span><Camera className="mr-1 inline h-3.5 w-3.5" />{tt("photosSection")}</span>
                     <label className="field-photo-add-button">
@@ -9677,13 +9445,14 @@ function FieldTabletPage() {
 
 // Opened by scanning the "Připojit tablet/telefon" QR in Centre's Scan podkladů panel
 // (?mode=scan-capture&examId=...). Deliberately dumb: it has no candidate/testBank/variant
-// context at all, so it can't decode or sort anything itself — it just captures page photos and
-// uploads them to this exam's server-side scan inbox; the Centre browser that showed the QR
-// polls that inbox and runs the full identify-and-detect pipeline there, where the exam data
-// actually lives (see processScanImage). Capture is a local queue, not one-photo-at-a-time: the
-// camera button re-arms the instant a photo is resized and queued (no network wait), so someone
-// can shoot through a whole stack of pages in a few seconds while a small number of uploads run
-// in the background - what used to be a serial photograph-wait-photograph-wait loop.
+// context at all, so it can't decode or sort anything itself — it just captures a page photo,
+// captures page photos and uploads them to this exam's server-side scan inbox; the Centre
+// browser that showed the QR polls that inbox and runs the full identify-and-detect pipeline
+// there, where the exam data actually lives (see processScanImage). Capture is a local queue,
+// not one-photo-at-a-time: the camera button re-arms the instant a photo is resized and queued
+// (no network wait), so someone can shoot through a whole stack of pages in a few seconds while
+// a small number of uploads run in the background - what used to be a serial
+// photograph-wait-photograph-wait loop.
 const SCAN_CAPTURE_UPLOAD_CONCURRENCY = 2;
 const SCAN_CAPTURE_MAX_DIMENSION = 2200;
 function ScanCaptureMobilePage() {
@@ -9830,13 +9599,6 @@ function ScanCaptureMobilePage() {
 // needs none of the Test/Outdoor/Orientation plumbing — only the report_draft/report_photo sync
 // events and media storage, called directly here with the same payload shapes ReportSection's
 // updateReport/addReportPhoto use, so both entry points write into the exact same report draft.
-// Shared field-capture UI for Consulting candidates - Tree A/B switch, photo/audio capture, the
-// always-visible marking-criteria panel, and the two-step submit. Takes an ALREADY-resolved
-// session as props rather than doing its own auth, so it can run two different ways: standalone
-// inside ConsultingFieldMobilePage (its own QR/session resolution, for the dedicated mobile link)
-// or embedded inside CandidateView (reusing the session already open in that tab, for the
-// "switch to mobile field mode" banner offered on a small screen) - same component, same sync
-// events, no separate token ever has to be minted for the in-app case.
 function ConsultingFieldCapture({ sessionToken, candidateId, candidateName, t, onClose }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [activeTree, setActiveTree] = useState(REPORT_TREES[0]);
@@ -10383,6 +10145,7 @@ function ConsultingFieldMobilePage() {
   return <ConsultingFieldCapture sessionToken={auth.sessionToken} candidateId={auth.candidateId} candidateName={auth.candidateName} t={t} />;
 }
 
+
 function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBank, setOutdoorItemsByLevel, setActiveAdminPackageMeta, setTestImportSummary, setCentreSetupDirty, language, t }) {
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
   const [activePackagePreview, setActivePackagePreview] = useState(null);
@@ -10468,7 +10231,7 @@ function CentreActivePackagePanel({ setVariants, setAvailableVariants, setTestBa
       }
       applyActivePackageData(data);
     } catch (error) {
-      setActivePackagePreviewError(vetReadErrorMessage(error, t));
+      setActivePackagePreviewError(error.message || t("centre.activePackage.loadFailed"));
       setActivePackagePreviewStatus("");
     }
   }
@@ -10888,7 +10651,6 @@ function OutdoorExaminerColumn({ column, items, editable, onChange, candidateId,
     </div>
   );
 }
-
 function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scanFlags, identifiedExaminer, onRequireIdentify, onMarkCorrected, onOutdoorCorrection, onWrittenCorrection, onReportCorrection, isCorrected, onClose, sessionToken, t }) {
   // Fetched once per candidate (not per examiner column - both columns share the same recording)
   // so OutdoorAiNotePanel's draft note can link straight to the candidate's own outdoor recording
@@ -11009,7 +10771,7 @@ function CentreReviewModal({ candidate, section, snapshot, scanAssignments, scan
               {!snapshot.items.length && <p className="text-sm text-slate-500">{t("centre.review.noQuestions")}</p>}
             </div>
           )}
-          {section.kind === "outdoor" && (() => {
+{section.kind === "outdoor" && (() => {
             // Only the candidate's own primary examiner may correct, and only their own column.
             const canEditPrimary = Boolean(identifiedExaminer && snapshot.primary.examinerId && identifiedExaminer.id === snapshot.primary.examinerId);
             return (
@@ -11471,7 +11233,6 @@ function ScanGradingModal({ candidate, pages, questions, initialScores, onSave, 
     </div>
   );
 }
-
 function CentreReviewCell({ status, sectionKey, onClick, locked = false, lockedTitle = "", t }) {
   const labelKey = sectionKey === "outdoor" && status === "open" ? "centre.review.status.openExaminer" : `centre.review.status.${status}`;
   return (
@@ -14966,7 +14727,7 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
         testQuestionsSnapshot: candidateQuestionSnapshot,
         responses: testResponses[loggedCandidate.id] ?? {},
         reportDraft: reportDrafts[loggedCandidate.id] ?? createReportDraft(),
-        outdoorPreparationDraft: { treeNotes: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).notesByTree, sketchesByTree: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).sketchesByTree, fieldPackageSnapshot: candidateFieldPackage },
+        outdoorPreparationDraft: { treeNotes: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).notesByTree, fieldPackageSnapshot: candidateFieldPackage },
         activeAdminPackageMeta,
         outdoorItemsByLevel,
         includePhotoData: false,
@@ -15025,7 +14786,7 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
       testQuestionsSnapshot: candidateQuestionSnapshot,
       responses: testResponses[loggedCandidate.id] ?? {},
       reportDraft: reportDrafts[loggedCandidate.id] ?? createReportDraft(),
-      outdoorPreparationDraft: { treeNotes: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).notesByTree, sketchesByTree: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).sketchesByTree, fieldPackageSnapshot: candidateFieldPackage },
+      outdoorPreparationDraft: { treeNotes: normalizeCandidateTreePreparationDraft(candidateTreeAPreparation).notesByTree, fieldPackageSnapshot: candidateFieldPackage },
       activeAdminPackageMeta,
       outdoorItemsByLevel,
       includePhotoData: true,
@@ -15098,7 +14859,7 @@ function CandidateView({ candidates, examiners, harmonogramSettings, loggedCandi
     );
   }
 
-  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}</div></div>{showMobileFieldBanner && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm text-emerald-950">{t("consultingField.bannerText")}</p><button type="button" onClick={dismissMobileFieldBanner} aria-label={t("common.close")} className="shrink-0 rounded-full p-1 text-lg leading-none text-emerald-700 hover:bg-emerald-100">×</button></div><div className="mt-3"><Button onClick={() => setShowFieldCaptureOverlay(true)} className="rounded-2xl">{t("consultingField.bannerSwitch")}</Button></div></div>}{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}</div>}</div></div></CardContent></Card>;
+  return <Card className="rounded-2xl shadow-sm lg:col-span-3"><CardContent className="p-5"><SectionTitle icon={QrCodeIcon} title={t("candidate.view.title")} subtitle={t("candidate.view.subtitle")} /><CandidateQuickHelp t={t} /><div className="grid gap-4 lg:grid-cols-3">{!loggedCandidate && <div className="rounded-2xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold">{t("candidate.qrAccess.title")}</h3><Button onClick={() => setScannerMode("Candidate")} variant="outline" className="rounded-2xl">{t("common.scanQr")}</Button></div><p className="mt-3 text-sm text-slate-600">{t("candidate.qrAccess.helper")}</p></div>}<div className={`rounded-2xl border bg-white p-4 ${loggedCandidate ? "lg:col-span-3" : "lg:col-span-2"}`}>{!loggedCandidate ? <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">{t("candidate.empty")}</div> : <div className="grid gap-4"><div className="rounded-2xl bg-slate-100 p-4"><div className="flex flex-wrap gap-2"><StatusPill tone="good">{t("common.loggedIn")}</StatusPill><StatusPill>{loggedCandidate.level}</StatusPill>{!isInternalVariantCode(selectedVariantCode) && <StatusPill>{selectedVariantCode}</StatusPill>}</div><div className="mt-2 font-semibold">{loggedCandidate.name}</div><div className="mt-3 flex flex-wrap gap-2"><Button onClick={logoutCandidate} variant="outline" className="rounded-2xl">{t("common.logout")}</Button>{activeSection === "report" && <Button onClick={returnToIdentity} variant="outline" className="rounded-2xl">{t("common.back")}</Button>}</div></div>{showMobileFieldBanner && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm text-emerald-950">{t("consultingField.bannerText")}</p><button type="button" onClick={dismissMobileFieldBanner} aria-label={t("common.close")} className="shrink-0 rounded-full p-1 text-lg leading-none text-emerald-700 hover:bg-emerald-100">×</button></div><div className="mt-3"><Button onClick={() => setShowFieldCaptureOverlay(true)} className="rounded-2xl">{t("consultingField.bannerSwitch")}</Button></div></div>}{activeSection === "landing" && <CandidateLanding candidate={loggedCandidate} candidates={candidates} examiners={examiners} harmonogramSettings={harmonogramSettings} confirmed={confirmed} confirmCandidate={confirmCandidate} logoutCandidate={logoutCandidate} setScannerMode={setScannerMode} setScannerReentry={setScannerReentry} sections={sections} status={sectionStatus} times={sectionTimes} tone={sectionTone} openSection={openSection} t={t} />}{activeSection === "test" && <TestSection candidate={loggedCandidate} selectedVariantCode={selectedVariantCode} testBank={testBank} responses={testResponses[loggedCandidate.id] ?? {}} updateTest={updateTest} submitTest={submitTest} setActiveSection={setActiveSection} introAccepted={Boolean(testIntroAccepted[testIntroKey])} acceptIntro={acceptTestIntro} openedAt={sectionTimes?.test?.openedAtIso || sectionTimes?.test?.openedAt || ""} t={t} />}{activeSection === "report" && loggedCandidate.level === "Consulting" && <ReportSection candidate={loggedCandidate} reportDrafts={reportDrafts} activeReportTree={activeReportTree} setActiveReportTree={setActiveReportTree} updateReport={updateReport} addReportPhoto={addReportPhoto} updateReportPhoto={updateReportPhoto} moveReportPhoto={moveReportPhoto} submitReport={submitReport} t={t} />}{canShowOfflinePackage && <div className="rounded-2xl border bg-slate-50 p-4"><h4 className="font-semibold">{t("candidate.offlineHandoff.title")}</h4><p className="mt-1 text-sm text-slate-600">{t("candidate.offlineHandoff.qrDisabled")}</p><div className="mt-3 flex flex-wrap gap-2"><Button onClick={saveOfflineCandidatePackageToLan} disabled={lanPackageSaving || lanPackageSaved} className="rounded-2xl">{lanPackageSaving ? t("candidate.offlineHandoff.saving") : lanPackageSaved ? t("candidate.offlineHandoff.saved") : t("candidate.offlineHandoff.saveToLan")}</Button><Button onClick={downloadOfflineCandidatePackage} variant="outline" className="rounded-2xl">{t("candidate.offlineHandoff.downloadBackup")}</Button></div>{lanPackageStatus && <div className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-700">{lanPackageStatus}</div>}<p className="mt-2 text-xs text-slate-500">{tf("candidate.offlineHandoff.packageContains", { count: candidateQuestionSnapshot.length })}</p></div>}</div>}</div></div></CardContent></Card>;
 }
 
 // title's default is never actually shown: every current caller passes showHeader={false},
@@ -15301,6 +15062,7 @@ function CandidateFieldResourcesSection({ candidate, fieldPackage, fieldStatus, 
         <option value="esri">{t("map.layer.esri")}</option>
         <option value="osm">{t("map.layer.osm")}</option>
       </select>
+      {fieldStatus && <span className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">{fieldStatus}</span>}
       {gpsStatus && <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">{gpsStatus}</span>}
     </div>
   );
@@ -15495,24 +15257,6 @@ function activePackageSummary(pkg) {
   };
 }
 
-// The per-level outdoor briefing (title/preface/candidateIntro) is dropped by the outdoor bank
-// normalization, so carry it here — this meta object is the one thing that survives all the way
-// from the Centre's Admin.vet import through centre-setup persistence and the session bootstrap
-// to the Examiner, with no extra plumbing.
-function outdoorIntroFromPackage(pkg) {
-  const outdoor = pkg?.outdoor && typeof pkg.outdoor === "object" ? pkg.outdoor : {};
-  const result = {};
-  for (const level of ["Practicing", "Consulting"]) {
-    const lvl = outdoor[level];
-    if (!lvl || typeof lvl !== "object") continue;
-    const title = String(lvl.title || "").trim();
-    const preface = String(lvl.preface || "").trim();
-    const candidateIntro = String(lvl.candidateIntro || "").trim();
-    if (title || preface || candidateIntro) result[level] = { title, preface, candidateIntro };
-  }
-  return result;
-}
-
 function activePackageRuntimeMeta(pkg) {
   if (!pkg?.packageId) return null;
 
@@ -15533,7 +15277,6 @@ function activePackageRuntimeMeta(pkg) {
       Practicing: levelMeta("Practicing"),
       Consulting: levelMeta("Consulting"),
     },
-    outdoorIntro: outdoorIntroFromPackage(pkg),
   };
 }
 
@@ -15719,11 +15462,6 @@ function WrittenTestIntroGate({ candidate, onAccept, onBack, t }) {
   );
 }
 
-// Time indicator for the candidate's timed sections (written test, report writing): an analog clock
-// on the current time, the moment the section opened, and the deadline. The deadline block changes
-// colour as the window closes — green, amber once `warnMinutes` remain, red for the last five —
-// and a short, deliberately quiet tone plays once when the red state is entered, so a candidate
-// with their head down still notices without the room being startled.
 // Keeps a timed candidate section in fullscreen and reports when it isn't. Leaving fullscreen is
 // already written to the audit trail by the session-integrity effect; this is the candidate-facing
 // half, so nobody drops out of the exam view without noticing. Browsers only grant fullscreen from a
@@ -15876,9 +15614,7 @@ function SectionTimerPanel({ openedAt, durationMinutes = 60, warnMinutes = 15, t
     </div>
   );
 }
-
 function TestSection({ candidate, selectedVariantCode, testBank, responses, updateTest, submitTest, setActiveSection, introAccepted, acceptIntro, openedAt, t }) {
-  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const { inFullscreen, requestFullscreen } = useExamFullscreen(introAccepted);
   const requestedVariantCode = String(selectedVariantCode || "");
   const effectiveVariantCode = variantCodeMatchesCandidateLevel(candidate, requestedVariantCode)
@@ -15889,6 +15625,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
 
   const questions = questionsForVariantStrict(testBank, effectiveVariantCode);
   const hasStrictQuestions = questions.length > 0;
+  const helper = t("test.variantAutosave").replace("{variant}", selectedVariantCode);
 
   if (!introAccepted) {
     return <WrittenTestIntroGate candidate={candidate} onAccept={acceptIntro} onBack={() => setActiveSection("landing")} t={t} />;
@@ -15900,6 +15637,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
       <div className="sticky top-0 z-20 -mx-4 -mt-4 flex items-start justify-between gap-3 rounded-t-2xl border-b bg-white/95 px-4 pb-3 pt-4 backdrop-blur">
         <div>
           <h3 className="font-semibold">{t("test.title")}</h3>
+          <p className="text-sm text-slate-600">{helper}</p>
         </div>
         <div className="flex items-start gap-3">
           <Button onClick={() => setActiveSection("landing")} variant="outline" className="rounded-2xl">
@@ -15919,7 +15657,7 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
           {questions.map((q, i) => (
             <div key={q.id} className="rounded-xl border p-3">
               <div className="text-xs text-slate-500">{t("test.question")} {i + 1} / {q.points} {t("common.points")}</div>
-              <div className="mt-1 whitespace-pre-wrap font-medium leading-relaxed">{cleanQuestionText(q.text)}</div>
+              <div className="mt-1 font-medium">{q.text}</div>
               {Array.isArray(q.options) && q.options.length > 0 ? (
                 <div className="mt-2 space-y-2">
                   {q.options.map((option, optionIndex) => {
@@ -15959,22 +15697,10 @@ function TestSection({ candidate, selectedVariantCode, testBank, responses, upda
         </div>
       )}
 
-      <Button onClick={() => setSubmitConfirmOpen(true)} disabled={questions.length === 0} className="mt-4 rounded-2xl">
+      <Button onClick={submitTest} disabled={questions.length === 0} className="mt-4 rounded-2xl">
         <Lock className="mr-2 h-4 w-4" /> {t("test.submit")}
       </Button>
-
-      {submitConfirmOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">{t("test.submit")}</h3>
-            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{t("test.submitConfirm")}</div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Button type="button" onClick={() => setSubmitConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
-              <Button type="button" onClick={() => { setSubmitConfirmOpen(false); submitTest(); }} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" />{t("test.submit")}</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p>
     </div>
   );
 }
@@ -16082,7 +15808,6 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const tree = draft[activeReportTree];
   const [photoStatus, setPhotoStatus] = useState("");
   const [reportStep, setReportStep] = useState("field");
-  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
   // Persisted: the 60-minute report window must survive a reload, otherwise a refresh would silently
@@ -16091,7 +15816,6 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
   const [reportWritingStartedAt, setReportWritingStartedAt] = useState(() => {
     try { return localStorage.getItem(reportStartKey) || ""; } catch { return ""; }
   });
-
   const { inFullscreen, requestFullscreen } = useExamFullscreen(reportStep === "write");
 
   function beginReportWriting() {
@@ -16179,36 +15903,42 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
     let loaded = 0;
     let failed = 0;
 
-    Promise.all(files.map(async (file) => {
-      try {
-        const dataUrl = await compressImageToDataUrl(file);
+    files.forEach((file) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
         addReportPhoto(activeReportTree, {
           name: file.name || `photo-${Date.now()}`,
-          type: "image/jpeg",
-          size: approxDataUrlBytes(dataUrl),
-          dataUrl,
+          type: file.type || "image/*",
+          size: file.size,
+          dataUrl: reader.result,
           description: "",
           useInReport: true,
           createdAt: new Date().toISOString(),
         });
+
         loaded += 1;
-      } catch {
+        if (loaded + failed === files.length) {
+          setPhotoStatus(loaded === 1 ? t("report.photoAdded") : t("report.photosAddedCount").replace("{count}", loaded));
+          input.value = "";
+        }
+      };
+
+      reader.onerror = () => {
         failed += 1;
-      }
-    })).then(() => {
-      setPhotoStatus(failed && !loaded ? t("report.photoError") : (loaded === 1 ? t("report.photoAdded") : t("report.photosAddedCount").replace("{count}", loaded)));
-      input.value = "";
+        if (loaded + failed === files.length) {
+          setPhotoStatus(failed ? t("report.photoError") : t("report.photoAdded"));
+          input.value = "";
+        }
+      };
+
+      reader.readAsDataURL(file);
     });
   }
 
   function handleSubmitReport() {
-    // In-app confirmation modal instead of window.confirm — native dialogs are silently
-    // suppressed in some tablet/in-app browsers, which made the submit button look dead.
-    setSubmitConfirmOpen(true);
-  }
-
-  function confirmSubmitReport() {
-    setSubmitConfirmOpen(false);
+    const confirmed = window.confirm(t("report.submitConfirmation"));
+    if (!confirmed) return;
     submitReport();
   }
 
@@ -16449,6 +16179,9 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         )}
 
         <div className="mt-4 flex flex-wrap gap-3">
+          <Button onClick={saveFieldDataLocally} variant="outline" className="rounded-2xl">
+            {t("report.saveFieldDataLocally")}
+          </Button>
           <Button onClick={() => setStartConfirmOpen(true)} className="rounded-2xl">
             {t("report.continueWriting")}
           </Button>
@@ -16638,19 +16371,6 @@ function ReportSection({ candidate, reportDrafts, activeReportTree, setActiveRep
         </div>
       )}
 
-      {submitConfirmOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="text-lg font-semibold">{t("report.submitAndClose")}</h3>
-            <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{t("report.submitConfirmation")}</div>
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Button type="button" onClick={() => setSubmitConfirmOpen(false)} variant="outline" className="rounded-2xl">{t("common.cancel")}</Button>
-              <Button type="button" onClick={confirmSubmitReport} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" />{t("report.submitAndClose")}</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Same content the print/PDF fallback builds (buildReportBodyHtml), shown in-window so the
           candidate can do a final read-through - including photos - without leaving the app or
           triggering a print dialog. */}
@@ -16767,6 +16487,20 @@ function ExaminerView({
           />
           <VetCertRulesReference t={t} />
           <ExaminerQuickHelp t={t} />
+          {loggedExaminer && (
+            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="font-semibold">{t("examiner.offlinePackage.title")}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{t("examiner.offlinePackage.helper")}</p>
+                </div>
+                <label className="rounded-2xl border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
+                  {t("examiner.offlinePackage.importButton")}
+                  <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" />
+                </label>
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 lg:grid-cols-3">
             {!loggedExaminer && (
               <div className="rounded-2xl border bg-white p-4">
@@ -18175,7 +17909,7 @@ function ExaminerWrittenReview({ selectedCandidate, variants, testBank, testResp
                   </div>
                 </div>
 
-                <div className="whitespace-pre-wrap font-medium leading-relaxed">{cleanQuestionText(question.text)}</div>
+                <div className="font-medium">{question.text}</div>
 
                 {isSectionAChoice && isChoice ? (
                   <div className="mt-3 rounded-xl border bg-slate-50 p-3 text-sm">
@@ -18829,9 +18563,74 @@ function ExaminerLanding({
   activeSessionToken,
   t,
 }) {
+  const [lanPackages, setLanPackages] = useState([]);
+  const [lanLoading, setLanLoading] = useState(false);
+  const [lanStatus, setLanStatus] = useState("");
 
   const tf = (key, values = {}) => Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
 
+  async function loadLanPackages() {
+    setLanLoading(true);
+    setLanStatus(t("examiner.lan.loading"));
+    try {
+      const response = await fetch("/api/local-exchange/packages", { cache: "no-store" });
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
+      }
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      const loaded = Array.isArray(data.packages) ? data.packages : Array.isArray(data) ? data : [];
+      setLanPackages(loaded);
+      setLanStatus(tf("examiner.lan.loaded", { count: loaded.length, time: new Date().toLocaleTimeString("cs-CZ") }));
+    } catch (error) {
+      console.error("LAN package list failed", error);
+      setLanStatus(tf("examiner.lan.loadFailed", { message: error.message || t("common.unknownError") }));
+    } finally {
+      setLanLoading(false);
+    }
+  }
+
+  async function importLanPackage(packageId) {
+    setLanLoading(true);
+    setLanStatus(tf("examiner.lan.importing", { packageId }));
+    try {
+      const response = await fetch(`/api/local-exchange/packages/${encodeURIComponent(packageId)}`);
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(tf("examiner.lan.notJsonError", { status: response.status, snippet: raw.slice(0, 160) }));
+      }
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      if (!data?.candidateId) throw new Error(tf("examiner.lan.missingCandidateIdError", { keys: Object.keys(data || {}).join(", ") }));
+      if (data?.kind !== "vetbara.offlineCandidatePackage.v1") throw new Error(tf("examiner.lan.invalidKindError", { kind: data?.kind || t("examiner.lan.missingKind") }));
+
+      const normalizedImportedPackage = normalizeOfflineCandidatePackageForImport(data, testBank);
+      const imported = importOfflineCandidatePackageData(normalizedImportedPackage);
+      if (imported === false) throw new Error(t("examiner.lan.importFunctionFailed"));
+
+      setImportedCandidatePackages?.((prev) => ({
+        ...prev,
+        [data.candidateId]: normalizedImportedPackage,
+      }));
+      setSelectedCandidateId?.(data.candidateId);
+      setLanStatus(tf("examiner.lan.imported", { name: data.candidateName || data.candidateId, level: data.level || "-" }));
+      setActivePage?.("writtenReview");
+    } catch (error) {
+      console.error("LAN package import failed", error);
+      setLanStatus(tf("examiner.lan.importFailed", { message: error.message || t("common.unknownError") }));
+    } finally {
+      setLanLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (confirmed) loadLanPackages();
+  }, [confirmed]);
 
   function candidateOutdoorClosed(candidateId) {
     return Boolean(examinerTimes?.[candidateId]?.outdoor?.closedAt);
@@ -18871,6 +18670,10 @@ function ExaminerLanding({
           <LogOut className="mr-2 h-4 w-4" />
           {t("examiner.identity.endExam")}
         </Button>
+        <label className={`mt-3 block rounded-2xl border bg-white px-4 py-2 text-center text-sm font-medium ${confirmed ? "hover:bg-slate-50" : "pointer-events-none opacity-50"}`}>
+          JSON
+          <input type="file" accept=".json,application/json" onChange={importOfflineCandidatePackageFile} className="hidden" disabled={!confirmed} />
+        </label>
       </div>
 
       <div className="lg:col-span-2">
@@ -18898,7 +18701,13 @@ function ExaminerLanding({
             <h3 className="font-semibold">{t("examiner.worklist.title")}</h3>
             <p className="mt-1 text-sm text-slate-600">{t("examiner.worklist.helper")}</p>
           </div>
+          {confirmed && (
+            <Button onClick={loadLanPackages} disabled={lanLoading} variant="outline" className="rounded-2xl">
+              {lanLoading ? t("examiner.lan.loadingShort") : t("examiner.lan.loadButton")}
+            </Button>
+          )}
         </div>
+        {lanStatus && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{lanStatus}</div>}
         {assignedCandidates.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <div className="font-semibold">{t("examiner.worklist.emptyTitle")}</div>
@@ -18908,6 +18717,9 @@ function ExaminerLanding({
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             {assignedCandidates.map((c) => {
               const isPrimary = assignments[c.id]?.primary === examiner.id;
+              const candidatePackages = lanPackages
+                .filter((pkg) => pkg.candidateId === c.id)
+                .sort((a, b) => String(b.storedAt || b.createdAt || "").localeCompare(String(a.storedAt || a.createdAt || "")));
               return (
                 <div key={c.id} className="rounded-2xl border bg-white p-4">
                   <div className="flex justify-between gap-3">
@@ -18934,6 +18746,23 @@ function ExaminerLanding({
                     </Button>
                     {c.level === "Consulting" && <Button onClick={() => openReportReview(c.id)} disabled={!confirmed} variant="outline" className="rounded-2xl">REPORT</Button>}
                   </div>
+                  {candidatePackages.length > 0 && (
+                    <div className="mt-4 rounded-2xl border bg-slate-50 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("examiner.lan.packages")}</div>
+                      <div className="mt-2 space-y-2">
+                        {candidatePackages.map((pkg) => (
+                          <div key={pkg.packageId} className="rounded-xl border bg-white p-3 text-sm">
+                            <div className="font-medium">{pkg.variantCode || t("examiner.lan.candidatePackage")}</div>
+                            <div className="mt-1 text-xs text-slate-500">{t("examiner.lan.stored")}: {pkg.storedAt || pkg.createdAt || "-"}</div>
+                            <div className="mt-1 text-xs text-slate-500">{t("fieldPrep.photos")}: {pkg.reportPhotoCount ?? 0}</div>
+                            <Button onClick={() => importLanPackage(pkg.packageId)} disabled={lanLoading || !confirmed} className="mt-2 rounded-2xl">
+                              {t("common.import")}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -19319,17 +19148,6 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }
   }, [activeOutdoorSection, effectiveActiveOutdoorSection, outdoorSections, setActiveOutdoorSection]);
 
-  // "Text to read at the start of the outdoor session" (package preface + candidate intro for
-  // this level). Shown in a dismissable panel that auto-opens when the examiner opens a
-  // candidate's outdoor form, and can be reopened from the header.
-  const outdoorIntro = activeAdminPackageMeta?.outdoorIntro?.[selectedCandidate.level] || null;
-  const outdoorIntroText = outdoorIntro ? [outdoorIntro.preface, outdoorIntro.candidateIntro].filter(Boolean).join("\n\n") : "";
-  const [introOpen, setIntroOpen] = useState(false);
-  useEffect(() => {
-    setIntroOpen(Boolean(outdoorIntroText));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCandidate.id, selectedCandidate.level, outdoorIntroText]);
-
   if (!activeAdminPackageMeta || isOutdoorFallback) {
     return (
       <div className="rounded-2xl border bg-white p-4 lg:col-span-3">
@@ -19349,24 +19167,6 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
   const passPercent = max > 0 ? Math.round((total / max) * 1000) / 10 : 0;
   const outdoorPassed = max > 0 && total / max >= OUTDOOR_PASS_RATE;
   const passLine = `${total} / ${max} · ${passPercent} % · ${outdoorPassed ? t("outdoor.summary.passed") : t("outdoor.summary.notPassed")}`;
-
-  const introModal = introOpen && outdoorIntroText ? (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-auto rounded-2xl bg-white p-5 shadow-xl">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("outdoor.intro.eyebrow")}</div>
-            <h3 className="text-lg font-semibold">{outdoorIntro?.title || t("outdoor.intro.title")}</h3>
-          </div>
-          <Button type="button" onClick={() => setIntroOpen(false)} variant="outline" className="rounded-2xl"><X className="mr-1 h-4 w-4" />{t("common.close")}</Button>
-        </div>
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{outdoorIntroText}</div>
-        <div className="mt-4 flex justify-end">
-          <Button type="button" onClick={() => setIntroOpen(false)} className="rounded-2xl">{t("outdoor.intro.acknowledge")}</Button>
-        </div>
-      </div>
-    </div>
-  ) : null;
 
   function printOutdoorPdf() {
     const scores = outdoor[selectedCandidate.id] ?? {};
@@ -19401,7 +19201,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div>{introModal}<OutdoorExaminerTimer openedAtIso={time?.openedAtIso} closedAt={time?.closedAt} t={t} /><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={getVoiceLevels} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="lg:sticky lg:top-4 lg:self-start">{outdoorIntroText && <div className="mb-3 flex flex-wrap gap-2"><Button onClick={() => setIntroOpen(true)} variant="outline" className="rounded-2xl">{t("outdoor.intro.reopen")}</Button></div>}<h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}{(() => { const scoreVal = outdoor[selectedCandidate.id]?.[item.id]; const hasScore = scoreVal !== undefined && scoreVal !== null && scoreVal !== ""; const editing = editingScoreIds.has(item.id); return hasScore && !editing ? <div onDoubleClick={() => unlockScoreEdit(item.id)} title={t("outdoor.editScoreHint")} className="mt-1 flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-50 p-2 text-base font-bold text-emerald-800">{formatHalfPointScore(scoreVal)}</div> : <select autoFocus={editing} value={scoreVal ?? ""} onChange={(e) => { updateOutdoor(item.id, e.target.value); if (e.target.value !== "") lockScoreEdit(item.id); }} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select>; })()}</label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" onDoubleClick={() => setDrawingItemId(item.id)} title={t("outdoor.editSketch")} className="h-12 w-20 cursor-pointer rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas lockMaximized templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}</div></div></div></div>;
+  return <div><OutdoorExaminerTimer openedAtIso={time?.openedAtIso} closedAt={time?.closedAt} t={t} /><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={getVoiceLevels} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="lg:sticky lg:top-4 lg:self-start"><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}{(() => { const scoreVal = outdoor[selectedCandidate.id]?.[item.id]; const hasScore = scoreVal !== undefined && scoreVal !== null && scoreVal !== ""; const editing = editingScoreIds.has(item.id); return hasScore && !editing ? <div onDoubleClick={() => unlockScoreEdit(item.id)} title={t("outdoor.editScoreHint")} className="mt-1 flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-50 p-2 text-base font-bold text-emerald-800">{formatHalfPointScore(scoreVal)}</div> : <select autoFocus={editing} value={scoreVal ?? ""} onChange={(e) => { updateOutdoor(item.id, e.target.value); if (e.target.value !== "") lockScoreEdit(item.id); }} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select>; })()}</label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" onDoubleClick={() => setDrawingItemId(item.id)} title={t("outdoor.editSketch")} className="h-12 w-20 cursor-pointer rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas lockMaximized templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}<StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div></div>;
 }
 
 export default function VetBaraApp() {

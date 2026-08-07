@@ -1,7 +1,7 @@
 import { envReady, sendJson, supabase } from "../_lib/backend.mjs";
 import {
-  auditAuth, createActivationToken, createAdminSession, findAdminProfile, hashPasswordWithSalt,
-  newSalt, requestIp, resolveActivationToken, sha256, validateAdminPassword,
+  adminEmailForUsername, auditAuth, createActivationToken, findAdminProfile, requestIp,
+  resolveActivationToken, upsertAdminAuthUser, validateAdminPassword,
 } from "../_lib/adminauth.mjs";
 
 // Admin activation (§4.2). Three actions on one route:
@@ -51,7 +51,10 @@ export default async function handler(request, response) {
     if (action === "inspect") {
       const resolved = await resolveActivationToken(body.token);
       if (!resolved) return sendJson(response, 401, { error: "This activation link is invalid or has expired" });
-      return sendJson(response, 200, { ok: true, username: resolved.profile.username, role: resolved.profile.role });
+      return sendJson(response, 200, {
+        ok: true, username: resolved.profile.username, role: resolved.profile.role,
+        email: resolved.profile.auth_email || adminEmailForUsername(resolved.profile.username),
+      });
     }
 
     // --- complete activation ---------------------------------------------------------------
@@ -67,12 +70,19 @@ export default async function handler(request, response) {
       const policyError = validateAdminPassword(password, profile.username);
       if (policyError) return sendJson(response, 400, { error: policyError });
 
-      const salt = newSalt();
+      // The password now lives in Supabase Auth, not in our own table - Supabase owns admin
+      // credentials and the MFA factors built on top of them.
+      const email = profile.auth_email || adminEmailForUsername(profile.username);
+      const authUserId = await upsertAdminAuthUser(email, password);
+
       await supabase(`user_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
         method: "PATCH", headers: { Prefer: "return=minimal" },
         body: JSON.stringify({
-          salt, password_hash: hashPasswordWithSalt(password, salt), password_set_at: new Date().toISOString(),
-          status: "active", activated_at: new Date().toISOString(),
+          auth_user_id: authUserId, auth_email: email, password_set_at: new Date().toISOString(),
+          // Deliberately NOT active yet, and no legacy hash kept: §8 says an account may not be
+          // activated on a password alone. It becomes active at /api/admin/auth/session, once a
+          // second factor has actually been verified.
+          salt: null, password_hash: null,
         }),
       });
       // Burn the link immediately - single use (§4.2).
@@ -81,15 +91,13 @@ export default async function handler(request, response) {
         body: JSON.stringify({ used_at: new Date().toISOString() }),
       });
 
-      const session = await createAdminSession(profile);
       await auditAuth({ ...audit, actorId: profile.username, action: "admin_password_created" });
-      await auditAuth({ ...audit, actorId: profile.username, action: "admin_activation_completed" });
 
       return sendJson(response, 200, {
-        ok: true, username: profile.username, role: profile.role,
-        sessionToken: session.sessionToken, expiresAt: session.expiresAt,
-        // §8: the account is usable now, but the spec's target state also needs a second factor.
-        secondFactorRequired: true,
+        ok: true, username: profile.username, role: profile.role, email,
+        // The client now signs in to Supabase with this password and enrols a second factor; only
+        // then is an admin session issued.
+        nextStep: "enroll-second-factor",
       });
     }
 
