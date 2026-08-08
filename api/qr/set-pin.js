@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { verifyPin, hashPin, newPinSalt, normalisePin, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR } from "../_lib/pinsecurity.mjs";
 
 // Called once, right after a Candidate/Examiner's FIRST device resolves their QR link (see
 // promptSetPin in api/qr/resolve.js) - that device is already trusted; this just records the PIN
@@ -58,11 +59,31 @@ export default async function handler(request, response) {
       const wanted = String(subjectId ?? "").trim();
       if (!wanted) return sendJson(response, 400, { error: "subjectId is required" });
       if (session.role !== "Centre" && session.role !== "Examiner") return sendJson(response, 403, { error: "Not allowed to verify a PIN" });
-      const rows = await supabase(`qr_tokens?role=eq.Examiner&subject_id=eq.${encodeURIComponent(wanted)}&revoked_at=is.null&select=pin_hash&order=created_at.desc&limit=1`);
-      const pinHash = rows[0]?.pin_hash ?? null;
+      const rows = await supabase(`qr_tokens?role=eq.Examiner&subject_id=eq.${encodeURIComponent(wanted)}&revoked_at=is.null&select=id,pin_hash,pin_salt,pin_algo,pin_failed_attempts,pin_locked_until,pin_lockout_count,pin_permanently_locked_at&order=created_at.desc&limit=1`);
+      const row = rows[0] || {};
+      const pinHash = row.pin_hash ?? null;
       if (!pinHash) return sendJson(response, 200, { ok: true, hasPin: false, valid: true });
       const digits = String(pin ?? "").trim();
-      return sendJson(response, 200, { ok: true, hasPin: true, valid: hash(digits) === pinHash });
+      // Same lockout rules as a new device (§13.1): this path verifies the very same PIN, so
+      // leaving it uncounted would be an open side door for guessing.
+      const lock = pinLockState(row);
+      if (lock.locked) return sendJson(response, 200, { ok: true, hasPin: true, valid: false, locked: true, permanent: lock.permanent, error: PIN_GENERIC_ERROR });
+      const check = verifyPin(digits, row);
+      if (!check.ok) {
+        await supabase(`qr_tokens?id=eq.${encodeURIComponent(row.id)}`, {
+          method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(nextStateAfterFailure(row)),
+        }).catch(() => {});
+        return sendJson(response, 200, { ok: true, hasPin: true, valid: false, error: PIN_GENERIC_ERROR });
+      }
+      const patch = { ...clearedPinState() };
+      if (check.needsUpgrade) {
+        const salt = newPinSalt();
+        patch.pin_salt = salt; patch.pin_hash = hashPin(digits, salt); patch.pin_algo = "scrypt";
+      }
+      await supabase(`qr_tokens?id=eq.${encodeURIComponent(row.id)}`, {
+        method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(patch),
+      }).catch(() => {});
+      return sendJson(response, 200, { ok: true, hasPin: true, valid: true });
     }
 
     if (session.role !== "Candidate" && session.role !== "Examiner") return sendJson(response, 403, { error: "PIN is only used for Candidate/Examiner QR links" });
@@ -78,7 +99,10 @@ export default async function handler(request, response) {
 
     await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ pin_hash: hash(digits) }),
+      body: JSON.stringify((() => {
+        const salt = newPinSalt();
+        return { pin_hash: hashPin(digits, salt), pin_salt: salt, pin_algo: "scrypt", pin_created_at: new Date().toISOString(), ...clearedPinState() };
+      })()),
     });
 
     return sendJson(response, 200, { ok: true, stored: true });

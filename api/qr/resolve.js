@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { verifyPin, hashPin, newPinSalt, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR } from "../_lib/pinsecurity.mjs";
 
 const DEMO_TOKENS = {
   "VETBARA-CENTRE-ARBOR-2026": { role: "Centre", subjectId: "CENTRE-ARBOR" },
@@ -117,8 +118,9 @@ async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin }) {
     return { outcome: "allow" };
   }
   try {
-    const tokenRows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}&select=pin_hash&limit=1`);
-    const pinHash = tokenRows[0]?.pin_hash ?? null;
+    const tokenRows = await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}&select=pin_hash,pin_salt,pin_algo,pin_failed_attempts,pin_locked_until,pin_lockout_count,pin_permanently_locked_at&limit=1`);
+    const tokenRow = tokenRows[0] || {};
+    const pinHash = tokenRow.pin_hash ?? null;
 
     const deviceRows = await supabase(`qr_token_devices?qr_token_id=eq.${encodeURIComponent(qrTokenId)}&device_id=eq.${encodeURIComponent(deviceId)}&select=id&limit=1`);
     if (deviceRows.length) {
@@ -129,9 +131,35 @@ async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin }) {
 
     // A device we haven't seen before for this token.
     if (pinHash) {
+      // §13.1 - a locked PIN is refused before any comparison happens, so a lockout cannot be
+      // burned through by continuing to guess.
+      const lock = pinLockState(tokenRow);
+      if (lock.locked) return { outcome: "pin-locked", permanent: lock.permanent, until: lock.until };
       if (!pin) return { outcome: "requires-pin" };
-      if (hash(String(pin)) !== pinHash) return { outcome: "wrong-pin" };
-      // Correct PIN - trust this device, fall through to the concurrency check below.
+
+      const check = verifyPin(String(pin), tokenRow);
+      if (!check.ok) {
+        // Escalating lockout: 5 wrong attempts -> 15 min -> 60 min -> manual unlock only.
+        const patch = nextStateAfterFailure(tokenRow);
+        await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}`, {
+          method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(patch),
+        }).catch(() => {});
+        return { outcome: "wrong-pin" };
+      }
+
+      // Correct: clear the counters, and transparently re-hash a legacy SHA-256 PIN with
+      // salt + scrypt so nobody has to reset a PIN that still works (§14).
+      const patch = { ...clearedPinState() };
+      if (check.needsUpgrade) {
+        const salt = newPinSalt();
+        patch.pin_salt = salt;
+        patch.pin_hash = hashPin(String(pin), salt);
+        patch.pin_algo = "scrypt";
+      }
+      await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}`, {
+        method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(patch),
+      }).catch(() => {});
+      // Trust this device, fall through to the concurrency check below.
     }
 
     const activeRows = await supabase(
@@ -214,8 +242,20 @@ export default async function handler(request, response) {
     let deviceGate = null;
     if (envReady() && access.qrTokenId) {
       deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin });
-      if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: "This device needs the PIN for this QR code", requiresPin: true });
-      if (deviceGate.outcome === "wrong-pin") return sendJson(response, 401, { error: "Incorrect PIN", requiresPin: true, wrongPin: true });
+      if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: PIN_GENERIC_ERROR, requiresPin: true });
+      // A lockout is a definitive server decision, not an error condition, so unlike the rest of
+      // this gate it must NOT fail open - without this the 6th attempt after a lockout sailed
+      // straight through, because an unrecognised outcome falls through to "allow" below.
+      if (deviceGate.outcome === "pin-locked") {
+        return sendJson(response, 429, {
+          error: PIN_GENERIC_ERROR, requiresPin: true, pinLocked: true,
+          permanent: Boolean(deviceGate.permanent),
+          retryAfter: deviceGate.until ? new Date(deviceGate.until).toISOString() : null,
+        });
+      }
+      // §13.4 - the same wording for every failure, so nothing reveals whether the token exists,
+      // whether a PIN was set, or how close the guess was.
+      if (deviceGate.outcome === "wrong-pin") return sendJson(response, 401, { error: PIN_GENERIC_ERROR, requiresPin: true, wrongPin: true });
       if (deviceGate.outcome === "device-limit") return sendJson(response, 429, { error: "This QR code is already open on 3 devices at once", deviceLimitReached: true });
     }
 
