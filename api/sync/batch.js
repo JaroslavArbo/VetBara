@@ -29,6 +29,7 @@ const SUPPORTED_EVENT_TYPES = new Set([
   "report_photo.moved",
   "candidate_preparation.saved",
   "outdoor_assessment.opened",
+  "outdoor_section.focus",
   "outdoor_assessment.submitted",
   "outdoor_score.saved",
   "examiner_score.saved",
@@ -52,6 +53,7 @@ const EVENT_TYPES_BY_ROLE = {
   ]),
   Examiner: new Set([
     "outdoor_assessment.opened",
+    "outdoor_section.focus",
     "outdoor_assessment.submitted",
     "outdoor_score.saved",
     "examiner_score.saved",
