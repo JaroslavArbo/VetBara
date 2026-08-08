@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { auditAuth, requestIp } from "../_lib/adminauth.mjs";
 import { verifyPin, hashPin, newPinSalt, normalisePin, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR } from "../_lib/pinsecurity.mjs";
 
 // Called once, right after a Candidate/Examiner's FIRST device resolves their QR link (see
@@ -96,6 +97,7 @@ export default async function handler(request, response) {
     // silently change it. Regenerating the QR link (a fresh token) is the intended way to reset it.
     const existing = await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}&select=pin_hash&limit=1`);
     if (existing[0]?.pin_hash) return sendJson(response, 200, { ok: true, stored: false, alreadySet: true });
+    auditAuth({ ip: requestIp(request), userAgent: request.headers?.["user-agent"], actorType: String(session.role || "").toLowerCase(), actorId: session.subject_id || session.subjectId, action: "pin_created" });
 
     await supabase(`qr_tokens?id=eq.${encodeURIComponent(session.qr_token_id)}`, {
       method: "PATCH",

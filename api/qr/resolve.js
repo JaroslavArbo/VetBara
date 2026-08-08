@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { auditAuth, requestIp } from "../_lib/adminauth.mjs";
 import { verifyPin, hashPin, newPinSalt, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR,
   newPinChallenge, pinChallengeHash, pinChallengeExpiry, isChallengeUsable } from "../_lib/pinsecurity.mjs";
 
@@ -114,7 +115,7 @@ async function markCentreLinkActivated(access) {
 // an unexpected error, a malformed row - resolves to { outcome: "allow" }. A bug in this brand-new
 // gate must never be able to lock a real candidate or examiner out of their own exam; it may only
 // ever fail OPEN, never closed.
-async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin, pinChallenge }) {
+async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin, pinChallenge, subjectId, audit }) {
   if (!qrTokenId || !deviceId || (role !== "Candidate" && role !== "Examiner")) {
     return { outcome: "allow" };
   }
@@ -163,6 +164,9 @@ async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin, pinChallen
         await supabase(`qr_tokens?id=eq.${encodeURIComponent(qrTokenId)}`, {
           method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(patch),
         }).catch(() => {});
+        auditAuth({ ...audit, actorType: role.toLowerCase(), actorId: subjectId, action: "pin_verification_failed", result: "failure" });
+        if (patch.pin_permanently_locked_at) auditAuth({ ...audit, actorType: role.toLowerCase(), actorId: subjectId, action: "pin_permanently_locked", result: "failure" });
+        else if (patch.pin_locked_until) auditAuth({ ...audit, actorType: role.toLowerCase(), actorId: subjectId, action: "pin_temporarily_locked", result: "failure" });
         return { outcome: "wrong-pin" };
       }
 
@@ -187,10 +191,12 @@ async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin, pinChallen
     const distinctActiveDevices = new Set((activeRows || []).map((row) => row.device_id).filter(Boolean));
     distinctActiveDevices.delete(deviceId);
     if (distinctActiveDevices.size >= MAX_CONCURRENT_DEVICES) {
+      auditAuth({ ...audit, actorType: role.toLowerCase(), actorId: subjectId, action: "qr_device_limit_reached", result: "failure" });
       return { outcome: "device-limit" };
     }
 
     await supabase("qr_token_devices", { method: "POST", body: JSON.stringify({ qr_token_id: qrTokenId, device_id: deviceId }) }).catch(() => {});
+    auditAuth({ ...audit, actorType: role.toLowerCase(), actorId: subjectId, action: "qr_device_registered" });
 
     return { outcome: "allow", isFirstDevice: !pinHash, isNewDevice: true, concurrentDeviceCount: distinctActiveDevices.size + 1 };
   } catch {
@@ -261,7 +267,8 @@ export default async function handler(request, response) {
 
     let deviceGate = null;
     if (envReady() && access.qrTokenId) {
-      deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin, pinChallenge });
+      deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin, pinChallenge,
+        subjectId: access.subjectId, audit: { ip: requestIp(request), userAgent: request.headers?.['user-agent'] } });
       if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: PIN_GENERIC_ERROR, requiresPin: true, pinChallenge: deviceGate.challenge });
       // A lockout is a definitive server decision, not an error condition, so unlike the rest of
       // this gate it must NOT fail open - without this the 6th attempt after a lockout sailed

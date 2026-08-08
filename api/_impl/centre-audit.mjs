@@ -63,6 +63,69 @@ const AUDIT_COLUMNS = "id,event_type,role,subject_id,candidate_id,payload,create
 // Scoping candidate/examiner reads by roster MEMBERSHIP rather than by matching exam_event_id
 // exactly avoids the same event-id drift that can otherwise make report data look emptied out
 // (see evaluation-candidate.mjs's candidateOwnExamEventIds).
+
+// Security events (logins, PIN lockouts, device registrations, approval decisions) live in
+// auth_audit_log, not in sync_events, because they are recorded server-side by the auth layer
+// rather than by an addAudit() call on somebody's device. The Centre needs them in the SAME trail:
+// "who got in, from what, and when it was refused" is exactly what an invigilator is asked about
+// afterwards. Only rows belonging to this Centre or to its own roster are read.
+const CENTRE_SECURITY_ACTIONS = [
+  "centre_login_success", "centre_login_failed",
+  "pin_created", "pin_verification_failed", "pin_temporarily_locked", "pin_permanently_locked", "pin_reset",
+  "qr_device_registered", "qr_device_limit_reached", "qr_device_revoked", "qr_all_devices_revoked",
+  "centre_approved", "centre_rejected", "centre_suspended", "centre_reactivated",
+];
+
+// Wording for the Centre's trail. Deliberately plain: this is read by an examination coordinator,
+// not by an engineer.
+const SECURITY_LABELS = {
+  centre_login_success: "Centre signed in",
+  centre_login_failed: "Centre sign-in refused",
+  pin_created: "PIN created",
+  pin_verification_failed: "Wrong PIN entered",
+  pin_temporarily_locked: "PIN temporarily locked",
+  pin_permanently_locked: "PIN locked - needs unlocking",
+  pin_reset: "PIN reset",
+  qr_device_registered: "New device registered",
+  qr_device_limit_reached: "Device limit reached",
+  qr_device_revoked: "Device revoked",
+  qr_all_devices_revoked: "All devices revoked",
+  centre_approved: "Centre approved",
+  centre_rejected: "Centre rejected",
+  centre_suspended: "Centre suspended",
+  centre_reactivated: "Centre reactivated",
+};
+
+// Anything that means "somebody was refused" is flagged so it surfaces under the Centre's
+// existing "alerts only" filter.
+const SECURITY_ALERTS = new Set([
+  "centre_login_failed", "pin_verification_failed", "pin_temporarily_locked",
+  "pin_permanently_locked", "qr_device_limit_reached", "centre_rejected", "centre_suspended",
+]);
+
+async function readSecurityEvents(centreId, subjectIds) {
+  const actions = CENTRE_SECURITY_ACTIONS.map((a) => encode(a)).join(",");
+  // NOTE the dotted syntax: inside PostgREST's or=(...) a condition is written
+  // field.operator.value, NOT the top-level field=operator.value. Getting that wrong makes the
+  // whole filter invalid, and the previous .catch() swallowed the error so the trail silently
+  // showed no security events at all.
+  const scopes = [`target_id.eq.${encode(centreId)}`, `actor_id.eq.${encode(centreId)}`];
+  if (subjectIds.length) scopes.push(`actor_id.in.(${idInQuery(subjectIds)})`, `target_id.in.(${idInQuery(subjectIds)})`);
+  const rows = await supabase(
+    `auth_audit_log?action=in.(${actions})&or=(${scopes.join(",")})&select=id,actor_type,actor_id,action,result,target_id,created_at&order=created_at.desc&limit=300`
+  ).catch((error) => { console.warn("Centre security-event read failed", error?.message || error); return []; });
+  return rows.map((row) => ({
+    id: `sec-${row.id}`,
+    action: SECURITY_LABELS[row.action] || row.action,
+    target: row.actor_id || row.target_id || "-",
+    detail: row.result === "failure" ? "refused" : "",
+    actorRole: row.actor_type === "centre" ? "Centre" : row.actor_type === "admin" ? "Admin" : row.actor_type,
+    alert: SECURITY_ALERTS.has(row.action) || row.result === "failure",
+    time: "",
+    createdAt: row.created_at,
+  }));
+}
+
 async function readAuditEvents(centreId, candidateIds, examinerIds) {
   const queries = [
     supabase(`sync_events?subject_id=eq.${encode(centreId)}&role=eq.Centre&event_type=eq.audit.logged&select=${AUDIT_COLUMNS}&order=created_at.desc&limit=500`),
@@ -102,7 +165,9 @@ export default async function handler(request, response) {
         ])
       : [[], []];
 
-    const rows = await readAuditEvents(centreId, candidates.map((c) => c.id), examiners.map((e) => e.id));
+    const candidateIds = candidates.map((c) => c.id);
+    const examinerIds = examiners.map((e) => e.id);
+    const rows = await readAuditEvents(centreId, candidateIds, examinerIds);
     const entries = rows.map((row) => ({
       // Prefer the client-generated id (payload.localId): the Centre that originated an entry
       // already shows it instantly via its own local addAudit() call, and matching ids is how
@@ -118,7 +183,12 @@ export default async function handler(request, response) {
       createdAt: row.created_at,
     }));
 
-    return sendJson(response, 200, { ok: true, entries });
+    // Security events are merged into the same list, newest first, so the Centre has ONE trail
+    // rather than two places to look.
+    const security = await readSecurityEvents(centreId, [...candidateIds, ...examinerIds]);
+    const merged = [...entries, ...security].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return sendJson(response, 200, { ok: true, entries: merged });
   } catch (error) {
     console.error("Centre audit read failed", error);
     return sendJson(response, 500, { error: "Centre audit read failed" });

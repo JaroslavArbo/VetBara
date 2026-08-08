@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { auditAuth, requestIp } from "../_lib/adminauth.mjs";
 
 // "Opakované generování" button in section D: Candidate/Examiner QR tokens are DERIVED
 // deterministically from role+subjectId+examEventId (see ensureQrAccess in api/centre/setup.js),
@@ -76,6 +77,7 @@ export default async function handler(request, response) {
     await supabase(`pin_challenges?qr_token_id=eq.${encode(qrTokenId)}&consumed_at=is.null`, {
       method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ consumed_at: new Date().toISOString() }),
     }).catch(() => {});
+    auditAuth({ ip: requestIp(request), userAgent: request.headers?.["user-agent"], actorType: "centre", actorId: session.subject_id || session.subjectId, action: "pin_reset", targetType: "qr_token", targetId: String(subjectId || "") });
     await supabase(`qr_token_devices?qr_token_id=eq.${encode(qrTokenId)}`, { method: "DELETE" }).catch(() => {});
 
     return sendJson(response, 200, { ok: true, reset: true });

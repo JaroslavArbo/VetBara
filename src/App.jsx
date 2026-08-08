@@ -6198,6 +6198,76 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
 // §7.5 - the admin's own security factors: what is registered, add another, remove one. Removing the
 // LAST verified factor is refused by the library layer, so an account can never be left reachable by
 // password alone (§8).
+
+// Administrator's read-only view of what Centres are doing (§17-adjacent, but operational rather
+// than forensic). The server decides what counts as a "main moment"; this only renders it.
+function AdminCentreActivityPanel({ t }) {
+  const admin = React.useContext(AdminSessionContext);
+  const [entries, setEntries] = useState([]);
+  const [onlyAlerts, setOnlyAlerts] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!admin?.sessionToken) return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin/activity", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: admin.sessionToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setEntries(data.entries || []);
+    } catch { /* keep whatever is on screen */ }
+    finally { setLoading(false); }
+  }, [admin?.sessionToken]);
+
+  // Paused while the tab is hidden, like every other poller - see usePollWhenVisible.
+  usePollWhenVisible(refresh, 30000, Boolean(admin?.sessionToken));
+
+  const shown = onlyAlerts ? entries.filter((entry) => entry.alert) : entries;
+  const alertCount = entries.filter((entry) => entry.alert).length;
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("admin.activity.title")}</h3>
+          <p className="mt-0.5 max-w-3xl text-sm text-slate-600">{t("admin.activity.helper")}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {alertCount > 0 && <StatusPill tone="warn">{t("admin.activity.alerts")}: {alertCount}</StatusPill>}
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <input type="checkbox" checked={onlyAlerts} onChange={(e) => setOnlyAlerts(e.target.checked)} />
+            {t("admin.activity.onlyAlerts")}
+          </label>
+          <Button onClick={refresh} disabled={loading} variant="outline" className="rounded-2xl px-3 py-1 text-xs">
+            {loading ? t("admin.activity.loading") : t("admin.activity.refresh")}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-3 max-h-[420px] space-y-1 overflow-auto pr-1">
+        {shown.map((entry) => (
+          <div key={entry.id} className={`flex flex-wrap items-baseline justify-between gap-2 rounded-lg border p-2 text-sm ${entry.alert ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}>
+            <div className="min-w-0">
+              <span className="font-medium">{entry.action}</span>
+              {entry.detail && <span className="ml-2 text-xs text-slate-500">{entry.detail}</span>}
+            </div>
+            <div className="flex shrink-0 items-baseline gap-2 text-xs text-slate-500">
+              {/* For a decision the actor and the subject are different people - "Centre approved"
+                  is useless without saying which Centre. */}
+              <span>{entry.who}{entry.centreId && entry.centreId !== entry.who ? ` → ${entry.centreId}` : ""}</span>
+              {entry.role && <span className="rounded-full bg-slate-100 px-2 py-0.5">{entry.role}</span>}
+              <span className="font-mono">{String(entry.createdAt).slice(0, 16).replace("T", " ")}</span>
+            </div>
+          </div>
+        ))}
+        {!shown.length && <div className="rounded-lg border border-dashed bg-slate-50 p-3 text-sm text-slate-500">{t("admin.activity.empty")}</div>}
+      </div>
+    </div>
+  );
+}
+
 function AdminSecurityFactorsPanel({ t }) {
   const [factors, setFactors] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -6500,6 +6570,18 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
           <AdminSecurityFactorsPanel t={t} />
           <AdminCentreAccountsPanel t={t} />
         </div>
+      </AdminDashboardSection>
+
+      <AdminDashboardSection
+        id="centre-activity"
+        icon={Layers}
+        t={t}
+        title={t("admin.dashboard.activity.title")}
+        description={t("admin.dashboard.activity.description")}
+        activeSection={activeAdminSection}
+        setActiveSection={setActiveAdminSection}
+      >
+        <AdminCentreActivityPanel t={t} />
       </AdminDashboardSection>
 
       <AdminDashboardSection
