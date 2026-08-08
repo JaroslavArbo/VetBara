@@ -8,6 +8,7 @@ import audit from "./_impl/centre-audit.mjs";
 import auditExport from "./_impl/centre-audit-export.mjs";
 import resetQrPin from "./_impl/centre-reset-qr-pin.mjs";
 import testPackageActive from "./_impl/centre-test-package-active.mjs";
+import accounts from "./_impl/centre-accounts.mjs";
 
 const routes = {
   setup,
@@ -15,6 +16,7 @@ const routes = {
   "audit-export": auditExport,
   "reset-qr-pin": resetQrPin,
   "test-package/active": testPackageActive,
+  accounts,
 };
 
 export default async function handler(request, response) {
