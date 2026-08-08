@@ -62,7 +62,20 @@ export default async function handler(request, response) {
     const qrTokenId = tokenRows[0]?.id;
     if (!qrTokenId) return sendJson(response, 200, { ok: true, reset: false, reason: "no-active-token" });
 
-    await supabase(`qr_tokens?id=eq.${encode(qrTokenId)}`, { method: "PATCH", body: JSON.stringify({ pin_hash: null }) });
+    // §19 - a reset must clear the PIN AND everything derived from it: the hash and its salt, the
+    // lockout counters, every registered device, and any live PIN challenge. The next time the QR
+    // link is opened it therefore behaves exactly like a first use.
+    await supabase(`qr_tokens?id=eq.${encode(qrTokenId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        pin_hash: null, pin_salt: null, pin_algo: null, pin_created_at: null,
+        pin_failed_attempts: 0, pin_locked_until: null, pin_lockout_count: 0, pin_permanently_locked_at: null,
+      }),
+    });
+    await supabase(`qr_token_devices?qr_token_id=eq.${encode(qrTokenId)}`, { method: "DELETE", headers: { Prefer: "return=minimal" } }).catch(() => {});
+    await supabase(`pin_challenges?qr_token_id=eq.${encode(qrTokenId)}&consumed_at=is.null`, {
+      method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ consumed_at: new Date().toISOString() }),
+    }).catch(() => {});
     await supabase(`qr_token_devices?qr_token_id=eq.${encode(qrTokenId)}`, { method: "DELETE" }).catch(() => {});
 
     return sendJson(response, 200, { ok: true, reset: true });
