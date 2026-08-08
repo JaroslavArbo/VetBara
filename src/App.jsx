@@ -6224,6 +6224,223 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
 
 // Administrator's read-only view of what Centres are doing (§17-adjacent, but operational rather
 // than forensic). The server decides what counts as a "main moment"; this only renders it.
+// Shared renderer for the outdoor time report. The Centre and the administrator see the SAME
+// numbers from the same endpoint - one is scoped to a roster, the other is not - so a conversation
+// about "you ran over" can never turn into an argument about whose figures are right.
+function OutdoorTimingTable({ rows, nameFor, t }) {
+  const [openId, setOpenId] = useState(null);
+  if (!rows.length) return <div className="rounded-lg border border-dashed bg-slate-50 p-3 text-sm text-slate-500">{t("pacing.empty")}</div>;
+  const fmtDelta = (minutes) => `${minutes > 0 ? "+" : ""}${minutes} min`;
+  const deltaTone = (minutes, planned) => {
+    if (!planned) return "text-slate-500";
+    const ratio = minutes / planned;
+    return ratio > 0.15 ? "text-amber-800" : ratio < -0.15 ? "text-sky-800" : "text-slate-600";
+  };
+  return (
+    <div className="space-y-1">
+      {rows.map((row) => (
+        <div key={row.candidateId} className="rounded-lg border bg-white">
+          <button type="button" onClick={() => setOpenId(openId === row.candidateId ? null : row.candidateId)}
+            className="flex w-full flex-wrap items-center justify-between gap-2 p-2 text-left text-sm">
+            <span className="min-w-0">
+              <span className="font-medium">{nameFor?.(row.candidateId) || row.candidateId}</span>
+              {!row.complete && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{t("pacing.inProgress")}</span>}
+              {row.budgetKnown === false && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{t("pacing.noBudget")}</span>}
+            </span>
+            <span className="flex shrink-0 items-center gap-3 text-xs">
+              <span className="text-slate-500">{t("pacing.planned")} {row.plannedMinutes} · {t("pacing.actual")} {row.actualMinutes}</span>
+              <span className={`font-bold ${deltaTone(row.deltaMinutes, row.plannedMinutes)}`}>{row.budgetKnown === false ? "—" : fmtDelta(row.deltaMinutes)}</span>
+              <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${openId === row.candidateId ? "rotate-180" : ""}`} />
+            </span>
+          </button>
+          {openId === row.candidateId && (
+            <div className="border-t px-2 py-1.5">
+              <table className="w-full text-xs">
+                <thead><tr className="text-left text-slate-500">
+                  <th className="py-1">{t("pacing.section")}</th>
+                  <th className="py-1 text-right">{t("pacing.planned")}</th>
+                  <th className="py-1 text-right">{t("pacing.actual")}</th>
+                  <th className="py-1 text-right">{t("pacing.delta")}</th>
+                </tr></thead>
+                <tbody>
+                  {row.sections.map((section) => (
+                    <tr key={section.section} className="border-t border-slate-100">
+                      <td className="py-1 pr-2">{section.section}</td>
+                      <td className="py-1 text-right tabular-nums text-slate-500">{section.plannedMinutes}</td>
+                      <td className="py-1 text-right tabular-nums">{section.actualMinutes}</td>
+                      <td className={`py-1 text-right tabular-nums font-semibold ${deltaTone(section.deltaMinutes, section.plannedMinutes)}`}>{fmtDelta(section.deltaMinutes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {row.idleMinutes > 0 && (
+                // Reported separately, never charged to a section: a break is not slow examining.
+                <div className="mt-1 text-[11px] text-slate-500">{t("pacing.idle")}: {row.idleMinutes} min</div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Centre (part B): its own candidates, plus the per-section minute overrides (part D).
+function CentreOutdoorTimingPanel({ sessionToken, candidates, outdoorItemsByLevel, settings, setSettings, setCentreSetupDirty, t }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editingOverrides, setEditingOverrides] = useState(false);
+  const overrides = settings?.outdoorSectionMinutes || {};
+
+  const load = useCallback(async () => {
+    if (!sessionToken) return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/centre/outdoor-pacing", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken, outdoorItemsByLevel, overrides }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setRows(data.candidates || []);
+    } catch { /* keep what is on screen */ }
+    finally { setLoading(false); }
+  }, [sessionToken, outdoorItemsByLevel, overrides]);
+
+  usePollWhenVisible(load, 60000, Boolean(sessionToken));
+
+  const nameFor = (id) => candidates?.find((candidate) => candidate.id === id)?.name || id;
+
+  function setOverride(level, section, value) {
+    setCentreSetupDirty?.(true);
+    const minutes = Number(value);
+    setSettings((prev) => {
+      const next = { ...(prev.outdoorSectionMinutes || {}) };
+      const forLevel = { ...(next[level] || {}) };
+      if (Number.isFinite(minutes) && minutes > 0) forLevel[section] = minutes; else delete forLevel[section];
+      next[level] = forLevel;
+      return { ...prev, outdoorSectionMinutes: next };
+    });
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("pacing.centre.title")}</h3>
+          <p className="mt-0.5 max-w-3xl text-sm text-slate-600">{t("pacing.centre.helper")}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setEditingOverrides((v) => !v)} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{t("pacing.overrides.toggle")}</Button>
+          <Button onClick={load} disabled={loading} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{loading ? t("admin.activity.loading") : t("admin.activity.refresh")}</Button>
+        </div>
+      </div>
+
+      {editingOverrides && (
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{t("pacing.overrides.title")}</div>
+          <p className="mt-1 text-xs text-slate-600">{t("pacing.overrides.helper")}</p>
+          <div className="mt-2 space-y-3">
+            {Object.entries(outdoorItemsByLevel || {}).map(([level, bank]) => (
+              <div key={level}>
+                <div className="text-xs font-semibold text-slate-700">{level}</div>
+                <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                  {Object.keys(bank || {}).map((section) => (
+                    <label key={section} className="flex items-center justify-between gap-2 rounded-lg border bg-white px-2 py-1 text-xs">
+                      <span className="min-w-0 truncate">{section}</span>
+                      <input type="number" min="0" step="5" placeholder={t("pacing.overrides.auto")}
+                        value={overrides?.[level]?.[section] ?? ""}
+                        onChange={(event) => setOverride(level, section, event.target.value)}
+                        className="w-20 shrink-0 rounded border p-1 text-right" />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3"><OutdoorTimingTable rows={rows} nameFor={nameFor} t={t} /></div>
+    </div>
+  );
+}
+
+// Admin (part C): the per-examiner roll-up - the question actually asked, "does this examiner keep
+// to the time frame?" - with the individual runs underneath.
+function AdminOutdoorTimingPanel({ t }) {
+  const admin = React.useContext(AdminSessionContext);
+  const [data, setData] = useState({ candidates: [], examiners: [] });
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!admin?.sessionToken) return;
+    setLoading(true);
+    try {
+      const response = await fetch("/api/admin/outdoor-pacing", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: admin.sessionToken }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (response.ok) setData({ candidates: body.candidates || [], examiners: body.examiners || [] });
+    } catch { /* keep what is on screen */ }
+    finally { setLoading(false); }
+  }, [admin?.sessionToken]);
+
+  usePollWhenVisible(load, 60000, Boolean(admin?.sessionToken));
+
+  const pct = (ratio) => `${ratio > 0 ? "+" : ""}${Math.round(ratio * 100)} %`;
+  const trendLabel = { improving: "↘", worsening: "↗", steady: "→", unknown: "·" };
+  const tone = (ratio) => (ratio > 0.15 ? "text-amber-800" : ratio < -0.15 ? "text-sky-800" : "text-slate-700");
+
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{t("pacing.admin.title")}</h3>
+          <p className="mt-0.5 max-w-3xl text-sm text-slate-600">{t("pacing.admin.helper")}</p>
+        </div>
+        <Button onClick={load} disabled={loading} variant="outline" className="rounded-2xl px-3 py-1 text-xs">{loading ? t("admin.activity.loading") : t("admin.activity.refresh")}</Button>
+      </div>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
+          <thead><tr className="border-b text-left text-slate-500">
+            <th className="py-2 pr-3">{t("pacing.examiner")}</th>
+            <th className="py-2 pr-3 text-right">{t("pacing.exams")}</th>
+            <th className="py-2 pr-3 text-right">{t("pacing.avgDeviation")}</th>
+            <th className="py-2 pr-3 text-right">{t("pacing.sectionsOver")}</th>
+            <th className="py-2 pr-3 text-center">{t("pacing.trend")}</th>
+          </tr></thead>
+          <tbody>
+            {data.examiners.map((row) => (
+              <tr key={row.examinerId} className="border-b align-middle">
+                <td className="py-2 pr-3 font-medium">{row.examinerId}</td>
+                <td className="py-2 pr-3 text-right tabular-nums">{row.exams}</td>
+                <td className={`py-2 pr-3 text-right font-bold tabular-nums ${tone(row.deviationRatio)}`}>{pct(row.deviationRatio)}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-slate-600">{row.sectionsOverBudget} / {row.sectionCount}</td>
+                <td className="py-2 pr-3 text-center" title={t(`pacing.trend.${row.trend}`)}>{trendLabel[row.trend] || "·"}</td>
+              </tr>
+            ))}
+            {!data.examiners.length && <tr><td colSpan={5} className="py-3 text-sm text-slate-500">{t("pacing.empty")}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {/* A systematic overrun by everyone usually means the budget is wrong, not the examiners. */}
+      {data.examiners.length > 1 && data.examiners.every((row) => row.deviationRatio > 0.15) && (
+        <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{t("pacing.admin.budgetHint")}</div>
+      )}
+
+      {data.candidates.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">{t("pacing.admin.runs")}</div>
+          <OutdoorTimingTable rows={data.candidates} t={t} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminCentreActivityPanel({ t }) {
   const admin = React.useContext(AdminSessionContext);
   const [entries, setEntries] = useState([]);
@@ -6604,7 +6821,10 @@ function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, 
         activeSection={activeAdminSection}
         setActiveSection={setActiveAdminSection}
       >
-        <AdminCentreActivityPanel t={t} />
+        <div className="space-y-4">
+          <AdminCentreActivityPanel t={t} />
+          <AdminOutdoorTimingPanel t={t} />
+        </div>
       </AdminDashboardSection>
 
       <AdminDashboardSection
@@ -14796,6 +15016,16 @@ function CentreView({ centreUnlocked, centreCode, setCentreCode, centreExamId, u
           activeSection={activeCentreSection}
           setActiveSection={setActiveCentreSection}
         >
+          <CentreOutdoorTimingPanel
+            sessionToken={activeSessionToken}
+            candidates={candidates}
+            outdoorItemsByLevel={outdoorItemsByLevel}
+            settings={harmonogramSettings}
+            setSettings={setHarmonogramSettings}
+            setCentreSetupDirty={setCentreSetupDirty}
+            t={t}
+          />
+
           <CentreReviewSection
             candidates={candidates}
             examiners={examiners}
@@ -19535,7 +19765,12 @@ function ClockIcon({ className }) { return <IconBase className={className}><circ
 // Small always-visible examiner timer (bottom-left of the outdoor form): shows when the exam was
 // opened and a countdown "minutka" that defaults to 30 min and can be adjusted in 5-min steps.
 // Turns amber under 5 min and rose once it runs out; collapsible so it never blocks the scoring.
-function OutdoorExaminerTimer({ openedAtIso, t }) {
+// `pacing` is the cumulative comparison from src/lib/outdoorPacing.js - how far the examiner is
+// behind the plan across the sections done so far, not just in the current one. The colour is the
+// entire signal on purpose: no dialog, no sound, nothing that interrupts an exam in progress. The
+// running-out-of-block red still wins over the pacing amber, because that one is about to be true
+// regardless of how the time was distributed.
+function OutdoorExaminerTimer({ openedAtIso, pacing, t }) {
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
@@ -19552,7 +19787,13 @@ function OutdoorExaminerTimer({ openedAtIso, t }) {
   const ss = String(totalSec % 60).padStart(2, "0");
   const over = nowMs >= endMs;
   const warn = !over && remainingMs <= 5 * 60000;
-  const tone = over ? "border-rose-400 bg-rose-50 text-rose-800" : warn ? "border-amber-400 bg-amber-50 text-amber-900" : "border-slate-300 bg-white text-slate-800";
+  const behind = !over && !warn && pacing?.known && pacing.level === "behind";
+  const slipping = !over && !warn && pacing?.known && pacing.level === "slipping";
+  const tone = over ? "border-rose-400 bg-rose-50 text-rose-800"
+    : warn ? "border-amber-400 bg-amber-50 text-amber-900"
+    : behind ? "border-amber-500 bg-amber-50 text-amber-900"
+    : slipping ? "border-amber-300 bg-white text-amber-800"
+    : "border-slate-300 bg-white text-slate-800";
   const openedLabel = new Date(openedMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return (
     <div className={`fixed bottom-4 left-4 z-40 select-none rounded-2xl border shadow-lg ${tone}`}>
@@ -19569,6 +19810,13 @@ function OutdoorExaminerTimer({ openedAtIso, t }) {
           <div className="mt-1 text-[11px] opacity-80">{t("outdoor.timer.opened")}: <strong>{openedLabel}</strong></div>
           <div className="mt-1 font-mono text-3xl font-bold tabular-nums leading-none">{over ? "00:00" : `${mm}:${ss}`}</div>
           {over && <div className="mt-0.5 text-xs font-bold">{t("outdoor.timer.over")}</div>}
+          {/* Only shown once the slip is real (>15%): a plain statement of plan vs actual, no
+              instruction and no judgement. The examiner decides what to do about it. */}
+          {behind && (
+            <div className="mt-1 text-[11px] font-semibold">
+              {t("outdoor.pacing.behind")}: {Math.round(pacing.expectedMinutes)} / {Math.round(pacing.actualMinutes)} min
+            </div>
+          )}
           <div className="mt-2 flex items-center gap-1">
             <button type="button" onClick={() => setDurationMinutes((m) => Math.max(5, m - 5))} className="h-7 w-7 rounded-lg border bg-white/70 text-sm font-bold hover:bg-white">−</button>
             <span className="min-w-16 text-center text-xs font-semibold">{durationMinutes} min</span>
@@ -19588,6 +19836,41 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
   const unlockScoreEdit = (id) => setEditingScoreIds((prev) => { const next = new Set(prev); next.add(id); return next; });
   const lockScoreEdit = (id) => setEditingScoreIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   const outdoorSections = effectiveOutdoorSectionsForLevel(outdoorItemsByLevel, selectedCandidate.level);
+
+  // Live pacing signal (part A). Computed from the section switches THIS device has made, so it
+  // needs no server round-trip and works offline in the field; the synced focus events are what the
+  // Centre and Admin reports are built from afterwards.
+  const [focusLog, setFocusLog] = useState([]);
+  useEffect(() => {
+    if (!effectiveActiveOutdoorSection) return;
+    setFocusLog((prev) => (prev.length && prev[prev.length - 1].sectionKey === effectiveActiveOutdoorSection
+      ? prev
+      : [...prev, { sectionKey: effectiveActiveOutdoorSection, at: new Date().toISOString() }]));
+  }, [effectiveActiveOutdoorSection]);
+  // Re-evaluated on a slow tick: the pacing verdict only has to be right to the minute, and a
+  // per-second recompute of the whole thing would be wasted work on a tablet.
+  const [pacingTick, setPacingTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setPacingTick((n) => n + 1), 20000);
+    return () => window.clearInterval(id);
+  }, []);
+  const outdoorPacing = useMemo(() => {
+    const bank = outdoorItemsByLevel?.[selectedCandidate.level];
+    if (!bank || !focusLog.length) return { known: false, level: "neutral" };
+    const budgets = sectionBudgets(bank, { blockMinutes: OUTDOOR_BLOCK_MINUTES_DEFAULT });
+    const dwell = accumulateDwell(focusLog, { endedAt: new Date().toISOString() });
+    const currentStartedAt = focusLog[focusLog.length - 1]?.at;
+    const elapsed = currentStartedAt ? (Date.now() - Date.parse(currentStartedAt)) / 60000 : 0;
+    const done = { ...dwell.perSection };
+    // The section in progress is counted through `currentSectionElapsedMinutes`, so remove the
+    // partial figure accumulateDwell already added for it to avoid counting it twice.
+    delete done[effectiveActiveOutdoorSection];
+    return pacingState({
+      budgets, order: outdoorSections, currentSection: effectiveActiveOutdoorSection,
+      perSection: done, currentSectionElapsedMinutes: elapsed,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusLog, outdoorItemsByLevel, selectedCandidate.level, effectiveActiveOutdoorSection, outdoorSections, pacingTick]);
   const effectiveActiveOutdoorSection = outdoorSections.includes(activeOutdoorSection)
     ? activeOutdoorSection
     : (outdoorSections[0] ?? "generic");
@@ -19691,7 +19974,7 @@ function OutdoorForm({ selectedCandidate, selectedMode, activeOutdoorSection, se
     }));
   }
 
-  return <div><OutdoorExaminerTimer openedAtIso={time?.openedAtIso} closedAt={time?.closedAt} t={t} /><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={getVoiceLevels} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="lg:sticky lg:top-4 lg:self-start"><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); noteOutdoorSectionFocus?.(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}{(() => { const scoreVal = outdoor[selectedCandidate.id]?.[item.id]; const hasScore = scoreVal !== undefined && scoreVal !== null && scoreVal !== ""; const editing = editingScoreIds.has(item.id); return hasScore && !editing ? <div onDoubleClick={() => unlockScoreEdit(item.id)} title={t("outdoor.editScoreHint")} className="mt-1 flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-50 p-2 text-base font-bold text-emerald-800">{formatHalfPointScore(scoreVal)}</div> : <select autoFocus={editing} value={scoreVal ?? ""} onChange={(e) => { updateOutdoor(item.id, e.target.value); if (e.target.value !== "") lockScoreEdit(item.id); }} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select>; })()}</label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" onDoubleClick={() => setDrawingItemId(item.id)} title={t("outdoor.editSketch")} className="h-12 w-20 cursor-pointer rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas lockMaximized templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}<StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div></div>;
+  return <div><OutdoorExaminerTimer openedAtIso={time?.openedAtIso} closedAt={time?.closedAt} pacing={outdoorPacing} t={t} /><OutdoorVoiceRecorderBar voiceRecording={voiceRecording} toggleVoiceRecording={toggleVoiceRecording} pauseVoiceRecording={pauseVoiceRecording} resumeVoiceRecording={resumeVoiceRecording} getVoiceLevels={getVoiceLevels} voiceRecordingSupported={voiceRecordingSupported} selectedMode={selectedMode} selectedCandidate={selectedCandidate} t={t} /><div className="grid gap-4 lg:grid-cols-3"><div className="lg:sticky lg:top-4 lg:self-start"><h3 className="font-semibold">{t("outdoor.candidateBinding")}</h3><div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">{t("outdoor.activeRecord")}: <strong>{selectedCandidate.name}</strong><br />{t("outdoor.level")}: <strong>{selectedCandidate.level}</strong><br />{t("outdoor.total")}: <strong>{total}</strong> / {max}<br />{t("common.opened")}: {time?.openedAt || "-"}<br />{t("common.closed")}: {time?.closedAt || "-"}<br /><span className="text-emerald-700">{t("outdoor.sourceActivePackage")}</span></div>{selectedCandidate.level === "Practicing" && <div className="mt-3 rounded-xl border bg-white p-3 text-sm"><div className="font-semibold">{t("outdoor.paperArchive.title")}</div><p className="mt-1 text-slate-600">{t("outdoor.paperArchive.helper")}</p><label className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-2xl border bg-white px-4 py-2 text-sm font-medium text-slate-950 hover:bg-slate-50">{t("outdoor.paperArchive.button")}<input type="file" accept="image/*" capture="environment" multiple onChange={(event) => { archivePlan(event.target.files); event.target.value = ""; }} className="hidden" /></label><div className="mt-2 text-xs text-slate-500">{t("outdoor.paperArchive.photos")}: {(practicingArchive[selectedCandidate.id] ?? []).length}</div>{(practicingArchive[selectedCandidate.id] ?? []).length > 0 && <div className="mt-2 grid grid-cols-4 gap-2">{(practicingArchive[selectedCandidate.id] ?? []).map((photo) => photo.dataUrl && <img key={photo.id} src={photo.dataUrl} alt={photo.name || photo.id} className="h-14 w-full rounded-lg border object-cover" />)}</div>}</div>}<div className="mt-4 space-y-2">{outdoorSections.map((section) => { const excluded = isOutdoorSectionExcluded(section); const inGroup = outdoorGroups.has(outdoorSectionBaseAndVariant(section).base); return <button key={section} onClick={() => { setActiveOutdoorSection(section); chooseOutdoorVariant(section); noteOutdoorSectionFocus?.(section); }} className={`w-full rounded-xl border p-3 text-left text-sm ${effectiveActiveOutdoorSection === section ? "border-slate-950 bg-slate-50" : "bg-white hover:bg-slate-50"} ${excluded ? "opacity-60" : ""}`}><div className="flex items-center justify-between gap-2"><div className="font-medium">{outdoorSectionTitle(section)}</div>{inGroup && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${excluded ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{excluded ? t("outdoor.variant.excluded") : t("outdoor.variant.counted")}</span>}</div><div className="text-xs text-slate-500">{excluded ? `— / —` : `${outdoorTotal(selectedCandidate.id, selectedCandidate.level, section)} / ${outdoorMax(selectedCandidate.level, section)}`} {t("outdoor.points")}{inGroup ? ` · ${t("outdoor.variant.pickHint")}` : ""}</div></button>; })}</div></div><div className="lg:col-span-2"><h3 className="font-semibold">{t("outdoor.detail.title")}</h3><p className="mt-1 text-sm text-slate-600">{t("outdoor.detail.helper")}</p><div className="mt-4 space-y-3">{activeItems.map((item) => <div key={item.id} className="rounded-2xl border bg-white p-4"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><div className="font-mono text-xs text-slate-500">{item.id}</div><div className="whitespace-pre-wrap font-medium">{item.text}</div>{item.notes && <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-600">{item.notes}</div>}</div><label className="text-sm font-medium md:w-36">{t("outdoor.pointsLabel")} / {item.max}{(() => { const scoreVal = outdoor[selectedCandidate.id]?.[item.id]; const hasScore = scoreVal !== undefined && scoreVal !== null && scoreVal !== ""; const editing = editingScoreIds.has(item.id); return hasScore && !editing ? <div onDoubleClick={() => unlockScoreEdit(item.id)} title={t("outdoor.editScoreHint")} className="mt-1 flex w-full cursor-pointer items-center justify-center rounded-xl border-2 border-emerald-500 bg-emerald-50 p-2 text-base font-bold text-emerald-800">{formatHalfPointScore(scoreVal)}</div> : <select autoFocus={editing} value={scoreVal ?? ""} onChange={(e) => { updateOutdoor(item.id, e.target.value); if (e.target.value !== "") lockScoreEdit(item.id); }} className="mt-1 w-full rounded-xl border bg-white p-2"><option value="">-</option>{outdoorHalfPointOptions(item.max).map((option) => <option key={option} value={option}>{formatHalfPointScore(option)}</option>)}</select>; })()}</label></div><textarea value={outdoorNotes[selectedCandidate.id]?.[item.id] ?? ""} onChange={(e) => updateOutdoorNote(item.id, e.target.value)} placeholder={t("outdoor.examinerNotes")} className="mt-3 min-h-16 w-full rounded-xl border bg-white p-3 text-sm" /><div className="mt-2 flex flex-wrap items-center gap-2">{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <img src={outdoorNoteDrawings[selectedCandidate.id][item.id]} alt="" onDoubleClick={() => setDrawingItemId(item.id)} title={t("outdoor.editSketch")} className="h-12 w-20 cursor-pointer rounded-lg border object-cover" />}<Button type="button" onClick={() => setDrawingItemId(item.id)} variant="outline" className="rounded-2xl"><Pencil className="mr-1 h-4 w-4" />{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] ? t("outdoor.editSketch") : t("outdoor.addSketch")}</Button>{outdoorNoteDrawings[selectedCandidate.id]?.[item.id] && <Button type="button" onClick={() => updateOutdoorNoteDrawing(item.id, "")} variant="outline" className="rounded-2xl">{t("outdoor.removeSketch")}</Button>}</div>{drawingItemId === item.id && <HandwritingPad onClose={() => setDrawingItemId(null)} onSave={(dataUrl) => { updateOutdoorNoteDrawing(item.id, dataUrl); setDrawingItemId(null); }} existingImage={outdoorNoteDrawings[selectedCandidate.id]?.[item.id] || null} tallCanvas lockMaximized templateText={item.notes || ""} title={t("outdoor.sketchTitle")} helperText={t("outdoor.sketchHelper")} t={t} Button={Button} CloseIcon={X} EraserIcon={Eraser} UndoIcon={Undo} />}</div>)}</div><div className="mt-6 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{t("outdoor.summary.title")}</h3><span className={`rounded-full px-3 py-1.5 text-sm font-bold ${outdoorPassed ? "bg-emerald-100 text-emerald-900" : "bg-rose-100 text-rose-900"}`}>{passLine}</span></div><p className="mt-1 text-sm text-slate-600">{t("outdoor.summary.helper")} · {t("outdoor.summary.passMark")}: 70 %</p><textarea value={examSummaryText} onChange={(e) => updateOutdoorExamSummary?.(e.target.value)} disabled={selectedMode !== "primary"} placeholder={t("outdoor.summary.placeholder")} className="mt-3 min-h-28 w-full rounded-xl border bg-white p-3 text-sm disabled:bg-slate-50 disabled:text-slate-500" />{selectedMode !== "primary" && <p className="mt-1 text-xs text-slate-500">{t("outdoor.summary.primaryOnly")}</p>}</div><div className="mt-4 flex flex-wrap gap-2"><Button onClick={() => setActivePage("landing")} variant="outline" className="rounded-2xl"><span aria-hidden="true">←</span> {t("examiner.backNoSave")}</Button><Button onClick={submitOutdoor} disabled={selectedMode === "unassigned"} className="rounded-2xl"><Lock className="mr-2 h-4 w-4" /> {t("outdoor.submit")}</Button><Button onClick={printOutdoorPdf} variant="outline" className="rounded-2xl">{t("examiner.pdfWithGrading")}</Button>{selectedMode !== "secondary" && <StatusPill tone={selectedMode === "primary" ? "good" : "default"}>{selectedMode === "primary" ? t("outdoor.mode.primary") : t("outdoor.mode.unassigned")}</StatusPill>}<StatusPill tone="warn">{t("outdoor.autosave")}</StatusPill></div><p className="mt-2 text-xs text-slate-500">{t("common.offlineRetry")}</p></div></div></div>;
 }
 
 export default function VetBaraApp() {

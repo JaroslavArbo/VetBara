@@ -9,6 +9,7 @@ import auditExport from "./_impl/centre-audit-export.mjs";
 import resetQrPin from "./_impl/centre-reset-qr-pin.mjs";
 import testPackageActive from "./_impl/centre-test-package-active.mjs";
 import accounts from "./_impl/centre-accounts.mjs";
+import outdoorPacing from "./_impl/outdoor-pacing.mjs";
 
 const routes = {
   setup,
@@ -17,6 +18,7 @@ const routes = {
   "reset-qr-pin": resetQrPin,
   "test-package/active": testPackageActive,
   accounts,
+  "outdoor-pacing": outdoorPacing,
 };
 
 export default async function handler(request, response) {

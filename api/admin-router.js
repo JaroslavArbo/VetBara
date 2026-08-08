@@ -5,6 +5,7 @@ import login from "./_impl/admin-auth-login.mjs";
 import changePassword from "./_impl/admin-auth-change-password.mjs";
 import activate from "./_impl/admin-auth-activate.mjs";
 import activity from "./_impl/admin-activity.mjs";
+import outdoorPacing from "./_impl/outdoor-pacing.mjs";
 import authSession from "./_impl/admin-auth-session.mjs";
 import draftsSave from "./_impl/admin-authoring-drafts-save.mjs";
 import draftsList from "./_impl/admin-authoring-drafts-list.mjs";
@@ -26,6 +27,7 @@ const routes = {
   "auth/change-password": changePassword,
   "auth/activate": activate,
   activity,
+  "outdoor-pacing": outdoorPacing,
   "auth/session": authSession,
   "authoring-drafts/save": draftsSave,
   "authoring-drafts/list": draftsList,
