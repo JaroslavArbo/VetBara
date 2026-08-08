@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
-import { verifyPin, hashPin, newPinSalt, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR } from "../_lib/pinsecurity.mjs";
+import { verifyPin, hashPin, newPinSalt, pinLockState, nextStateAfterFailure, clearedPinState, PIN_GENERIC_ERROR,
+  newPinChallenge, pinChallengeHash, pinChallengeExpiry, isChallengeUsable } from "../_lib/pinsecurity.mjs";
 
 const DEMO_TOKENS = {
   "VETBARA-CENTRE-ARBOR-2026": { role: "Centre", subjectId: "CENTRE-ARBOR" },
@@ -113,7 +114,7 @@ async function markCentreLinkActivated(access) {
 // an unexpected error, a malformed row - resolves to { outcome: "allow" }. A bug in this brand-new
 // gate must never be able to lock a real candidate or examiner out of their own exam; it may only
 // ever fail OPEN, never closed.
-async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin }) {
+async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin, pinChallenge }) {
   if (!qrTokenId || !deviceId || (role !== "Candidate" && role !== "Examiner")) {
     return { outcome: "allow" };
   }
@@ -135,7 +136,25 @@ async function evaluateDeviceAccess({ qrTokenId, role, deviceId, pin }) {
       // burned through by continuing to guess.
       const lock = pinLockState(tokenRow);
       if (lock.locked) return { outcome: "pin-locked", permanent: lock.permanent, until: lock.until };
-      if (!pin) return { outcome: "requires-pin" };
+      if (!pin) {
+        // Issue the one-time window the PIN must be submitted inside (§13.3).
+        const challenge = newPinChallenge();
+        await supabase("pin_challenges", {
+          method: "POST", headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ qr_token_id: qrTokenId, challenge_hash: pinChallengeHash(challenge), expires_at: pinChallengeExpiry() }),
+        }).catch(() => {});
+        return { outcome: "requires-pin", challenge };
+      }
+
+      // A PIN submitted without a live challenge for THIS token is refused outright, so the form
+      // cannot be replayed or aimed at somebody else's token.
+      const challengeRows = await supabase(`pin_challenges?challenge_hash=eq.${pinChallengeHash(String(pinChallenge || ""))}&select=*&limit=1`).catch(() => []);
+      const challengeRow = challengeRows[0];
+      if (!isChallengeUsable(challengeRow, qrTokenId)) return { outcome: "wrong-pin" };
+      await supabase(`pin_challenges?id=eq.${encodeURIComponent(challengeRow.id)}`, {
+        method: "PATCH", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ consumed_at: new Date().toISOString(), attempts: Number(challengeRow.attempts || 0) + 1 }),
+      }).catch(() => {});
 
       const check = verifyPin(String(pin), tokenRow);
       if (!check.ok) {
@@ -220,6 +239,7 @@ export default async function handler(request, response) {
     if (!token) return sendJson(response, 400, { error: "Missing QR token" });
     const deviceId = String(request.body?.deviceId || "").trim() || null;
     const pin = request.body?.pin != null ? String(request.body.pin).trim() : null;
+    const pinChallenge = request.body?.pinChallenge != null ? String(request.body.pinChallenge).trim() : null;
 
     let access = null;
 
@@ -241,8 +261,8 @@ export default async function handler(request, response) {
 
     let deviceGate = null;
     if (envReady() && access.qrTokenId) {
-      deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin });
-      if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: PIN_GENERIC_ERROR, requiresPin: true });
+      deviceGate = await evaluateDeviceAccess({ qrTokenId: access.qrTokenId, role: access.role, deviceId, pin, pinChallenge });
+      if (deviceGate.outcome === "requires-pin") return sendJson(response, 401, { error: PIN_GENERIC_ERROR, requiresPin: true, pinChallenge: deviceGate.challenge });
       // A lockout is a definitive server decision, not an error condition, so unlike the rest of
       // this gate it must NOT fail open - without this the 6th attempt after a lockout sailed
       // straight through, because an unrecognised outcome falls through to "allow" below.

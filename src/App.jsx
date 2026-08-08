@@ -16,7 +16,7 @@ import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder"
 import { OUTDOOR_AI_DRAFT_NOTES } from "./lib/outdoorAiDraftNotes";
 import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
 import { adminSignInWithPassword, adminAccessToken, adminSignOut, adminEnrollTotp, adminVerifyTotp, adminListFactors, supabaseAuthConfigured,
-  passkeysAvailable, adminRegisterPasskey, adminSignInWithPasskey } from "./lib/supabaseAuth";
+  passkeysAvailable, adminRegisterPasskey, adminSignInWithPasskey, adminRemoveFactor, supabaseAuth } from "./lib/supabaseAuth";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -1984,11 +1984,12 @@ function VetBaraPrototype() {
     const token = parsed.token || parsed.raw || window.location.href;
     const deviceId = getOrCreateDeviceId();
     let pin;
+    let pinChallenge;
     // Bounded retry loop: a wrong PIN re-prompts (with wrongPin:true) rather than failing outright,
     // up to 5 tries, so a typo doesn't force starting the whole scan over.
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
-        const resolved = await resolveQrToken(token, { deviceId, pin });
+        const resolved = await resolveQrToken(token, { deviceId, pin, pinChallenge });
         const session = await bootstrapSession(resolved.sessionToken);
         // The PIN is created at "identity confirmed", not here: the candidate/examiner has only just
         // scanned and may not even be the right person yet. Remember that this session still owes
@@ -1997,6 +1998,9 @@ function VetBaraPrototype() {
         return { ...resolved, ...session, sessionToken: resolved.sessionToken };
       } catch (error) {
         if (error?.body?.requiresPin) {
+          // §13.3 - the server hands out a one-time, 5-minute window; the PIN is only accepted
+          // when it comes back with that challenge.
+          pinChallenge = error.body.pinChallenge || pinChallenge;
           pin = await requestQrPin({ wrongPin: Boolean(error?.body?.wrongPin) });
           if (pin === null || pin === undefined) return null;
           continue;
@@ -5631,6 +5635,10 @@ export function AdminLoginGate({ t, addAudit, children }) {
     catch (err) { setChangeMsg(err.message || t("adminAuth.changeFailed")); }
   }
 
+  // A Centre invitation link is not an admin flow at all - it must render before the admin gate.
+  const centreInviteToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("centreInvite") : null;
+  if (centreInviteToken) return <CentreInviteScreen token={centreInviteToken} t={t} />;
+
   // Opening a one-time activation link takes precedence over the login form.
   const activationToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("adminActivate") : null;
   if (activationToken && !auth.isAuthed && !secondFactor) {
@@ -6184,11 +6192,316 @@ export function AdminTranslationPanel({ uiLanguage, t }) {
   );
 }
 
+// Centre account administration (§10): issue an invitation, then review what comes back. The whole
+// flow is server-side in api/_impl/centre-accounts.mjs; this is the operator's view of it.
+
+// §7.5 - the admin's own security factors: what is registered, add another, remove one. Removing the
+// LAST verified factor is refused by the library layer, so an account can never be left reachable by
+// password alone (§8).
+function AdminSecurityFactorsPanel({ t }) {
+  const [factors, setFactors] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const supabase = supabaseAuth();
+      if (!supabase) return;
+      const { data } = await supabase.auth.mfa.listFactors();
+      setFactors(data?.all ?? []);
+    } catch { /* leave the list as it is */ }
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  async function addPasskey() {
+    setBusy(true); setNote(null);
+    try { await adminRegisterPasskey("VetBara admin"); setNote({ ok: true, text: t("adminAuth.factors.added") }); await refresh(); }
+    catch (error) { setNote({ ok: false, text: error?.message || t("adminAuth.passkey.registerFailed") }); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(factor) {
+    if (!window.confirm(t("adminAuth.factors.removeConfirm"))) return;
+    setBusy(true); setNote(null);
+    try { await adminRemoveFactor(factor.id); setNote({ ok: true, text: t("adminAuth.factors.removed") }); await refresh(); }
+    catch (error) { setNote({ ok: false, text: error?.message || t("adminAuth.factors.removeFailed") }); }
+    finally { setBusy(false); }
+  }
+
+  const verified = factors.filter((factor) => factor.status === "verified");
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <h3 className="font-semibold">{t("adminAuth.factors.title")}</h3>
+      <p className="mt-0.5 text-sm text-slate-600">{t("adminAuth.factors.helper")}</p>
+      <div className="mt-3 space-y-1">
+        {verified.map((factor) => (
+          <div key={factor.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-slate-50 p-2 text-sm">
+            <div className="min-w-0">
+              <div className="font-medium">{factor.friendly_name || factor.factor_type}</div>
+              <div className="text-xs text-slate-500">
+                {factor.factor_type === "webauthn" ? t("adminAuth.factors.passkey") : t("adminAuth.factors.totp")}
+                {factor.created_at ? ` · ${String(factor.created_at).slice(0, 10)}` : ""}
+              </div>
+            </div>
+            <Button onClick={() => remove(factor)} disabled={busy || verified.length <= 1} variant="outline" className="rounded-xl px-3 py-1 text-xs">
+              {t("adminAuth.factors.remove")}
+            </Button>
+          </div>
+        ))}
+        {!verified.length && <div className="rounded-lg border border-dashed bg-slate-50 p-3 text-sm text-slate-500">{t("adminAuth.factors.none")}</div>}
+      </div>
+      {verified.length === 1 && <p className="mt-2 text-xs text-amber-800">{t("adminAuth.factors.lastOne")}</p>}
+      {passkeysAvailable() && (
+        <Button onClick={addPasskey} disabled={busy} variant="outline" className="mt-3 rounded-2xl">
+          {busy ? t("adminAuth.passkey.registering") : t("adminAuth.factors.addPasskey")}
+        </Button>
+      )}
+      {note && <div className={`mt-2 text-sm font-medium ${note.ok ? "text-emerald-700" : "text-rose-700"}`}>{note.text}</div>}
+    </div>
+  );
+}
+
+function AdminCentreAccountsPanel({ t }) {
+  const admin = React.useContext(AdminSessionContext);
+  const [form, setForm] = useState({ centreId: "", centreName: "", invitedEmail: "", country: "" });
+  const [invites, setInvites] = useState([]);
+  const [centres, setCentres] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);   // { ok, text, link? }
+
+  const call = useCallback(async (body) => {
+    const response = await fetch("/api/centre/accounts", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionToken: admin?.sessionToken, ...body }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || t("admin.centres.failed"));
+    return data;
+  }, [admin?.sessionToken, t]);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [a, b] = await Promise.all([call({ action: "invite-list" }), call({ action: "list" })]);
+      setInvites(a.invites || []);
+      setCentres(b.centres || []);
+    } catch { /* the panel simply stays empty */ }
+  }, [call]);
+
+  useEffect(() => { if (admin?.sessionToken) refresh(); }, [admin?.sessionToken, refresh]);
+
+  async function createInvite(event) {
+    event.preventDefault();
+    setBusy(true); setMessage(null);
+    try {
+      const data = await call({ action: "invite-create", ...form });
+      // The invitation link is shown ONCE - only its hash is stored, so it cannot be retrieved later.
+      const link = `${window.location.origin}/?centreInvite=${data.token}`;
+      setMessage({ ok: true, text: t("admin.centres.inviteCreated"), link });
+      setForm({ centreId: "", centreName: "", invitedEmail: "", country: "" });
+      refresh();
+    } catch (error) {
+      setMessage({ ok: false, text: error.message });
+    } finally { setBusy(false); }
+  }
+
+  async function decide(username, decision) {
+    const reason = decision === "reject" || decision === "suspend"
+      ? window.prompt(t("admin.centres.reasonPrompt")) : "";
+    if (reason === null) return;
+    setBusy(true); setMessage(null);
+    try {
+      await call({ action: "decide", username, decision, reason });
+      setMessage({ ok: true, text: t("admin.centres.decisionSaved") });
+      refresh();
+    } catch (error) {
+      setMessage({ ok: false, text: error.message });
+    } finally { setBusy(false); }
+  }
+
+  const statusTone = { active: "good", pending_approval: "warn", suspended: "warn", disabled: "bad" };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border bg-white p-4">
+        <h3 className="font-semibold">{t("admin.centres.inviteTitle")}</h3>
+        <p className="mt-0.5 text-sm text-slate-600">{t("admin.centres.inviteHelper")}</p>
+        <form onSubmit={createInvite} className="mt-3 grid gap-2 sm:grid-cols-2">
+          {[["centreId", "admin.centres.centreId"], ["centreName", "admin.centres.centreName"],
+            ["invitedEmail", "admin.centres.email"], ["country", "admin.centres.country"]].map(([key, label]) => (
+            <label key={key} className="text-xs font-medium text-slate-500">
+              {t(label)}
+              <input value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+            </label>
+          ))}
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={busy} className="rounded-2xl">{t("admin.centres.createInvite")}</Button>
+          </div>
+        </form>
+        {message && (
+          <div className={`mt-3 rounded-xl border p-3 text-sm ${message.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`}>
+            <div className="font-medium">{message.text}</div>
+            {message.link && (
+              <>
+                <div className="mt-2 break-all font-mono text-xs">{message.link}</div>
+                <div className="mt-2 flex gap-2">
+                  <Button onClick={() => navigator.clipboard?.writeText(message.link)} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("qr.copy")}</Button>
+                </div>
+                <div className="mt-2 text-xs">{t("admin.centres.inviteOnce")}</div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border bg-white p-4">
+        <h3 className="font-semibold">{t("admin.centres.pendingTitle")}</h3>
+        <p className="mt-0.5 text-sm text-slate-600">{t("admin.centres.pendingHelper")}</p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead><tr className="border-b text-left text-slate-500">
+              <th className="py-2 pr-3">{t("admin.centres.centreName")}</th>
+              <th className="py-2 pr-3">{t("admin.centres.email")}</th>
+              <th className="py-2 pr-3">{t("admin.centres.status")}</th>
+              <th className="py-2 pr-3" />
+            </tr></thead>
+            <tbody>
+              {centres.map((centre) => (
+                <tr key={centre.username} className="border-b align-middle">
+                  <td className="py-2 pr-3"><div className="font-medium">{centre.centre_id}</div><div className="text-xs text-slate-500">{centre.username}</div></td>
+                  <td className="py-2 pr-3 text-xs">{centre.auth_email}</td>
+                  <td className="py-2 pr-3"><StatusPill tone={statusTone[centre.status] || "warn"}>{centre.status}</StatusPill></td>
+                  <td className="py-2 pr-3">
+                    <div className="flex flex-wrap gap-1">
+                      {centre.status === "pending_approval" && <>
+                        <Button onClick={() => decide(centre.username, "approve")} disabled={busy} className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.approve")}</Button>
+                        <Button onClick={() => decide(centre.username, "reject")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.reject")}</Button>
+                      </>}
+                      {centre.status === "active" && <Button onClick={() => decide(centre.username, "suspend")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.suspend")}</Button>}
+                      {(centre.status === "suspended" || centre.status === "disabled") && <Button onClick={() => decide(centre.username, "reactivate")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.reactivate")}</Button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!centres.length && <tr><td colSpan={4} className="py-3 text-sm text-slate-500">{t("admin.centres.none")}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {invites.length > 0 && (
+        <div className="rounded-2xl border bg-white p-4">
+          <h3 className="font-semibold">{t("admin.centres.invitesTitle")}</h3>
+          <div className="mt-2 space-y-1 text-xs">
+            {invites.slice(0, 12).map((invite) => (
+              <div key={invite.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-slate-50 px-2 py-1">
+                <span className="font-medium">{invite.centre_id}</span>
+                <span className="text-slate-500">{invite.invited_email}</span>
+                <span className={invite.accepted_at ? "text-emerald-700" : invite.revoked_at ? "text-slate-400" : "text-amber-700"}>
+                  {invite.accepted_at ? t("admin.centres.inviteAccepted") : invite.revoked_at ? t("admin.centres.inviteRevoked") : `${t("admin.centres.inviteOpen")} · ${String(invite.expires_at).slice(0, 10)}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The Centre's own side of §10.2, reached from the invitation link (?centreInvite=<token>).
+function CentreInviteScreen({ token, t }) {
+  const [state, setState] = useState({ status: "checking", invite: null, error: "" });
+  const [form, setForm] = useState({ username: "", password: "", confirm: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/centre/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "invite-inspect", token }) })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) setState({ status: "invalid", invite: null, error: data.error || t("centreInvite.invalid") });
+        else { setState({ status: "ready", invite: data, error: "" }); setForm((f) => ({ ...f, username: data.centreId || "" })); }
+      })
+      .catch(() => { if (!cancelled) setState({ status: "invalid", invite: null, error: t("centreInvite.invalid") }); });
+    return () => { cancelled = true; };
+  }, [token, t]);
+
+  async function submit(event) {
+    event.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/centre/accounts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "activate", token, username: form.username, password: form.password, passwordConfirm: form.confirm }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) { setError(data.error || t("centreInvite.failed")); return; }
+      setDone(true);
+    } catch (err) {
+      setError(err?.message || t("centreInvite.failed"));
+    } finally { setBusy(false); }
+  }
+
+  if (state.status === "checking") return <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-sm">{t("centreInvite.checking")}</div>;
+  if (state.status === "invalid") return (
+    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+      <div className="text-lg font-semibold text-rose-900">{t("centreInvite.invalidTitle")}</div>
+      <p className="mt-2 text-sm text-rose-900">{state.error}</p>
+    </div>
+  );
+  if (done) return (
+    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+      <div className="text-lg font-semibold text-emerald-900">{t("centreInvite.submittedTitle")}</div>
+      <p className="mt-2 text-sm text-emerald-900">{t("centreInvite.submitted")}</p>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto mt-10 max-w-md rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="flex items-center gap-2 text-lg font-semibold text-slate-950"><Lock className="h-5 w-5" /> {t("centreInvite.title")}</div>
+      <p className="mt-1 text-sm text-slate-600">{t("centreInvite.helper")}</p>
+      <div className="mt-3 rounded-xl bg-slate-100 p-3 text-sm">
+        <div className="font-bold">{state.invite?.centreName}</div>
+        <div className="text-xs text-slate-600">{state.invite?.centreId} · {state.invite?.invitedEmail}{state.invite?.country ? ` · ${state.invite.country}` : ""}</div>
+      </div>
+      <ul className="mt-3 list-disc space-y-0.5 pl-5 text-xs text-slate-600">
+        {["len", "lower", "upper", "digit", "special"].map((rule) => <li key={rule}>{t(`adminAuth.activation.rule.${rule}`)}</li>)}
+      </ul>
+      <form onSubmit={submit} className="mt-4">
+        <input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder={t("centreInvite.username")} autoComplete="username" className="w-full rounded-xl border bg-white p-2 text-sm" />
+        <input value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} type="password" placeholder={t("adminAuth.activation.newPassword")} autoComplete="new-password" className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" />
+        <input value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} type="password" placeholder={t("adminAuth.activation.confirmPassword")} autoComplete="new-password" className="mt-2 w-full rounded-xl border bg-white p-2 text-sm" />
+        {error && <div className="mt-2 text-sm font-medium text-rose-700">{error}</div>}
+        <Button type="submit" disabled={busy} className="mt-4 w-full rounded-2xl">{busy ? t("centreInvite.submitting") : t("centreInvite.submit")}</Button>
+      </form>
+    </div>
+  );
+}
+
 function AdminView({ centre, setCentre, examDate, setExamDate, place, setPlace, language, setLanguage, availableVariants, variants, testImportStatus, testImportError, testImportSummary, importTestPackage, setStatus, addAudit, uiLanguage, t, adminPdfPackageLatest, setAdminPdfPackageStatus, setAdminPdfPackageError, setAdminPdfPackageLatest }) {
   const [activeAdminSection, setActiveAdminSection] = useState("");
 
   return (
     <>
+      <AdminDashboardSection
+        id="access-rights"
+        icon={Lock}
+        t={t}
+        title={t("admin.dashboard.accessRights.title")}
+        description={t("admin.dashboard.accessRights.description")}
+        activeSection={activeAdminSection}
+        setActiveSection={setActiveAdminSection}
+      >
+        <div className="space-y-4">
+          <AdminSecurityFactorsPanel t={t} />
+          <AdminCentreAccountsPanel t={t} />
+        </div>
+      </AdminDashboardSection>
+
       <AdminDashboardSection
         id="package-authoring"
         icon={FileSpreadsheet}
@@ -10137,7 +10450,7 @@ function ConsultingFieldMobilePage() {
 
   async function attemptAuth(pin) {
     try {
-      const resolved = await resolveQrToken(qrToken, { deviceId: deviceIdRef.current, pin });
+      const resolved = await resolveQrToken(qrToken, { deviceId: deviceIdRef.current, pin, pinChallenge: pinChallenge?.challenge });
       if (resolved.role && resolved.role !== "Candidate") {
         setAuth((prev) => ({ ...prev, status: "error", error: t("consultingField.wrongRole") }));
         return;
@@ -10151,7 +10464,7 @@ function ConsultingFieldMobilePage() {
       if (resolved.promptSetPin) setSetPinPrompt(sessionToken);
     } catch (error) {
       if (error?.body?.requiresPin) {
-        setPinChallenge({ wrongPin: Boolean(error?.body?.wrongPin) });
+        setPinChallenge({ wrongPin: Boolean(error?.body?.wrongPin), challenge: error?.body?.pinChallenge || null });
         return;
       }
       if (error?.body?.deviceLimitReached) {

@@ -94,3 +94,28 @@ export function clearedPinState() {
 // whether a PIN has been set, how close the guess was, or whether the subject is a candidate or an
 // examiner. Callers should return this verbatim.
 export const PIN_GENERIC_ERROR = "PIN is not correct, or the access could not be verified.";
+
+
+// §13.3 - a PIN may only be submitted inside a server-issued attempt window. The challenge is
+// one-time, short-lived and bound to ONE qr_token, so a PIN form cannot be replayed or pointed at a
+// different person's token.
+export const PIN_CHALLENGE_TTL_SECONDS = 5 * 60;
+
+export function newPinChallenge() {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
+export function pinChallengeHash(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+export function pinChallengeExpiry(now = new Date()) {
+  return new Date(now.getTime() + PIN_CHALLENGE_TTL_SECONDS * 1000).toISOString();
+}
+
+// Valid = exists, matches this token, not consumed, not expired.
+export function isChallengeUsable(row, qrTokenId, now = new Date()) {
+  if (!row || row.consumed_at) return false;
+  if (String(row.qr_token_id) !== String(qrTokenId)) return false;
+  return new Date(row.expires_at) > now;
+}

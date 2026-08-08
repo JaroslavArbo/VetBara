@@ -39,10 +39,10 @@ async function requestJson(path, options = {}) {
   return body;
 }
 
-export function resolveQrToken(token, { deviceId, pin } = {}) {
+export function resolveQrToken(token, { deviceId, pin, pinChallenge } = {}) {
   return requestJson("/api/qr/resolve", {
     method: "POST",
-    body: JSON.stringify({ token, deviceId, pin }),
+    body: JSON.stringify({ token, deviceId, pin, pinChallenge }),
   });
 }
 
