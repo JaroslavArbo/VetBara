@@ -196,3 +196,21 @@ export async function adminRemoveFactor(factorId) {
   const result = await supabase.auth.mfa.unenroll({ factorId });
   if (result.error) throw result.error;
 }
+
+// Supabase Auth is called straight from the browser, so its errors reach the user verbatim -
+// including infrastructure messages like "Service for this project is restricted due to the
+// following violations: exceed_egress_quota", which is meaningless to an examination coordinator
+// and names internals they cannot act on. Anything that is really "the backend is not serving us
+// right now" is collapsed into one plain sentence; genuine credential errors are left alone so a
+// mistyped password still says so.
+export function friendlyAuthError(error, t) {
+  const status = Number(error?.status || error?.code);
+  const raw = String(error?.message || "");
+  const restricted = status === 402
+    || /exceed_\w*quota|project is restricted|spend cap|upgrade their plan/i.test(raw);
+  if (restricted) return t("adminAuth.serviceRestricted");
+  if (status === 503 || /service unavailable|failed to fetch|networkerror|load failed/i.test(raw)) {
+    return t("adminAuth.serviceUnavailable");
+  }
+  return raw || t("adminAuth.loginFailed");
+}

@@ -17,7 +17,7 @@ import { OutdoorVoiceRecorder, isRecordingSupported } from "./lib/audioRecorder"
 import { OUTDOOR_AI_DRAFT_NOTES } from "./lib/outdoorAiDraftNotes";
 import { saveLocalMedia, updateLocalMedia, listLocalMedia, getLocalMedia, downloadBlob } from "./lib/mediaStore";
 import { adminSignInWithPassword, adminAccessToken, adminSignOut, adminEnrollTotp, adminVerifyTotp, adminListFactors, supabaseAuthConfigured,
-  passkeysAvailable, adminRegisterPasskey, adminSignInWithPasskey, adminRemoveFactor, supabaseAuth } from "./lib/supabaseAuth";
+  passkeysAvailable, adminRegisterPasskey, adminSignInWithPasskey, adminRemoveFactor, supabaseAuth, friendlyAuthError } from "./lib/supabaseAuth";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { readVetPackage } from "./lib/vetArchive";
 import JSZip from "jszip";
@@ -5635,7 +5635,7 @@ export function AdminLoginGate({ t, addAudit, children }) {
       const result = await auth.exchangeSupabaseSession();
       if (result?.needsSecondFactor) setSecondFactor(result.hasVerifiedFactor ? "challenge" : "enroll");
     } catch (err) {
-      setError(err?.message || t("adminAuth.passkey.signInFailed"));
+      setError(friendlyAuthError(err, t) || t("adminAuth.passkey.signInFailed"));
     } finally { setBusy(false); }
   }
 
@@ -5647,7 +5647,7 @@ export function AdminLoginGate({ t, addAudit, children }) {
       setForm({ username: "", password: "" });
       if (result?.needsSecondFactor) setSecondFactor(result.hasVerifiedFactor ? "challenge" : "enroll");
     }
-    catch (err) { setError(err.message || t("adminAuth.loginFailed")); }
+    catch (err) { setError(friendlyAuthError(err, t)); }
     finally { setBusy(false); }
   }
 
