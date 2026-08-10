@@ -1,5 +1,6 @@
 import { envReady, sendJson, supabase, resolveSession } from "../_lib/backend.mjs";
 import { sectionBudgets, buildCandidateTiming, aggregateByExaminer, OUTDOOR_BLOCK_MINUTES_DEFAULT } from "../_lib/outdoorpacing.mjs";
+import { buildCandidateScope } from "../_lib/candidatescope.mjs";
 
 // Outdoor time efficiency, read side. One handler serves both audiences from the same numbers, so
 // the Centre and the administrator can never be looking at different figures:
@@ -47,18 +48,11 @@ export default async function handler(request, response) {
     } else {
       candidateRows = await supabase("candidates?select=id,level,exam_event_id&limit=2000").catch(() => []);
     }
-    const levelByCandidateEvent = {};
-    const levelsById = {};
-    for (const row of candidateRows) {
-      if (row.exam_event_id) levelByCandidateEvent[`${row.id}::${row.exam_event_id}`] = row.level;
-      (levelsById[row.id] = levelsById[row.id] || new Set()).add(row.level);
-    }
-    const resolveLevel = (candidateId, examEventId) => {
-      const scoped = levelByCandidateEvent[`${candidateId}::${examEventId}`];
-      if (scoped) return scoped;
-      const levels = levelsById[candidateId];
-      return levels && levels.size === 1 ? [...levels][0] : null;
-    };
+    // One canonical resolver for the whole codebase - see api/_lib/candidatescope.mjs for why an
+    // id alone is not enough.
+    const scope = buildCandidateScope(candidateRows);
+    const centreId = isCentre ? session.subjectId : null;
+    const resolveLevel = (candidateId, examEventId) => scope.levelOf(candidateId, { examEventId, centreId });
 
     const events = await readOutdoorEvents(roster);
 

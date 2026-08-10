@@ -1,4 +1,5 @@
 import { envReady, sendJson, supabase, resolveAdminSession } from "../_lib/backend.mjs";
+import { buildCandidateScope } from "../_lib/candidatescope.mjs";
 
 // Administrator's overview of what Centres are doing (read-only).
 //
@@ -104,7 +105,14 @@ export default async function handler(request, response) {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 300);
 
-    return sendJson(response, 200, { ok: true, entries });
+    // Candidate ids repeat across certifications; where the LEVEL also differs, any lookup that
+    // misses the exam-event scope will compute against the wrong item bank and pass mark. Reported
+    // here so the hazard is visible to an administrator instead of waiting to surface as a wrong
+    // number in a report.
+    const candidateRows = await supabase("candidates?select=id,level,centre_id,exam_event_id&limit=2000").catch(() => []);
+    const ambiguous = buildCandidateScope(candidateRows).ambiguities().filter((row) => row.levelConflict);
+
+    return sendJson(response, 200, { ok: true, entries, ambiguousCandidates: ambiguous });
   } catch (error) {
     console.error("Admin activity read failed", error);
     return sendJson(response, 500, { error: "Admin activity read failed" });

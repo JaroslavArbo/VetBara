@@ -466,6 +466,10 @@ const REPORT_MARKING_SECTIONS = [
     key: "values",
     title: "Section 4 - Wildlife, historical, cultural or social values of the tree",
     perTreeMax: 6,
+    // The model answer allows marks under TWO headings only, 3 each. Capping the sum at 6 let an
+    // examiner score all four and still reach 6, which is not the same rule: it rewards breadth the
+    // scheme deliberately does not. Only the two best-scored headings count.
+    countBestItems: 2,
     items: [
       { key: "wildlife", title: "Wildlife", max: 3 },
       { key: "historical", title: "Historical", max: 3 },
@@ -579,7 +583,14 @@ function reportSectionScore(section, mark) {
   if (section.key === "plan") return reportPlanScore(mark);
   const hasItems = mark && mark.items && typeof mark.items === "object" && Object.keys(mark.items).length > 0;
   if (hasItems && Array.isArray(section.items)) {
-    const sum = section.items.reduce((total, item) => total + (Number(mark.items[item.key]) || 0), 0);
+    const values = section.items.map((item) => Number(mark.items[item.key]) || 0);
+    // countBestItems: the scheme limits how MANY headings may be marked, not just the total (see
+    // the "values" section). Taking the best N is the fair reading - the candidate is credited for
+    // their strongest two, exactly as an examiner picking two by hand would do.
+    const counted = Number(section.countBestItems) > 0
+      ? values.sort((a, b) => b - a).slice(0, Number(section.countBestItems))
+      : values;
+    const sum = counted.reduce((total, value) => total + value, 0);
     return Math.min(section.perTreeMax, sum);
   }
   return Number(mark?.score) || 0;
@@ -6444,6 +6455,7 @@ function AdminOutdoorTimingPanel({ t }) {
 function AdminCentreActivityPanel({ t }) {
   const admin = React.useContext(AdminSessionContext);
   const [entries, setEntries] = useState([]);
+  const [ambiguous, setAmbiguous] = useState([]);
   const [onlyAlerts, setOnlyAlerts] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -6456,7 +6468,7 @@ function AdminCentreActivityPanel({ t }) {
         body: JSON.stringify({ sessionToken: admin.sessionToken }),
       });
       const data = await response.json().catch(() => ({}));
-      if (response.ok) setEntries(data.entries || []);
+      if (response.ok) { setEntries(data.entries || []); setAmbiguous(data.ambiguousCandidates || []); }
     } catch { /* keep whatever is on screen */ }
     finally { setLoading(false); }
   }, [admin?.sessionToken]);
@@ -6485,6 +6497,21 @@ function AdminCentreActivityPanel({ t }) {
           </Button>
         </div>
       </div>
+
+      {/* A data hazard rather than an event: the same candidate number used at DIFFERENT levels in
+          different certifications. Level drives the item bank and the pass mark, so a lookup that
+          misses the exam-event scope changes results, not just labels. */}
+      {ambiguous.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+          <div className="font-semibold">{t("admin.activity.ambiguousTitle")}</div>
+          <p className="mt-0.5">{t("admin.activity.ambiguousHelper")}</p>
+          <ul className="mt-1 list-disc pl-4">
+            {ambiguous.slice(0, 6).map((row) => (
+              <li key={row.candidateId}><strong>{row.candidateId}</strong>: {row.levels.join(" / ")} ({row.centres.join(", ")})</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-3 max-h-[420px] space-y-1 overflow-auto pr-1">
         {shown.map((entry) => (
