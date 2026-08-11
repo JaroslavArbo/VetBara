@@ -26,6 +26,8 @@ export function CandidateQuickHelp({ t }) {
     ["help.candidate.identity", "Confirm your identity before opening sections."],
     ["help.candidate.fullscreen", "Do not leave fullscreen mode during the exam."],
     ["help.candidate.finish", "When you finish, send your data to the server and log out."],
+    ["help.candidate.autosave", "Written test answers autosave to the sync queue."],
+    ["help.candidate.photos", "Consulting report photo entries are pilot/archive placeholders, not real uploads yet."],
     ["help.candidate.ask", "If something looks wrong, ask Centre staff before final submit."],
   ];
 
@@ -61,6 +63,7 @@ export function ExaminerQuickHelp({ t }) {
     ["help.examiner.identity", "Confirm your identity before opening outdoor forms."],
     ["help.examiner.assigned", "Only assigned Candidates are shown."],
     ["help.examiner.primary", "Primary Examiner completes the full outdoor form; Secondary input is supporting."],
+    ["help.examiner.autosave", "Scores and notes autosave to the sync queue."],
     ["help.examiner.missing", "If assigned Candidates are missing, ask the Centre to assign and save Centre Setup."],
   ];
 

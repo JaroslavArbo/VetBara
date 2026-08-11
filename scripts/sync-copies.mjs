@@ -39,6 +39,15 @@ const DEPLOY_ONLY = new Set(["api/centre-router.js", "vercel.json"]);
 
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", ".vercel", "supabase/.branches", ".claude"]);
 
+
+// A RENAMED file sits at a different depth in each copy (api/centre/test-package/active.js became
+// api/_impl/centre-test-package-active.mjs), so its relative imports legitimately differ - "../../_lib"
+// here is "../_lib" there. Both are correct where they live. Without this the pair is reported as
+// drift for ever, which trains you to ignore the report - the one thing a drift check must not do.
+function normaliseForCompare(text, isRenamed) {
+  return isRenamed ? text.replace(/(\.\.\/)+_lib\//g, "_LIB/") : text;
+}
+
 function walk(root, base = "") {
   const out = [];
   for (const entry of readdirSync(join(root, base))) {
@@ -64,7 +73,7 @@ for (const rel of tracked) {
   const deployPath = join(DEPLOY, target);
   const localText = readFileSync(localPath, "utf8");
   if (!existsSync(deployPath)) { drift.push({ rel, target, kind: "missing", deployNewer: false }); continue; }
-  if (readFileSync(deployPath, "utf8") !== localText) {
+  if (normaliseForCompare(readFileSync(deployPath, "utf8"), rel !== target) !== normaliseForCompare(localText, rel !== target)) {
     // Direction matters, and it is NOT always "local is ahead". The deploy repo has genuinely newer
     // work in places (its vetArchive.js and exams-router.js are substantially larger), so copying
     // blindly from here would destroy it. Anything newer on the deploy side is refused by default.
