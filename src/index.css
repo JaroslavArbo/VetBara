@@ -586,6 +586,7 @@
   padding-left: 7px !important;
   padding-right: 7px !important;
 }
+.field-icon-button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
 .field-toolbar-lang button {
   min-width: 32px;
   padding-left: 8px !important;
@@ -641,6 +642,8 @@
    the rule used to target .field-ghost-button only, so it never matched and the button never
    went green after a successful upload. Keep both, and make it strong enough to beat the
    primary button's own background. */
+/* The success state is applied to the tablet's send button, which is a .field-primary-button;
+   this rule used to target .field-ghost-button only, so the green confirmation never appeared. */
 .field-sync-ok,
 .field-primary-button.field-sync-ok,
 .field-ghost-button.field-sync-ok {
