@@ -58,6 +58,7 @@ async function createInvite(request, response, audit) {
       centre_id: centreId, centre_name: centreName, invited_email: invitedEmail,
       country: cleanText(request.body?.country, 80) || null,
       internal_ref: cleanText(request.body?.internalRef, 80) || null,
+      access_valid_until: request.body?.accessValidUntil ? new Date(request.body.accessValidUntil).toISOString() : null,
       token_hash: sha256(token), expires_at: expiresAt, created_by: admin.subjectId,
     }),
   });
@@ -117,6 +118,7 @@ async function activateCentre(request, response, audit) {
     username, role: "centre_admin", centre_id: invite.centre_id, status: "pending_approval",
     auth_user_id: authUserId, auth_email: email, password_set_at: new Date().toISOString(),
     salt: null, password_hash: null,
+    valid_until: invite.access_valid_until || null,
   };
   let profileId = existing[0]?.id ?? null;
   if (profileId) {
@@ -185,7 +187,7 @@ async function decide(request, response, audit) {
 async function listPending(request, response) {
   const admin = await requireAdmin(request, response);
   if (!admin) return;
-  const rows = await supabase("user_profiles?role=like.centre*&select=username,centre_id,auth_email,status,created_at,activated_at&order=created_at.desc&limit=200");
+  const rows = await supabase("user_profiles?role=like.centre*&select=username,centre_id,auth_email,status,created_at,activated_at,valid_from,valid_until&order=created_at.desc&limit=200");
   return sendJson(response, 200, { ok: true, centres: rows });
 }
 
@@ -212,6 +214,24 @@ async function centreSession(request, response, audit) {
     return sendJson(response, 403, { error: "This Centre account is not approved yet", status: profile.status });
   }
 
+  // Access granted for one certification stops when that certification does. Checked HERE, where a
+  // session is minted, rather than on every request: a session already in progress is allowed to
+  // finish (it lasts one shift), because throwing an examiner out midway through entering results
+  // would do more harm than the few hours of overrun it prevents.
+  const now = new Date();
+  const from = profile.valid_from ? new Date(profile.valid_from) : null;
+  const until = profile.valid_until ? new Date(profile.valid_until) : null;
+  if ((from && now < from) || (until && now > until)) {
+    await auditAuth({
+      ...audit, actorType: "centre", actorId: profile.username, action: "centre_login_failed",
+      result: "failure", metadata: { reason: until && now > until ? "access_window_expired" : "access_window_not_started" },
+    });
+    return sendJson(response, 403, {
+      error: "Access for this certification has ended", accessWindowEnded: true,
+      validFrom: profile.valid_from || null, validUntil: profile.valid_until || null,
+    });
+  }
+
   const session = await createAdminSession({ username: profile.centre_id || profile.username });
   await supabase(`user_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
     method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ last_login_at: new Date().toISOString() }),
@@ -224,12 +244,44 @@ async function centreSession(request, response, audit) {
   });
 }
 
+// Only an administrator can move the end date. If a Centre could extend its own access, the limit
+// would not be a limit.
+async function setValidity(request, response, audit) {
+  const admin = await requireAdmin(request, response);
+  if (!admin) return;
+  const username = cleanText(request.body?.username, 80);
+  const rows = await supabase(`user_profiles?username=eq.${encodeURIComponent(username)}&select=*&limit=1`);
+  const profile = rows[0];
+  if (!profile || !String(profile.role || "").startsWith("centre")) {
+    return sendJson(response, 404, { error: "Unknown Centre account" });
+  }
+  const validUntil = request.body?.validUntil ? new Date(request.body.validUntil) : null;
+  if (request.body?.validUntil && Number.isNaN(validUntil?.getTime())) {
+    return sendJson(response, 400, { error: "That end date is not valid" });
+  }
+  await supabase(`user_profiles?id=eq.${encodeURIComponent(profile.id)}`, {
+    method: "PATCH", headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ valid_until: validUntil ? validUntil.toISOString() : null }),
+  });
+  await supabase("centre_approval_events", {
+    method: "POST", headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      centre_id: profile.centre_id, user_profile_id: profile.id, action: "validity_changed",
+      performed_by: admin.subjectId,
+      reason: validUntil ? `valid until ${validUntil.toISOString().slice(0, 10)}` : "no end date",
+    }),
+  });
+  await auditAuth({ ...audit, actorType: "admin", actorId: admin.subjectId, action: "centre_validity_changed", targetType: "centre", targetId: profile.centre_id });
+  return sendJson(response, 200, { ok: true, username, validUntil: validUntil ? validUntil.toISOString() : null });
+}
+
 const ACTIONS = {
   "invite-create": createInvite,
   "invite-list": listInvites,
   "invite-inspect": inspectInvite,
   activate: activateCentre,
   decide,
+  "set-validity": setValidity,
   list: listPending,
   session: centreSession,
 };

@@ -6600,7 +6600,10 @@ function AdminSecurityFactorsPanel({ t }) {
 
 function AdminCentreAccountsPanel({ t }) {
   const admin = React.useContext(AdminSessionContext);
-  const [form, setForm] = useState({ centreId: "", centreName: "", invitedEmail: "", country: "" });
+  // Default: a month from now. The Centre sets its own exam date later, so this is a sane starting
+  // point the administrator adjusts rather than a guess presented as fact.
+  const defaultValidUntil = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const [form, setForm] = useState({ centreId: "", centreName: "", invitedEmail: "", country: "", accessValidUntil: defaultValidUntil });
   const [invites, setInvites] = useState([]);
   const [centres, setCentres] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -6634,11 +6637,27 @@ function AdminCentreAccountsPanel({ t }) {
       // The invitation link is shown ONCE - only its hash is stored, so it cannot be retrieved later.
       const link = `${window.location.origin}/?centreInvite=${data.token}`;
       setMessage({ ok: true, text: t("admin.centres.inviteCreated"), link });
-      setForm({ centreId: "", centreName: "", invitedEmail: "", country: "" });
+      setForm({ centreId: "", centreName: "", invitedEmail: "", country: "", accessValidUntil: defaultValidUntil });
       refresh();
     } catch (error) {
       setMessage({ ok: false, text: error.message });
     } finally { setBusy(false); }
+  }
+
+  // Only an administrator can move the end date - see setValidity on the server.
+  async function extend(username, currentValidUntil) {
+    const base = currentValidUntil ? new Date(currentValidUntil) : new Date();
+    const from = base > new Date() ? base : new Date();
+    const next = new Date(from.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+    const answer = window.prompt(t("admin.centres.extendPrompt"), next);
+    if (answer === null) return;
+    setBusy(true); setMessage(null);
+    try {
+      await call({ action: "set-validity", username, validUntil: answer.trim() || null });
+      setMessage({ ok: true, text: t("admin.centres.validitySaved") });
+      refresh();
+    } catch (error) { setMessage({ ok: false, text: error.message }); }
+    finally { setBusy(false); }
   }
 
   async function decide(username, decision) {
@@ -6671,6 +6690,13 @@ function AdminCentreAccountsPanel({ t }) {
                 className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
             </label>
           ))}
+          <label className="text-xs font-medium text-slate-500 sm:col-span-2">
+            {t("admin.centres.validUntil")}
+            <input type="date" value={form.accessValidUntil}
+              onChange={(e) => setForm((f) => ({ ...f, accessValidUntil: e.target.value }))}
+              className="mt-1 w-full rounded-xl border bg-white p-2 text-sm text-slate-950" />
+            <span className="mt-1 block text-[11px] font-normal text-slate-500">{t("admin.centres.validUntilHelper")}</span>
+          </label>
           <div className="sm:col-span-2">
             <Button type="submit" disabled={busy} className="rounded-2xl">{t("admin.centres.createInvite")}</Button>
           </div>
@@ -6700,6 +6726,7 @@ function AdminCentreAccountsPanel({ t }) {
               <th className="py-2 pr-3">{t("admin.centres.centreName")}</th>
               <th className="py-2 pr-3">{t("admin.centres.email")}</th>
               <th className="py-2 pr-3">{t("admin.centres.status")}</th>
+              <th className="py-2 pr-3">{t("admin.centres.validUntilShort")}</th>
               <th className="py-2 pr-3" />
             </tr></thead>
             <tbody>
@@ -6708,6 +6735,15 @@ function AdminCentreAccountsPanel({ t }) {
                   <td className="py-2 pr-3"><div className="font-medium">{centre.centre_id}</div><div className="text-xs text-slate-500">{centre.username}</div></td>
                   <td className="py-2 pr-3 text-xs">{centre.auth_email}</td>
                   <td className="py-2 pr-3"><StatusPill tone={statusTone[centre.status] || "warn"}>{centre.status}</StatusPill></td>
+                  <td className="py-2 pr-3 text-xs">
+                    {(() => {
+                      if (!centre.valid_until) return <span className="text-slate-400">{t("admin.centres.noLimit")}</span>;
+                      const ended = new Date(centre.valid_until) < new Date();
+                      return <span className={ended ? "font-semibold text-amber-800" : "text-slate-600"}>
+                        {String(centre.valid_until).slice(0, 10)}{ended ? ` · ${t("admin.centres.ended")}` : ""}
+                      </span>;
+                    })()}
+                  </td>
                   <td className="py-2 pr-3">
                     <div className="flex flex-wrap gap-1">
                       {centre.status === "pending_approval" && <>
@@ -6715,12 +6751,13 @@ function AdminCentreAccountsPanel({ t }) {
                         <Button onClick={() => decide(centre.username, "reject")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.reject")}</Button>
                       </>}
                       {centre.status === "active" && <Button onClick={() => decide(centre.username, "suspend")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.suspend")}</Button>}
+                      <Button onClick={() => extend(centre.username, centre.valid_until)} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.extend")}</Button>
                       {(centre.status === "suspended" || centre.status === "disabled") && <Button onClick={() => decide(centre.username, "reactivate")} disabled={busy} variant="outline" className="rounded-xl px-3 py-1 text-xs">{t("admin.centres.reactivate")}</Button>}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!centres.length && <tr><td colSpan={4} className="py-3 text-sm text-slate-500">{t("admin.centres.none")}</td></tr>}
+              {!centres.length && <tr><td colSpan={5} className="py-3 text-sm text-slate-500">{t("admin.centres.none")}</td></tr>}
             </tbody>
           </table>
         </div>
